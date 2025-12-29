@@ -1,0 +1,26 @@
+services:
+  sm-6g_collaborative_bs-s:
+    container_name: sm-6g_collaborative_bs-c
+    build: .
+    privileged: true
+    command: /bin/bash
+    stdin_open: true # docker run -i
+    environment:
+      - DISPLAY=${DISPLAY}
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    tty: true        # docker run -t
+    network_mode: "host"
+    ipc: host
+    volumes:
+      - ./:/workspace
+      - $HOME/.Xauthority:/root/.Xauthority:rw #
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw       #
+      - /usr/share/nvidia:/usr/share/nvidia
+      - /usr/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu
+    deploy:
+      resources:
+        reservations:
+          devices:
+          - driver: nvidia
+            count: 2
+            capabilities: [gpu]
