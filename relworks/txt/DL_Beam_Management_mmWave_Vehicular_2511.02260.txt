@@ -1,0 +1,1088 @@
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+1
+DL-Based Beam Management for mmWave
+Vehicular Networks Exploring Temporal Correlation
+Ailton Oliveira∗, Amir Khatibi†, Daniel Suzuki∗, Ilan Correa∗, Jos´e Rezende† and Aldebaro Klautau∗
+∗LASSE - Telecom., Automation and Electronics Research and Development Center, Bel´em-PA, Brazil
+† Universidade Federal do Rio de Janeiro, Rio de Janeiro-RJ, Brazil
+Email: ∗{ailton.pinto, daniel.suzuki}@itec.ufpa.br, ilan@ufpa.br, aldebaro@ufpa.br
+†{amir.khatibi, rezende}@land.ufrj.br
+Abstract—Millimeter wave communications are essential for
+modern wireless networks. It supports high data rates but suffers
+from severe path loss, which requires precise beam alignment to
+maintain reliable links. This beam management is particularly
+challenging in highly dynamic scenarios such as vehicle-to-
+infrastructure, and several methods have been presented. In
+this work, we propose a deep learning-based beam tracking
+framework that combines a position-aware beam pre-selection
+strategy with sequential prediction using recurrent neural net-
+works. The proposed architecture can support deep learning
+models trained for both classification and regression. In contrast
+to many existing studies that evaluate beam tracking under
+predominantly line-of-sight (LOS) conditions, our work explicitly
+includes highly challenging non-LOS scenarios - with up to 50%
+non-LOS incidence in certain datasets - to rigorously assess model
+robustness. Experimental results demonstrate that our approach
+maintains high top-K accuracy, even under adverse conditions,
+while reducing the beam measurement overhead by up to 50%.
+Index
+Terms—Beam
+tracking,
+mmWave,
+deep
+learning,
+dataset, Autoregressive inference
+I. INTRODUCTION
+One critical enabler of 6G is the efficient use of Millimeter
+Wave (mmWave) (e.g., 28 GHz, 60 GHz) and Terahertz (THz)
+frequency bands, which offer abundant spectral resources
+that can facilitate ultra-high throughput and low latency [1].
+However, these bands suffer from higher path loss and limited
+diffraction capability, making signal degradation a significant
+concern in practical deployments. As a result, ensuring reliable
+connectivity in these bands demands innovations in beam
+management. To address these challenges, Multiple-Input
+Multiple-Output (MIMO) technologies—particularly massive
+MIMO—have become foundational in modern wireless sys-
+tems [2]. Beamforming, a key component of massive MIMO,
+concentrates signal energy along preferred spatial directions,
+significantly improving link budget and mitigating high-
+frequency attenuation [3]. The effectiveness of beamforming,
+however, depends on maintaining precise alignment between
+the transmitter and receiver beams. This is especially com-
+plex in mobile and dynamic scenarios such as Vehicle-to-
+Infrastructure (V2I) communications, where misalignment can
+lead to severe link degradation or complete outage [4].
+This work was funded by the Brasil 6G project (01245.020548/2021-07),
+by RNP and MCTI, by the Innovation Center, Ericsson Telecomunicac¸˜oes
+S.A., Brazil, and by the Project Smart 5G Core And MUltiRAn Integration
+(SAMURAI) (MCTIC/CGI.br/FAPESP Grant 2020/05127-2).
+Recent Third Generation Partnership Project (3GPP) ef-
+forts [5] have emphasized the importance of intelligent beam
+management, which includes not only initial alignment, but
+also real-time tracking and recovery from failures. Machine
+learning techniques—especially deep learning—have emerged
+as promising solutions, offering the potential to learn temporal
+and spatial signal patterns to guide beam selection and tracking
+more efficiently than traditional optimization algorithms [6].
+Continuous beam tracking and enhanced beam management
+can yield significant system-level gains, such as reduced en-
+ergy consumption, faster reconnection times, and lower signal-
+ing overhead. For example, smart tracking may reduce beam
+measurement overhead by over 50% compared to exhaustive
+beam sweeping in certain configurations (Section V).
+Motivated by these potential gains, this work explores a
+novel deep learning-based architecture for real-time beam
+tracking in mmWave MIMO systems, with focus on V2I
+scenarios. Our approach balances between computational ef-
+ficiency and prediction accuracy, leveraging Recurrent Neural
+Network (RNN)-based models to exploit sequential signal
+patterns while introducing a spatial beam pre-selection step
+to reduce search space. The contributions of this paper are:
+• The design and evaluation of two complementary mod-
+els, an RNN Index Classification and an RNN RSRP
+Regression, which respectively formulate beam tracking
+as classification and regression tasks.
+• A comprehensive evaluation framework across realistic
+vehicular datasets at real-word scenarios, highlighting
+performance under varying Line-of-Sight (LOS)/Non-
+Line-of-Sight (NLOS) conditions, and introducing a new
+metric—Mean Absolute First Difference (MAFD)—to
+characterize beam dynamics in these scenarios.
+• An analysis of measurement substitution strategies,
+demonstrating how replacing beam measurements with
+predictions can reduce sensing overhead (around to 66%)
+while incurring only a marginal loss in accuracy.
+The study is guided by the following research questions:
+RQ1: Considering classification and regression formula-
+tions, which supports better generalization and robustness
+under dynamic channel conditions?
+RQ2: How do variations in the input observation window
+size and the replacement of real measurements with predicted
+values affect tracking accuracy and system efficiency?
+arXiv:2511.02260v1  [eess.SP]  4 Nov 2025
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+2
+RQ3: Can the proposed architecture maintain high perfor-
+mance in challenging NLOS scenarios, which are frequent in
+urban V2I environments?
+The remainder of this paper is organized as follows. Sec-
+tion II reviews related work on beam tracking and deep learn-
+ing for wireless systems. Problem statement is described in
+Section III. Section III-C characterizes the datasets used. Then
+in Section IV, we detail the methodology, our proposed model
+architecture and pre-processing strategy. Section V presents
+performance evaluations and analyses. Finally, Section VI
+concludes the paper and outlines directions for future research.
+II. RELATED WORK
+Traditional beam management relies on heuristic-based
+strategies standardized by the 3GPP, which include the brute-
+force beam sweeping [7]. These procedures enable the iden-
+tification of optimal beams through periodic transmission
+and evaluation of Synchronization Signal Block (SSB) and
+Channel State Information Reference Signals (CSI-RS) [8].
+Such exhaustive or grid-based searches often lead to signif-
+icant signaling overhead and latency—particularly in high-
+mobility settings. In response, a growing body of research
+has investigated algorithmic optimizations and learning-based
+alternatives aimed at accelerating the beam tracking process
+while preserving, or even enhancing, alignment accuracy.
+Beam management has been extensively studied under dif-
+ferent methodological paradigms, ranging from standardized
+heuristic-based strategies to analytical models and machine
+learning approaches. These methods differ in terms of their
+reliance on predefined codebooks, adaptability to mobility
+patterns, computational cost, and data requirements.
+To frame our contribution, this section is organized into
+three parts: first, Traditional Methods standardized by the
+3GPP (Section II-A); second, Analytical Methods that apply
+model-based prediction techniques (Section II-B); and finally,
+Learning-Based Approaches that leverage data-driven models
+for beam tracking (Section II-C).
+Table I provides a consolidated view of key representa-
+tive works, comparing their algorithmic category, underlying
+technique, data sources, and how our method advances the
+state of the art. This organization facilitates direct comparison
+between different paradigms, highlighting trade-offs in terms
+of computational efficiency, robustness to NLOS conditions,
+and reliance on specific types of input data. Unlike many prior
+works that require long temporal sequences or site-specific
+sensing information, our approach: a) employs compact tem-
+poral sequences (as short as four time steps), b) relies only on
+historical beam data and estimated User Equipment (UE) posi-
+tion—readily available in standard 3GPP architectures, and c)
+evaluates performance in scenarios with high NLOS incidence,
+demonstrating robustness in challenging environments.
+A. Traditional Methods
+Traditional beam management methods, as specified in the
+3GPP standards (e.g., TS 38.213, TS 38.214, TS 38.215), form
+the foundation of initial access and beam tracking in modern
+wireless systems. Two key procedures underpin these methods:
+beam sweeping and beam measurement.
+Beam sweeping involves transmitting and/or receiving
+predefined beams sequentially across a wide angular space,
+typically using a codebook-based beamforming strategy [7].
+In downlink, for example, the Base Station (BS) periodically
+broadcasts SSBs in different spatial directions, enabling the
+UE to detect candidate beams.
+Once candidate beams are detected, beam measurement is
+performed by the UE based on received SSBs or CSI-RS [8],
+using metrics such as Reference Signal Received Power
+(RSRP) and Signal to Interference & Noise Ratio (SINR) to
+quantify link quality. These measurements are reported back
+to the network or used locally for uplink decisions.
+Although these procedures are highly structured and reli-
+able, their performance is bounded by the overhead associated
+with frequent measurements and reporting. These limitations
+have motivated the exploration of data-driven and learning-
+based alternatives that can anticipate beam transitions and
+reduce reliance on exhaustive scanning.
+B. Analytical Methods
+Beyond standardized procedures, a variety of analytical
+methods have been proposed to enhance beam tracking by
+leveraging recursive estimators and adaptive algorithms. These
+techniques aim to predict the optimal beam direction based on
+state evolution models, typically incorporating position, veloc-
+ity, and signal observations. Unlike learning-based methods,
+they operate without the need for large datasets or training
+phases, making them attractive for real-time applications with
+constrained computational budgets.
+Shaham et al. [9] proposed an Extended Kalman Filter
+using position, velocity, and channel coefficients as state
+variables. While computationally efficient, this approach relies
+on a constant velocity assumption, limiting its applicability in
+vehicular environments with complex mobility patterns.
+Asi et al. [10] compared Least Mean Squares (LMS)
+and Normalized LMS (NLMS) algorithms. While the NLMS
+model achieved faster convergence, the lack of systematic
+step-size selection constrained its adaptability. Similarly, Yi
+et al. [4] proposed a recursive beam refinement strategy using
+multi-resolution codebooks to reduce search complexity by
+exploiting spatial and temporal dependencies. These methods
+are computationally lightweight but typically depend on well-
+tuned hyperparameters or simplifying assumptions.
+C. Learning-Based Approaches
+More recent works apply Machine Learning (ML), espe-
+cially deep learning, to model spatial-temporal beam patterns
+and reduce reliance on exhaustive search.
+Zhao et al. [11] used a standard Long Short-Term Memory
+(LSTM) model trained with sub-6 GHz CSI to guide mmWave
+beam selection. Although effective, their model requires long
+input sequences (16 time steps) and struggles with generaliza-
+tion across heterogeneous BS deployments. Similarly, Lim et
+al. [12] proposed an LSTM combined with a Bayesian filter
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+3
+to estimate AoA/AoD variations. While accurate, this method
+is computationally intensive due to sequential filtering.
+Alwakeel et al. [13] proposed a machine learning-based
+framework for beamforming virtualization in 6G systems
+using software-defined networking and reinforcement learn-
+ing. Their solution focuses on improving beam management
+efficiency and energy savings in centralized LOS scenarios
+with limited mobility. While their approach is well suited
+for infrastructure-level virtualization, our work addresses real-
+time beam tracking under both LOS and NLOS conditions in
+dynamic vehicular networks.
+Several recent studies have explored vision- or sensor-aided
+learning. Zhong et al. [14] and Suzuki et al. [15] incorporated
+CNNs for LIDAR-based prediction, later enhanced by Oliveira
+et al. [16] to add multimodal data fusion. While accurate in
+specific environments, these models are often site-specific and
+require large amounts of heterogeneous data, raising concerns
+about generalization and training overhead.
+Recent work by Jiang et al. [17] proposed a beam tracking
+system evaluated on the DeepSense 6G dataset. Their ap-
+proach, based on GRU networks, achieved up to 95.6% Top-5
+accuracy. However, their evaluation is limited to LOS scenar-
+ios, which may not fully represent the challenges encountered
+in more complex or obstructed environments. In this work, we
+reproduce their techniques on our datasets under assumptions
+similar to the ones adopted in [17], including the one of perfect
+knowledge of previously selected optimal beams.
+III. BEAM TRACKING: PROBLEM FORMULATION,
+METRICS, AND DATASETS
+This section formally describes the problem, detailing the
+channel model and the beam tracking formulation.
+A. Channel Model and Beam Tracking
+We assume a narrowband channel model, meaning the
+channel’s frequency response is approximately constant over
+the bandwidth of interest. To capture spatial characteristics, we
+adopt a geometric-based channel representation incorporating
+L Multi-path Components (MPC), each associated with spe-
+cific Angle of Arrival (AoA) and Angle of Departure (AoD),
+as well as a complex path gain αℓ[18].
+The narrowband MIMO channel matrix is defined as:
+H =
+p
+NtxNrx
+L
+X
+ℓ=1
+αℓar(ϕA
+ℓ, θA
+ℓ)a∗
+t (ϕD
+ℓ, θD
+ℓ),
+(1)
+where αℓis the complex gain of the ℓ-th path, and at and
+ar are the array response vectors for the transmit and receive
+antennas, which are parameterized by azimuth and elevation
+angles of departure and arrival, respectively.
+This paper addresses beam tracking, i.e. the process of
+dynamically selecting the optimal beam pair in real-time, as
+transmitter and receiver positions—and consequently, channel
+conditions—evolve [19]. This is especially crucial in mobile
+environments where LOS paths can become obstructed, and
+dominant signal paths change rapidly, as illustrated in Figure 1.
+In this context, efficient beam tracking techniques aim to
+reduce beam search and alignment overhead, maintain signal
+Fig. 1: Representation of beam tracking in a vehicular network
+along the channel h[n] evolution over discrete-time n.
+quality by aligning with the strongest path, and operate in real
+time using historical beam sequences or side information.
+To analyze and design such techniques, we assume that
+the beamforming process uses predefined transmit and receive
+Discrete Fourier Transform (DFT) codebooks [20], CT and CR,
+respectively. It is also assumed that the number of codewords
+coincides with the number of antenna elements. And for sim-
+plicity, given pair (r, t) of beam indices is uniquely identified
+by a single index i, which varies from 1 to M, where M is
+the total number of pairs. Hence, for a given pair of indices,
+the combined channel is
+yi = w∗
+rHft,
+(2)
+where wr is the r-th combining vector in CR and ft is the t-th
+precoding vector in CT .
+The core problem is then to identify the beam index
+ˆi = arg
+max
+i∈{1,...,M} |yi|
+(3)
+that maximizes the magnitude |yi| of the combined chan-
+nel. Continuously searching over all M possible beam pairs
+via sweeping incurs high latency and computational cost,
+motivating the development of learning-based beam tracking
+models that predict the optimal beam from sequential and
+contextual features to reduce overhead and adapt to dynamic
+environments.
+B. Evaluation Metrics
+To assess the performance of the proposed beam tracking
+algorithms, we employ a set of complementary metrics that
+capture different aspects of model behavior and its applicabil-
+ity in realistic scenarios. In this study, we consider: a) RSRP,
+b) Throughput Ratio (TR), and c) Top-K Accuracy—each
+offering complementary insights into model behavior and its
+real-world applicability.
+a) Reference Signal Received Power. RSRP has been pro-
+posed as a key metric for beam tracking in 3GPP discussions
+on AI/ML-based beam management for next-generation net-
+works [21]. RSRP measures the received signal strength of the
+reference signal at the physical layer, providing an indication
+of the signal quality for a given beam. In beam tracking,
+RSRP is commonly employed to evaluate the performance of
+different beams and select the optimal one that maximizes the
+signal power received at the UE.
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+4
+TABLE I: Summary of related work and comparison with our contributions
+Related Work
+Machine
+Learning
+Technique
+Data Source
+Our Contribution Relative to Work
+Yi et al. [4]
+×
+Recursive multi-resolution
+search
+Hierarchical codebooks
+Data-driven beam filtering strategy, not reliant on
+fixed heuristics
+Shaham et al. [9]
+×
+Extended Kalman Filter
+Kinematic model
+(position/velocity)
+Handles non-constant velocity with more realistic
+vehicular dynamics
+Asi et al. [10]
+×
+LMS vs. NLMS
+Channel observations
+Systematic exploration of input sizes; ML-based
+and adaptive
+Zhao et al. [11]
+✓
+LSTM-based classification
+Sub-6 GHz CSI
+Reduced input size (4 vs. 16); better training
+efficiency
+Lim et al. [12]
+✓
+LSTM + Bayesian filtering
+Estimated channel states
+Lower computational complexity; avoids sequential
+filtering
+Alwakeel et
+al. [13]
+✓
+Virtualized ML-based
+beamforming
+Historical SNR data
+We focus on beam tracking and generalization;
+their method is for static virtualization in LOS only
+Zhong et al. [14]
+✓
+CNN for image-based coding
+BS-perspective images
+capturing the UE’s
+position
+Model-agnostic to specific spatial layouts;
+generalizable
+Suzuki et al. [15]
+✓
+CNN
+LIDAR
+Lighter input and more adaptable to general
+scenarios
+Oliveira et al. [16]
+✓
+CNN + Multimodal fusion
+LIDAR, GNSS, beam
+history
+Requires less data, supports general scenarios
+Jiang et al. [17]
+✓
+GRU
+LIDAR data and beam
+historical data(DeepSense
+6G)
+Lighter input when compared with LiDAR data,
+and it also takes into account the measurement
+overhead impact
+The RSRP for a given beam i can be expressed as:
+RSRPi =
+1
+NRS
+NRS
+X
+n=1
+P (n)
+RS,i,
+(4)
+where NRS is the number of reference signal (RS) resources,
+and P (n)
+RS,i is the power of the n-th reference signal for beam
+i, resulting in a value proportional to the combined channel,
+as defined in Equation (2). By periodically computing RSRP
+across multiple beam pairs, the system can identify the beam
+with the highest signal strength and dynamically switch to it,
+ensuring a stable and efficient communication link, even in
+scenarios involving user mobility or varying environments.
+b) Throughput Ratio. The TR is a metric used to evaluate
+the efficiency of beam-tracking algorithms in selecting beam
+indices for data transmission. It quantifies the ratio between
+the achievable throughput when using the predicted beam and
+the maximum possible throughput obtained by selecting the
+best beam. Mathematically, it is defined as:
+TR =
+PN
+i=1 log2(1 + yc
+(i))
+PN
+i=1 log2(1 + yˆi)
+,
+(5)
+where N is the number of test examples, ˆi is the best beam
+index, and c
+(i) is the predicted beam index.
+c) Top-K Accuracy. It is widely used to evaluate model
+performance in multi-class classification and ranking tasks,
+particularly when considering prediction uncertainty or when
+exact top-1 accuracy is too restrictive. See [22] for a detailed
+definition of this metric.
+Each metric offers a distinct lens through which the perfor-
+mance of the beam tracking solution can be assessed. RSRP
+serves as a core indicator of signal quality and is particularly
+relevant for regression-based evaluations. Tracking Ratio (TR)
+captures system-level effects by measuring the continuity of
+successful tracking, offering insight into real-world viability
+under constrained measurement conditions. Top-K Accuracy,
+while traditionally used in classification tasks, is adapted
+here to assess regression-based predictions by ranking beam
+candidates according to their estimated gain; it quantifies
+how often the optimal beam index appears among the top-K
+predicted candidates.
+By integrating these three metrics, we provide a holistic
+evaluation framework that captures signal fidelity, prediction
+robustness, and end-user impact—ensuring that the beam
+tracking solution is assessed not only in terms of model accu-
+racy but also in the context of practical system performance.
+C. Dataset Overview
+This work employs three datasets—M10%, R10%, and
+R50%—generated using high-fidelity ray-tracing simulations
+in distinct urban environments. The letter prefix indicates the
+scenario: R for Rosslyn and M for Marseille. The accompa-
+nying percentage represents the proportion of NLOS links in
+the dataset, reflecting different propagation challenges.
+M10%: Represents a low-density, residential-like setting
+in Marseille, characterized by smooth mobility patterns and
+predominantly LOS propagation. This scenario serves as a
+baseline due to its relatively stable and predictable dynamics.
+R10%: Models a dense urban canyon in Rosslyn with
+limited NLOS conditions but highly dynamic mobility. The
+scenario features frequent direction changes and fast link
+transitions, posing a challenge for tracking algorithms despite
+the low NLOS ratio.
+R50%: Captures a more balanced urban environment in
+Rosslyn, with a 50% mix of LOS/NLOS links and intermediate
+mobility dynamics.
+Figure 2 presents an aerial view of the scenarios for each
+dataset. As stated before, both R10 and R50 are situated in
+Rosslyn, but their BS positions differ. These datasets were
+selected to span a wide range of vehicular communication con-
+ditions, enabling thorough stress testing of the proposed beam
+tracking system in both favorable and adverse environments.
+a) Line-of-Sight and Non-Line-of-Sight Proportions: The
+LOS/NLOS distribution characterizes the level of signal ob-
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+5
+Fig. 2: Aerial visualization of the propagation environments
+in Wireless Insite.
+struction present in each dataset. While LOS conditions typi-
+cally allow easier beam alignment, NLOS scenarios introduce
+multi-path propagation and diffraction challenges. Table II
+summarizes the sample distribution for each dataset.
+As shown, both M10% and R10% datasets contain a high
+proportion of LOS scenes, consistent with 3GPP deployment
+assumptions [5] regarding BS antenna height (25 meters). In
+contrast, the R50% dataset was deliberately configured with a
+lower antenna height of 10 meters, increasing the likelihood of
+obstructions and resulting in a significantly higher proportion
+of NLOS links. This setup provides a more challenging
+environment for beam tracking, making R50% particularly
+suitable for assessing algorithm robustness under dynamic and
+obstructed conditions.
+b) Beam Dynamics Metrics: To analyze how beam prefer-
+ences evolve over time, we examined multiple complementary
+metrics. However, due to space constraints, we report only the
+MAFD here.
+Mean Absolute First Difference. MAFD captures average
+angular movement between successive beam indices. Let R be
+the number of receivers, S the number of scenes, and Ntotal
+the total number of beams, the MAFD is then computed as:
+MAFD = 1
+R
+R
+X
+r=1
+1
+S −1
+S−1
+X
+s=1
+Dsr,
+(6)
+with
+Dsr = min((ˆisr−1 −ˆisr)%Ntotal, (ˆisr −ˆisr−1)%Ntotal). (7)
+The %Ntotal operation implements a “wrap around”, with
+Ntotal being the total number of beams. For instance, assum-
+ing Ntotal = 3, a given receiver r = 5, and episodes with
+S = 7 scenes and a sequence of beam indices ˆi given by
+1, 1, 0, 2, 1, 2, 0; the respective sequence Ds5 is 0, 1, 1, 1, 1, 1.
+Note the wrap around Ntotal −1 = 2 in this case, such that
+the last value of Ds5 is 1 (not 2).
+The computed values for MAFD are 2.04 for R50% (Ross-
+lyn), 0.92 for M10% (Marseille) and 1.97 for R10% (Rosslyn).
+Since the dataset is structured hierarchically, composed of
+multiple episodes each containing several scenes, this metric
+TABLE II: LOS/NLOS distribution across datasets
+Dataset
+LOS Samples
+NLOS Samples
+R50% (Rosslyn)
+14,982
+13,306
+M10% (Marseille)
+27,800
+2,200
+R10% (Rosslyn)
+27,899
+2,101
+values represent the average behavior calculated across all
+episodes. MAFD provides insight into how abruptly and
+frequently the optimal beam direction changes, which directly
+impacts tracking difficulty.
+c) Key Observations and Dataset Justification: The
+observed (MAFD) values reveal clear distinctions in beam dy-
+namics across the evaluated scenarios: 1) M10% (Marseille,
+10% NLOS) exhibits the lowest MAFD of 0.92, indicat-
+ing smooth beam dynamics and relatively stable propagation
+conditions. This setting serves as a baseline for evaluating
+model performance under ideal or near-ideal tracking sce-
+narios. 2) R10% (Rosslyn, 10% NLOS) has a moderately
+higher MAFD of 1.97, suggesting greater angular variation.
+The increased complexity likely stems from urban structural
+features, despite having the same NLOS ratio as M10%. 3)
+R50% (Rosslyn, 50% NLOS) shows the highest MAFD at
+2.04, reflecting substantial angular fluctuations due to dense
+obstructions and frequent LOS blockages. This makes it the
+most challenging environment for beam tracking, stressing
+model robustness under dynamic urban conditions.
+MAFD differences underscore the importance of dataset
+diversity for evaluating tracking models under varied mobility
+and propagation conditions, enabling realistic and rigorous
+assessment of model’s generalization from stable to complex
+and rapidly changing environments.
+Reproducibility Note: To support reproducibility and en-
+able further experimentation, all datasets used in this study are
+publicly available through our research group website. 1
+IV. METHODOLOGY AND ARCHITECTURE
+This section introduces the proposed beam-tracking frame-
+work and outlines the experimental setup designed to evaluate
+its performance. The system is developed to operate under
+dynamic vehicular conditions and focuses on two key pre-
+diction tasks: beam index classification and RSRP regression.
+The architecture is benchmarked against existing approaches,
+including the LSTM-based model by Zhao et al.[11], a RNN-
+based approach using historical beam data in a Gated Re-
+current Unit (GRU) model proposed by Jiang et al.[17], and
+a LIDAR-based CNN approach originally proposed in[23],
+enhanced in [24], [25], and finalized by Suzuki et al.[15].
+The deep learning framework proposed in this work predicts
+the optimal beam index in real time using a sequence of
+historical beam measurements. It integrates spatial filtering
+with temporal modeling via a RNN composed of LSTM units,
+allowing the system to adapt to the temporal dynamics of
+vehicular communication scenarios.
+1Datasets are available at https://www.lasse.ufpa.br/pt/raymobtime, pub-
+lished under the following identifiers: M10% (Marseille) — originally t005,
+R50% (Rosslyn) — originally t004 and R10% (Rosslyn) — originally t006
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+6
+Fig. 3: Structure of historical beam data for time-series models.
+A. Time-Series Input Construction and Overhead Reduction
+Historical measurements and predictions are collected to
+construct the time-series input for the model. As illustrated
+in Figure 3, the system employs a sliding window. The
+framework is flexible, and future research is encouraged to
+explore different window lengths to better adapt to varying
+mobility patterns or application constraints. Each time step
+may contain either a measured or a predicted RSRP value.
+To minimize sensing overhead without compromising track-
+ing quality, the system alternates between actual measurements
+(every 240 ms) and predictions (every 80 ms), preserving
+temporal continuity. As shown in Figure 4, this results in
+mixed sequences of measured and predicted RSRP values, as
+exemplified for beams 32 and 33.
+By relying on predictions to fill gaps between measure-
+ments, the approach greatly reduces the overhead compared to
+beam sweep or frequent beam measurements in the worst-case
+scenarios. For example, if beam measurements were performed
+at the same frequency as the predictions (i.e., every 80 ms), the
+overhead would triple. In contrast, the proposed framework,
+depicted in Figure 5, combining one real measurement with
+two predictions over a 240 ms window—reduces the mea-
+surement overhead by approximately 66.7%, depending on the
+number of beams being tracked and the channel coherence.
+This approach balances prediction freshness and resource
+efficiency to maintain performance in dynamic scenarios.
+B. Prediction Architecture and Tasks
+The predictive model leverages a RNN architecture based
+on LSTM units, which are well-suited for modeling temporal
+dependencies inherent in beam tracking behavior. LSTMs
+overcome the vanishing gradient limitations of conventional
+RNNs through gated mechanisms—specifically, input, forget,
+and output gates—that regulate the flow of information across
+Fig. 4: Example input using real and predicted RSRP values
+for beams 32 and 33.
+Fig. 5: Prediction-aided strategy for reducing measurement
+overhead.
+time steps. This structure enables the model to retain relevant
+context over extended sequences, making it particularly ef-
+fective for beam tracking in mobile communication systems,
+where signal quality evolves continuously over time.
+The architecture of our model, shown in Figure 6, consists
+of an input layer that encodes the time-series beam data;
+LSTM layers that extract sequential features from historical
+RSRP values and beam indices; dropout layers for regular-
+ization to reduce overfitting; and dense layers that map the
+extracted features to the final output predictions.
+The architecture supports two core learning tasks:
+1. Deep Learning Beam Tracking via Classification –
+DeepBT-C The model predicts the most likely beam index
+for the next time step based on current time-series inputs. The
+output is a probability distribution over beams, and metric Top-
+K Accuracy is used to evaluate performance.
+2. Deep Learning Beam Tracking via Regression –
+DeepBT-R The model estimates the RSRP for each beam.
+The beam with the highest predicted RSRP is selected as
+optimal. The model is trained with Mean Squared Error (MSE)
+loss. To unify the evaluation with classification-based models,
+Top-K accuracy is also applied to regression predictions by
+identifying in each prediction the beam index with the highest
+predicted gain and check whether this index falls within the K
+highest-gain beams in the ground-truth vector. This approach
+preserves the core intuition of Top-K Accuracy, evaluating
+whether the model’s top-ranked prediction aligns with the most
+favorable beams in terms of actual signal strength.
+C. Baseline Methods
+To provide a comparative analysis, the proposed deep learn-
+ing model was evaluated against two baseline methods relevant
+to mmWave beam management and tracking:
+Fig. 6: Proposed beam tracking architecture based on LSTM
+layers.
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+7
+1. Zhao et al. LSTM: This deep learning-based approach
+targets beam tracking in co-located scenarios using LSTM
+layers trained on historical sequences of sub-6 GHz CSI [11].
+Each time step in the input sequence contains the complex
+channel coefficients between the UE and the BS. Our evalu-
+ation employs a re-implementation of this model, adapted to
+the datasets used in this study. It is important to note that
+reported performance in the original work or other studies
+may differ due to variations in datasets, input pre-processing,
+or evaluation conditions.
+2. Jiang et al. GRU: This model leverages gated recurrent
+units (GRUs) to perform beam tracking using a real-world
+dataset (DeepSense 6G) [17]. Their approach achieves up
+to 97.6% Top-5 accuracy under LOS conditions and serves
+as a strong benchmark. However, the evaluation assumes
+perfect knowledge of previous beam selections and does not
+consider NLOS scenarios, which limits its applicability in
+more complex or obstructed environments. We reproduce this
+method on our datasets to ensure consistent comparison under
+equivalent assumptions.
+3. Suzuki et al. CNN: This baseline is a Convolutional
+Neural Network (CNN)-based approach that leverages spa-
+tial sensing data, such as LIDAR, for beam selection and
+tracking [15]. We adopted this method as our sensing-based
+baseline instead of the LIDAR extension proposed by Jiang et
+al. [17], primarily due to its compatibility with the Raymob-
+time dataset used in this study.
+V. EXPERIMENTAL RESULTS
+This section presents a comprehensive evaluation of the
+proposed RNN-based beam tracking framework, assessing
+both task variants—DeepBT-R and DeepBT-C described in
+the section IV-B. The evaluation is conducted across three
+datasets with varying propagation conditions, identified by
+their NLOS percentages: M10% — Marseille, 10% NLOS
+(90% LOS), R10% — Rosslyn, 10% NLOS (90% LOS) and
+R50% — Rosslyn, 50% NLOS (balanced scenario).
+The experimental analysis begins by evaluating the input
+efficiency of our proposed models in comparison to baseline
+architectures. We then investigate the effects of LOS/NLOS
+transitions on beam stability and prediction accuracy, followed
+by a detailed assessment of our measurement overhead reduc-
+tion strategy. Finally, we analyze throughput efficiency, and
+the trade-offs between performance and sensing overhead.
+A. Model Specifications and Input Efficiency
+Table III presents a comparison of the proposed DeepBT
+models against three baseline architectures in terms of param-
+eter count, model size, and average input size. Although the
+DeepBT model has a comparable number of parameters to
+the CNN baseline by Suzuki et al. [15], it operates on input
+vectors that are over 800 times smaller than Suzuki et al.’s
+approach, highlighting its significant advantage in terms of
+memory efficiency and real-time feasibility.
+When comparing the proposed model to the LSTM and
+GRU-based baselines by Zhao et al.[11] and Jiang et al.[17],
+respectively, we observe a different trade-off. Although these
+models are smaller in terms of parameter count and model
+size, they rely on larger input vectors—potentially increasing
+CSI acquisition and transmission overhead. This is particularly
+relevant in uplink scenarios, where channel state information
+is gathered at the UE and must be transmitted to the BS. In
+contrast, the DeepBT model leverages minimal input while
+preserving competitive model capacity, making it more effi-
+cient in both computation and communication contexts.
+Although the proposed model is not the smallest in terms of
+parameter count, its compact input size makes it an attractive
+candidate for real-time, resource-constrained beam tracking.
+Future work may explore architecture optimizations to reduce
+model complexity without compromising accuracy and its
+input efficiency advantage.
+TABLE III: Model Specifications
+Model
+Parameters
+Model Size
+Mean Input Size
+DeepBT
+535,552
+2.04 MB
+1.25 KB
+Zhao et al. LSTM
+55,872
+0.218 MB
+5 KB
+Jiang et al. GRU
+43,008
+0.168 MB
+1.6 KB
+Suzuki et al. CNN
+514,000
+1.96 MB
+1048 KB
+B. Comparison Against Baseline Models
+Figure 7 presents a comparison of Top-K accuracy be-
+tween our proposed models—DeepBT-C (Classification) and
+DeepBT-R (Regression)—and several baselines across two
+datasets: M10% and R10%, which consist of 90% LOS and
+10% NLOS scenes. In both scenarios, DeepBT-C consistently
+achieves the highest accuracy across all K values, outperform-
+ing classical and recent LSTM-based baselines [11]. DeepBT-
+R also performs competitively, slightly behind DeepBT-C but
+still significantly ahead of all baselines, particularly in the
+more challenging R10% dataset.
+While DeepBT-R underperforms relative to DeepBT-C in
+terms of raw accuracy, it enables the application of an autore-
+gressive inference strategy [26], explained in Section IV-B,
+that can substantially reduce beam tracking overhead during
+deployment. This makes DeepBT-R particularly attractive for
+real-time, resource-constrained scenarios. The benefits of this
+technique are further discussed in Section V-D.
+Notably, while the LIDAR baseline [15] shows reasonable
+performance in R10%, they remain far below the accuracy
+achieved by our deep learning-based approaches. These results
+highlight the robustness and generalization capabilities of
+our method under LOS-dominant conditions and suggest that
+even minor NLOS occurrences do not significantly degrade
+performance. In the following section, we evaluate model
+performance in more complex environments, specifically the
+R50% dataset with a balanced LOS/NLOS distribution.
+C. Impact of LOS/NLOS Transitions on Beam Stability and
+Model Performance
+To assess the influence of propagation conditions on beam
+tracking, we analyze model behavior under mixed LOS/NLOS
+dynamics using the R50% dataset, which includes 50% NLOS
+scenes. As illustrated in Figure 8, abrupt beam index changes
+frequently occur in NLOS intervals due to blockages and
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+8
+Fig. 7: Top-K accuracy comparison within proposed models
+vs. baselines in datasets M10% and R10% (10% NLOS)
+multi-path propagation. These transitions contrast sharply with
+the more stable index behavior observed during LOS, where
+beam direction remains largely consistent.
+Figure 8 shows two representative temporal patterns. In
+subplot (a), the beam index changes gradually, with one
+abrupt switch near the end due to an NLOS event. Subplot
+(b) depicts a more erratic behavior: long intervals of stable
+beams are interrupted by brief but severe disruptions caused
+by transient LOS blockages. These examples show how short
+NLOS episodes can pose significant prediction challenges.
+To evaluate model robustness under frequent propagation
+changes, we compare performance on the challenging R50%
+dataset, which features a balanced 50% LOS and 50% NLOS
+distribution. As shown in Figure 9, our proposed models
+significantly outperform all baselines across all Top-K values,
+demonstrating strong generalization under mixed conditions.
+In this scenario, the DeepBT-C model consistently achieves
+the highest accuracy, outperforming both DeepBT-R and all
+baseline methods. DeepBT-R, while slightly behind DeepBT-
+C, still maintains a clear margin over all baselines. The
+gap between DeepBT-R and classification grows under more
+Fig. 8: Temporal evolution of the optimal beam index across
+LOS and NLOS intervals in R10% and R50%.
+severe NLOS conditions, which highlights the limitations
+of regression-based approaches in environments with abrupt
+signal fluctuations.
+Notably, the LIDAR-based baseline [15] also performs
+very well in this setting, demonstrating that spatial context
+can substantially enhance prediction accuracy. However, this
+comes at the cost of significantly higher input dimensionality
+and computational overhead, making it less practical for
+lightweight or latency-sensitive deployments.
+These results reinforce the importance of designing models
+that can adapt to unpredictable real-world conditions. Despite
+the higher complexity of the R50% environment, both DeepBT
+variants maintain high accuracy, with DeepBT-C nearing 99%
+Top-10 accuracy and DeepBT-R reaching over 70%. These
+findings validate the robustness of our approach for deploy-
+ment in urban and obstructed scenarios.
+Figure 10 compares the Top-K accuracy of DeepBT-C
+and DeepBT-R across the same environment in two different
+propagation conditions: R10% and R50%. As expected, both
+models achieve higher accuracy in the more favorable R10%
+scenario, where LOS conditions dominate and beam direction
+changes are smoother. DeepBT-C shows strong resilience,
+with only a minor drop in performance between the two set-
+tings—maintaining over 95% accuracy for Top-5 predictions
+even in R50%. This demonstrates the model’s robustness to
+propagation variability.
+In contrast, DeepBT-R is more sensitive to the increased
+presence of NLOS in R50%, exhibiting a noticeable drop
+in accuracy, particularly for lower K values. Despite this,
+it still delivers meaningful predictions and benefits from its
+lower inference overhead, as discussed in Section V-D. These
+results confirm that while classification-based approaches are
+more reliable under dynamic conditions, regression remains
+a practical alternative for lightweight inference when paired
+with techniques like autoregression.
+D. Autoregressive Inference for Overhead Reduction
+This section evaluates the performance of autoregression
+strategies, where real beam measurements are partially re-
+placed by model predictions in the input sequence. As de-
+scribed in Section IV and illustrated in Figure 5, this approach
+allows reducing measurement overhead by reusing recent
+model outputs in place of actual sensing data.
+Fig. 9: Top-K accuracy comparison in R50% (50% NLOS):
+proposed models vs. baselines.
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+9
+Fig. 10: Top-K accuracy comparison between RSRP Regres-
+sion and Best Index Classification in R10% vs. R50%.
+Specifically, we analyze three replacement configurations:
+the 1:1 prediction strategy, where each model prediction is
+followed by one real measurement; the 2:1 prediction strategy,
+where two consecutive predictions are made before a new
+measurement is taken; and the 3:1 prediction strategy, which
+uses three predictions for every one measurement.
+Figure 11 shows the Top-K accuracy of DeepBT-R un-
+der these replacement strategies across the three datasets. In
+Fig. 11, we use “The Full Measur.” to refer to evaluations
+made only with real measurements, which serve as a baseline.
+As expected, tracking accuracy declines gradually as the
+number of consecutive predictions increases. However, even
+in the most challenging scenario (R50% with 3:1 prediction),
+DeepBT-R maintains a reasonable level of accuracy. In LOS-
+dominant datasets (M10% and R10%), the impact of replace-
+ment is minimal, and the model preserves high accuracy even
+with fewer measurements. In R10% scenario, the DeepBT-R
+even outperforms all baseline methods in the same scenario,
+having close results to the LIDAR baseline.
+This trade-off is particularly advantageous for real-time
+applications such as vehicular beam tracking and mobile edge
+computing, where sensing time competes with data trans-
+mission and control signaling. By reducing the frequency of
+beam measurements, the system can allocate more resources
+to communication tasks.
+The
+corresponding
+Measurement
+Overhead
+Reduction
+(MOR) for each configuration can be quantified following
+3GPP Technical Report [27] and prior work [28], using the
+formula:
+MOR (%) =
+
+1 −Nmeasured
+Nfull
+
+× 100
+(8)
+where Nmeasured is the number of actual beam measurements
+used in a reduced strategy, and Nfull is the number used in the
+full-measurement setup. For example, the 1:1, 2:1, and 3:1
+configurations correspond to approximately 50%, 66.7%, and
+75% reduction in sensing overhead, respectively.
+Figure 11 shows the impact of this strategy on both pro-
+posed models—RSRP Regression and Best Index Classifi-
+cation—across the three datasets. These results confirm that
+DeepBT-R supports low-overhead autoregressive inference
+while maintaining strong performance, offering a practical
+path for efficient beam tracking in deployment-constrained
+environments.
+E. Throughput Analysis
+Figure 12 presents the TR for Top-1 accuracy across all
+evaluated datasets. This metric captures the fraction of success-
+ful beam alignments relative to the theoretical maximum, thus
+serving as a proxy for end-to-end communication efficiency.
+Among all models, DeepBT-C consistently achieves high
+throughput across datasets, particularly under the M10% and
+R10% conditions. DeepBT-R also demonstrates strong perfor-
+mance, especially in R50%, where it outperforms all baselines
+by a significant margin, and even surpass the DeepBT-C in this
+specific dataset.
+Traditional baselines exhibit larger performance gaps, par-
+ticularly under the M10% and R10% scenarios, where their
+throughput ratios remain substantially lower. This underscores
+the advantage of the adaptability of DeepBT strategies.
+Interestingly, R50% yields more consistent throughput
+across all models. This behavior aligns with the lower beam
+gain variance in this dataset (8.42 dB), which makes beam
+selection errors less critical, providing more leeway for beam
+miss-election without severe performance penalties. In con-
+trast, M10% and R10% have larger beam gain variance (14.24
+dB and 11.60 dB, respectively), meaning the performance
+gap between the optimal and suboptimal beams is more
+pronounced. As a result, accurate beam selection becomes
+more important, and misclassifications tend to cause sharper
+drops in throughput.
+VI. CONCLUSION AND FUTURE WORK
+This work presented a robust deep learning framework for
+beam tracking in mmWave V2I scenarios. We conducted ex-
+tensive evaluations across three realistic datasets with varying
+LOS/NLOS distributions. The proposed architecture, DeepBT,
+leverages historical channel dynamics through sequential mod-
+eling to support both beam classification and regression strate-
+gies. Among them, the DeepBT-R model, based on RSRP
+regression, achieves a favorable trade-off between prediction
+accuracy and measurement overhead, while the DeepBT-C
+outperforms all baselines accuracy in the analyzed datasets.
+Future research will explore more advanced sequential
+modeling architectures, such as Transformer-based and hybrid
+RNN-Transformer approaches, to enhance temporal depen-
+dency extraction under fast mobility. Additionally, integrating
+external sensing modalities (e.g., radar, or GNSS) may further
+improve beam pre-selection, especially in cluttered urban
+environments.
+An interesting direction for future work involves the in-
+tegration of position-aware spatial beam pre-selection to re-
+duce search space and computational overhead. Preliminary
+experiments (now omitted for brevity) explored a filtering
+strategy in which only beams within a small angular vicinity
+of the estimated user direction are considered. This approach,
+grounded in 3GPP beam management guidelines and based
+on CSI-derived user positioning, showed promising results
+in reducing inference time with minimal performance degra-
+dation, particularly in LOS-dominant environments. A more
+systematic exploration of adaptive beam set sizing and its
+impact across diverse propagation scenarios remains a valuable
+avenue for future research.
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+10
+Fig. 11: Top-K accuracy under different measurement replacement strategies. First row: Best Index Classification; Second row:
+RSRP Regression. Top to bottom: (a, b) R50%, (c, d) M10%, (e, f) R10%.
+Fig. 12: Top-1 Throughput Ratio for RSRP Regression and
+Best Index Classification models across datasets.
+REFERENCES
+[1] W. Roh, J. Seol, J. Park, B. Lee, J. Lee, Y. Kim, J. Cho, K. Cheun, and
+F. Aryanfar, “Millimeter-wave beamforming as an enabling technology
+for 5G cellular communications: theoretical feasibility and prototype
+results,” IEEE Communications Magazine, vol. 52, pp. 106–113, 2014.
+[2] J. Huang, C.-X. Wang, H. Chang, J. Sun, and X. Gao, “Multi-Frequency
+Multi-Scenario Millimeter Wave MIMO Channel Measurements and
+Modeling for B5G Wireless Communication Systems,” IEEE Journal
+on Selected Areas in Communications, vol. 38, pp. 2010–2025, 2020.
+[3] E. Bjornson, L. Van der Perre, S. Buzzi, and E. G. Larsson, “Massive
+MIMO in Sub-6 GHz and mmWave: Physical, Practical, and Use-Case
+Differences,” IEEE Wireless Commun., vol. 26, no. 2, pp. 100–108, 2019.
+[4] W. Yi, W. Zhiqing, and F. Zhiyong, “Beam training and tracking in
+mmwave communication: A survey,” China Communications, 2024.
+[5] 3GPP, “Feature lead summary #3 evaluation of AI/ML for beam
+management,” Meeting Document R1-2306199, 3GPP TSG RAN WG1
+Meeting #112b-e, e-Meeting, Apr. 2023.
+[6] Q. Xue, C. Ji, S. Ma, J. Guo, Y. Xu, Q. Chen, and W. Zhang, “A survey
+of beam management for mmWave and THz communications towards
+6G,” IEEE Communications Surveys & Tutorials, 2024.
+[7] “Study on New Radio Access Technology: Physical Layer Aspects,” 3rd
+Generation Partnership Project (3GPP), Tech. Rep. TR 38.802, 2017,
+version 14.2.0.
+[8] “NR; Physical layer procedures for control,” 3rd Generation Partnership
+Project (3GPP), Tech. Rep. TS 38.213, 2024, version 18.3.0.
+[9] S. Shaham, M. Kokshoorn, M. Ding, Z. Lin, and M. Shirvanimoghad-
+dam, “Extended Kalman filter beam tracking for millimeter wave
+vehicular communications,” in 2020 IEEE International Conference on
+Communications Workshops (ICC Workshops).
+IEEE, 2020, pp. 1–6.
+[10] B. A. Asi and F. E. Mohmood, “Beam tracking channel for millimeter-
+wave communication system using least mean square algorithm,” Al-
+Rafidain Engineering Journal (AREJ), vol. 26, no. 2, pp. 118–123, 2021.
+[11] Y. Zhao, X. Zhang, X. Gao, K. Yang, Z. Xiong, and Z. Han, “LSTM-
+Based Predictive mmWave Beam Tracking via Sub-6 GHz Channels for
+V2I Communications,” IEEE Transactions on Communications, 2024.
+[12] S. H. Lim, S. Kim, B. Shim, and J. W. Choi, “Deep learning-based
+beam tracking for millimeter-wave communications under mobility,”
+IEEE Trans. Commun., vol. 69, no. 11, pp. 7458–7469, 2021.
+[13] A. M. Alwakeel, “6g virtualized beamforming: a novel framework
+for optimizing massive mimo in 6g networks,” EURASIP Journal on
+Wireless Communications and Networking, vol. 2025, no. 1, p. 23, 2025.
+[14] W. Zhong, L. Zhang, H. Jin, X. Liu, Q. Zhu, Y. He, F. Ali, Z. Lin,
+K. Mao, and T. S. Durrani, “Image-Based Beam Tracking With Deep
+Learning for mmWave V2I Communication Systems,” IEEE Transac-
+tions on Intelligent Transportation Systems, 2024.
+[15] D. Suzuki, A. Oliveira, L. Gonc¸alves, I. Correa, A. Klautau, S. Lins, and
+P. Batista, “Ray-Tracing MIMO Channel Dataset for Machine Learning
+Applied to V2V Communication,” in 2022 IEEE Latin-American Con-
+ference on Communications (LATINCOM).
+IEEE, 2022, pp. 1–6.
+[16] A. Oliveira, D. Suzuki, S. Bastos, I. Correa, and A. Klautau, “Ma-
+chine learning-based mmwave mimo beam tracking in V2I scenarios:
+Algorithms and datasets,” in 2024 IEEE Latin-American Conference on
+Communications (LATINCOM), 2024, pp. 1–5.
+[17] S. Jiang, G. Charan, and A. Alkhateeb, “Lidar aided future beam
+prediction in real-world millimeter wave V2I communications,” IEEE
+Wireless Communications Letters, vol. 12, no. 2, pp. 212–216, 2022.
+[18] R. W. Heath, N. Gonz´alez-Prelcic, S. Rangan, W. Roh, and A. M.
+Sayeed, “An Overview of Signal Processing Techniques for Millimeter
+Wave MIMO Systems,” IEEE Journal of Selected Topics in Signal
+Processing, vol. 10, no. 3, pp. 436–453, 2016.
+[19] M. Giordani, M. Polese, A. Roy, D. Castor, and M. Zorzi, “A tutorial
+on beam management for 3GPP NR at mmWave frequencies,” IEEE
+Communications Surveys & Tutorials, vol. 21, no. 1, pp. 173–196, 2018.
+[20] S. He, J. Wang, Y. Huang, B. Ottersten, and W. Hong, “Codebook-
+based hybrid precoding for millimeter wave multiuser systems,” IEEE
+Transactions on Signal Processing, vol. 65, no. 20, pp. 5289–5304, 2017.
+[21] 3GPP, “FL summary #5 for AI/ML in beam management,” Meeting
+Document R1-2407554, 3GPP TSG RAN WG1 Meeting #118, Maas-
+tricht, NL, Apr. 2023.
+[22] Y. Bengio, I. Goodfellow, and A. Courville, Deep Learning. MIT Press,
+2015.
+[23] M. Dias, A. Klautau, N. Gonz´alez-Prelcic, and R. W. Heath, “Position
+and LIDAR-aided mmWave beam selection using deep learning,” in
+2019 IEEE 20th International Workshop on Signal Processing Advances
+in Wireless Communications (SPAWC).
+IEEE, 2019, pp. 1–5.
+[24] S. Targ, D. Almeida, and K. Lyman, “Resnet in resnet: Generalizing
+residual architectures,” arXiv preprint arXiv:1603.08029, 2016.
+[25] B. Salehi, G. Reus-Muns, D. Roy, Z. Wang, T. Jian, J. Dy, S. Ioannidis,
+and K. Chowdhury, “Deep learning on multimodal sensor data at the
+wireless edge for vehicular network,” IEEE Transactions on Vehicular
+Technology, vol. 71, no. 7, pp. 7639–7655, 2022.
+[26] J. F. Rubio-Ramirez, D. F. Waggoner, and T. Zha, “Structural vector
+autoregressions: Theory of identification and algorithms for inference,”
+The Review of Economic Studies, vol. 77, no. 2, pp. 665–696, 2010.
+[27] “Study on artificial intelligence (AI)/machine learning (ML) for NR air
+interface,” 3rd Generation Partnership Project (3GPP), Technical Report
+TR 38.843, December 2023, version 18.0.0. [Online]. Available: https:
+//www.3gpp.org/ftp/Specs/archive/38 series/38.843/38843-1800.zip
+[28] N. Jayaweera, A. Bonfante, M. Schamberger, A. M. A. Tehrani, T. San-
+guanpuak, P. Tilak, K. Jayasinghe, F. W. Vook, and N. Rajatheva,
+“5G-Advanced AI/ML beam management: Performance evaluation with
+integrated ML models,” arXiv preprint arXiv:2404.15326, 2024.

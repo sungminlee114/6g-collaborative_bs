@@ -1,0 +1,2183 @@
+Digital Communications and Networks(DCN)
+journal homepage: www.elsevier.com/locate/dcan
+Towards 6G Native-AI Edge Networks: A
+Semantic-Aware and Agentic Intelligence
+Paradigm
+Chenyuan Feng1, Anbang Zhang2, Geyong Min1, Yongming Huang3,4,
+Tony Q. S. Quek4,5,∗, Xiaohu You3,4,∗
+1 College of Computer Science, University of Exeter, Exeter, U.K.
+2 Sony China Research Laboratory, Beijing, China
+3 School of Information Science and Engineering, Southeast University, Nanjing, China
+4 Purple Mountain Laboratories, Nanjing, China
+5 Information System Technology and Design Pillar, Singapore University of Technology and Design, Singapore
+∗Corresponding Author
+Abstract
+The evolution toward sixth-generation (6G) wireless systems positions intelligence as a native network capability, fundamen-
+tally transforming the design of radio access networks (RANs). Within this vision, Semantic-native communication (SemCom)
+and agentic intelligence are expected to play central roles. SemCom departs from bit-level fidelity and instead emphasizes
+task-oriented meaning exchange, enabling compact semantic representations and introducing new performance measures such
+as semantic fidelity and task success rate (TSR). Agentic intelligence endows distributed RAN entities with goal-driven auton-
+omy, reasoning, planning, and multi-agent collaboration, increasingly supported by foundation models and knowledge graphs.
+In this work, we first introduce the conceptual foundations of SemCom and agentic networking, and discuss why existing AI-
+driven O-RAN solutions remain largely bit-centric and task-siloed. We then present a unified taxonomy that organizes recent
+research along three axes: i) semantic abstraction level (symbol/feature/intent/knowledge), ii) agent autonomy and coordina-
+tion granularity (single-, multi-, and hierarchical-agent), and iii) RAN control placement across PHY/MAC, near-real-time RIC,
+and non-real-time RIC. Based on this taxonomy, we systematically introduce enabling technologies including task-oriented se-
+mantic encoders/decoders, multi-agent reinforcement learning, foundation-model-assisted RAN agents, and knowledge-graph-
+based reasoning for cross-layer awareness. Representative 6G use cases, such as immersive XR, vehicular V2X, and industrial
+digital twins, are analyzed to illustrate the semantic–agentic convergence in practice. Finally, we identify open challenges in
+semantic representation standardization, scalable trustworthy agent coordination, O-RAN interoperability, and energy-efficient
+AI deployment, and outline research directions toward operational semantic–agentic AI-RAN.
+KEYWORDS: AI Edge, Radio Access Network, Semantic Communication, Agentic Networks, 6G Native-AI Communication
+1. Introduction
+The sixth generation (6G) of wireless communica-
+tion networks is expected to go beyond terabit-per-
+second data rates and sub-millisecond latency, and
+to serve as an intelligence-native, knowledge-driven
+∗Corresponding author: Tony Q. S. Quek and Xiaohu You.
+1(email: tonyquek@sutd.edu.sg, xhyu@seu.edu.cn).
+2(This work has been submitted to the Elseview for possible pub-
+lication. Copyright may be transferred without notice, after which
+this version may no longer be accessible. ).
+infrastructure supporting emerging services such as
+holographic extended reality (XR), industrial digi-
+tal twins, massive Internet-of-Things (IoT), and au-
+tonomous vehicular networks [1, 2, 3, 4]. In contrast
+to previous generations where AI plays an auxiliary
+role, 6G envisions learning, reasoning, and decision-
+making embedded across the protocol stack, enabling
+a self-evolving radio access network (RAN) [5, 6, 7].
+Despite this vision, current RAN operation and AI-
+enabled O-RAN controllers remain largely rooted in a
+bit-centric Shannon abstraction, optimizing through-
+arXiv:2512.04405v1  [eess.SP]  4 Dec 2025
+2
+C. Feng, et al.
+put, bit error rate (BER), or quality of service (QoS)
+without explicitly accounting for the meaning or task
+relevance of exchanged information [8, 9]. This mis-
+match is particularly pronounced for task-oriented ser-
+vices, where achieving the correct intent or outcome
+is more important than exact symbol recovery. Se-
+mantic communication (SemCom) addresses this gap
+by transmitting compact, task-relevant semantic repre-
+sentations and by evaluating performance via semantic
+fidelity and task success rate (TSR), rather than solely
+bit-level metrics [10, 11, 12].
+In parallel, the scale and heterogeneity anticipated
+in 6G RAN, including ultra-dense deployments, dy-
+namic spectrum sharing, and tightly coupled cross-
+layer interactions, render purely centralized intelli-
+gence increasingly unsustainable.
+Network entities
+such as base stations, edge servers, and user devices
+thus need to evolve into autonomous, goal-driven
+agents capable of local perception, reasoning, plan-
+ning, and multi-agent coordination. This agentic intel-
+ligence paradigm provides proactive and scalable con-
+trol, complementing SemCom by determining what
+semantic information to exchange, when to exchange
+it, and at what abstraction level.
+Recent advances have produced promising Sem-
+Com prototypes and distributed learning approaches
+for wireless networks, while AI-driven O-RAN has
+introduced open interfaces and hierarchical RAN In-
+telligent Controllers (near-RT and non-RT RICs) that
+facilitate xApp/rApp deployment [13]. However, sev-
+eral gaps hinder the realization of a task-effective,
+scalable 6G AI-RAN: (i) most SemCom designs are
+domain-specific, offering limited reusability across
+tasks and lacking standardized semantic representa-
+tions or fidelity metrics; (ii) existing RIC-based AI
+solutions typically target narrow functions and face
+scalability challenges when coordinating many au-
+tonomous agents; (iii) trust, explainability, and secu-
+rity for distributed agent decisions remain underdevel-
+oped; and (iv) energy- and latency-aware deployment
+of large semantic/agentic models is still challenging.
+These
+gaps
+motivate
+an
+integrated
+view
+of
+semantic-aware and agentic AI-RAN for 6G. This
+work systematically reviews how SemCom and agen-
+tic intelligence can be jointly designed and deployed
+within the O-RAN architecture to enable a closed-
+loop, self-evolving Native-AI RAN. The main con-
+tributions are summarized as follows.
+(i) Concep-
+tual unification of semantic and agentic AI-RAN: We
+articulate a 6G Native-AI RAN paradigm where se-
+mantic representations and autonomous agents form a
+closed-loop self-evolving system, and clarify the roles
+of semantic fidelity and TSR as task-level KPIs. (ii)
+A three-axis taxonomy for semantic–agentic research:
+We propose a unified taxonomy along semantic ab-
+straction level →agent autonomy/coordination gran-
+ularity →RAN control placement (PHY/MAC, near-
+RT RIC, non-RT RIC), enabling systematic compar-
+ison of existing works.
+(iii) Summary of enabling
+technologies: We review key technical enablers in-
+cluding task-oriented semantic encoder/decoder de-
+sign and metrics, scalable multi-agent learning and
+negotiation, foundation-model-augmented (planning-
+oriented) agents, and knowledge-graph-based cross-
+layer reasoning and orchestration. (iv) Use cases and
+evaluation perspectives: We map semantic–agentic
+methods to representative 6G services (XR, V2X, dig-
+ital twins, edge intelligence), and summarize datasets,
+benchmarks, and task-level KPIs beyond conventional
+BER and throughput. (v) Open challenges and stan-
+dardization directions: We identify high-impact open
+issues in semantic representation/metric standardiza-
+tion, scalable and trustworthy multi-agent control, in-
+teroperability with O-RAN interfaces, and energy-
+aware AI design, and outline potential evolution paths
+for future standardization.
+2. Key Evolving Techniques in 6G Native-AI RAN
+Research toward 6G Native-AI RAN is converg-
+ing along two historically separate threads:
+Sem-
+Com, which redefines the communication abstrac-
+tion from bits to meaning, and agentic intelligence,
+which equips distributed RAN entities with goal-
+driven autonomy.
+Existing studies typically exam-
+ine these threads in isolation—e.g., focusing on end-
+to-end semantic encoders/decoders or on MARL-
+based RAN control—while practical deployments are
+largely rooted in AI-assisted O-RAN controllers[29,
+30, 31, 32]. To systematically organize the state of
+the art, we review prior work through the lens of our
+three-axis taxonomy: semantic abstraction level, agent
+autonomy/coordination granularity, and RAN control
+placement. We review prior works through three axes
+shown in Table 1.
+(1) SemCom by Abstraction Level: Early Sem-
+Com for wireless networks originated from deep joint
+source–channel coding (JSCC), where neural end-to-
+end pipelines were trained to reconstruct text or im-
+ages under channel impairments [15]. These works
+operate mainly at the symbol/feature semantic level,
+encoding modality-specific latent features to reduce
+redundancy. More recent advances extend semantic
+models toward intent- and task-level semantics, en-
+abling task-oriented transmission for cross-modal ser-
+vices such as XR, digital twins, and V2X, where pre-
+serving meaning is more important than exact bit re-
+covery [33]. In parallel, a growing literature explores
+semantic distortion and task metrics beyond BER, in-
+cluding semantic fidelity and TSR, which serve as
+application-aligned KPIs for semantic networks [10,
+11, 12]. Despite rapid progress, most semantic pro-
+totypes remain domain-specific and lack standardized
+semantic representations and metrics, limiting interop-
+erability and large-scale adoption.
+Towards 6G Native-AI Edge Networks: A Semantic-Aware and Agentic Intelligence Paradigm
+3
+Table 1
+Taxonomy of Semantic–Agentic AI-RAN for 6G Native-AI Networks.
+Axis
+Sub-category
+Definition / What it captures
+Typical inputs / outputs
+Representative
+methods
+Evaluation KPIs
+(Axis-1)
+Semantic
+abstraction
+level
+(L0)
+Bit/Symbol
+Classical bit-centric RAN
+optimization; no semantic
+awareness.
+Raw bits/symbols →bits.
+Shannon-based
+PHY/MAC; bit-centric
+RIC/xApps.
+BER/BLER,
+SINR,
+throughput.
+(L1) Fea-
+ture/Latent
+Modality-specific latent feature
+exchange to remove redundancy;
+task-aware but not intent-aware.
+Images/text/speech →
+latent embeddings.
+Deep JSCC;
+task-oriented semantic
+coding [14, 15].
+Semantic fidelity,
+TSR, reconstruc-
+tion/task
+accuracy.
+(L2)
+Intent/Task
+Transmit intent, goal, or task
+state; semantics tied to
+downstream task success.
+Intent/labels/BEV →task
+tokens.
+multi-modal / generative
+SemCom with
+foundation models
+[16, 17, 18].
+TSR, task
+accuracy,
+latency-per-task.
+(L3) Knowl-
+edge/Graph
+Semantics represented as
+structured knowledge (KG/scene
+graph) enabling
+reasoning/explainability.
+KG triples/graphs →
+KG/intent.
+KG-aided SemCom /
+KG semantic reasoning
+[19, 20].
+TSR +
+explainability /
+constraint
+satisfaction.
+(Axis-2)
+Agent
+autonomy &
+coordination
+granularity
+(G0)
+Non-agentic
+Centralized/offline optimization
+without autonomous agents.
+Global state →policy.
+Conventional
+optimization /
+supervised DL.
+Convergence, bit
+KPIs.
+(G1)
+Single-agent
+One agent controls a cell/cluster;
+no explicit inter-agent
+negotiation.
+Local KPIs/state →action.
+RL for schedul-
+ing/power/mobility [21].
+Local utility,
+stability.
+(G2)
+Multi-agent
+Multiple agents coordinate via
+CTDE / negotiation for scalable
+RAN control.
+Distributed obs →joint
+actions.
+MARL for multi-cell
+RA/mobility/slicing
+[22, 23].
+Sum-utility,
+fairness,
+TSR-aware
+reward.
+(G3)
+Hierarchical /
+Agentic
+Agents have roles/levels
+(planner–executor); may use
+LLM tools/KG context.
+Intent + context →plans +
+actions.
+LLM-/tool-augmented
+RIC agents, LLM agents
+mainly for planning
+(non-RT/slow near-RT),
+not sub-ms execution.
+[24, 25, 26, 27].
+Goal satisfaction,
+robustness, trust.
+(Axis-3)
+RAN control
+placement
+(P0)
+PHY/MAC
+local loop
+Sub-ms to ms control at BS/UE;
+strict realtime constraints.
+CSI/KPIs →PHY/MAC
+actions.
+Semantic PHY; local RL
+schedulers.
+BLER, latency,
+energy, edge
+TSR.
+(P1) near-RT
+RIC (xApp)
+10 ms–1 s control over E2
+interface; closed-loop xApps.
+E2 telemetry →xApp
+actions.
+Learning-based xApps
+for RA/slicing [28].
+Slice utility,
+QoE/TSR,
+stability.
+(P2) non-RT
+RIC
+(rApp/SMO)
+>1 s to minutes; A1/O1;
+training/orchestration/policy.
+Data lake/DT/KG →
+policies/models.
+Long-timescale
+orchestration; DT-RAN;
+FL.
+Global TSR,
+energy,
+generalization.
+(P3)
+Cross-layer /
+E2E
+Joint intelligence across P0–P2
+with multi-timescale
+coordination.
+Multi-timescale context →
+hierarchical control.
+Semantic–agentic
+co-design frameworks.
+Pareto: TSR–
+latency–energy.
+(2) Agentic Intelligence by Autonomy and Co-
+ordination Granularity: On the intelligence side,
+reinforcement learning and deep learning have been
+widely applied to PHY/MAC and RAN functions such
+as spectrum allocation, power control, and user as-
+sociation.
+These solutions primarily reflect single-
+agent or loosely coupled multi-agent autonomy, where
+agents optimize local KPIs with limited reasoning
+about global task intent. To improve scalability, re-
+cent works adopt multi-agent reinforcement learn-
+ing (MARL) for coordinated scheduling, interfer-
+ence management, and mobility, often using cen-
+tralized training–decentralized execution or hierar-
+chical MARL to mitigate non-stationarity and par-
+tial observability.
+Emerging directions incorporate
+foundation-model-assisted agents (e.g., LLM-based
+planners) and knowledge-graph-augmented reasoning
+to provide agents with richer context, enabling intent-
+aware policy selection and cross-layer decision mak-
+ing. Existing MARL/controller studies are usually bit-
+centric, task-siloed, and face stability/trust challenges
+when scaled to large heterogeneous RANs.
+(3) RAN Control Placement–from PHY/MAC
+Intelligence to O-RAN RICs: The practical sub-
+strate for AI-RAN has been significantly shaped by
+O-RAN [29]. AI-driven O-RAN introduces standard-
+ized near-real-time (near-RT) and non-real-time (non-
+RT) RICs, open interfaces (E2/A1/O1), and deploy-
+able xApps/rApps for closed-loop RAN optimization.
+Current O-RAN-based works map learning to specific
+control locations: (i) PHY/MAC-level intelligence for
+fast adaptation, (ii) near-RT RIC agents for sub-second
+control such as scheduling and interference mitigation,
+and (iii) non-RT RIC orchestration for long-timescale
+analytics, policy management, and federated training.
+While O-RAN provides openness and a hierarchical
+4
+C. Feng, et al.
+Table 2
+Comparison of Traditional RAN, AI-driven O-RAN, and 6G Native-AI Networks.
+Dimension
+Traditional RAN
+AI-driven O-RAN
+6G Native-AI Networks
+Network Architecture
+Proprietary, vertically integrated
+Disaggregated RAN open interfaces
+AI-native stack native intelligence
+AI integration
+Heuristics/rules limited learningxApps/rApps in RICs AI-assisted control
+AI at all layers agentic intelligence
+Optimization target
+Rate/coverage bit-level QoS
+RRM, mobility, interference control
+Task success semantic utility
+Control paradigm
+Centralized static config
+Closed-loop RIC, near-RT control
+Proactive autonomy multi-agent MARL
+Communication abstraction Bits, Shannon symbol fidelity
+Bits + early semantic trials
+Semantics/knowledge meaning fidelity
+Scalability & flexibility
+Low, vendor lock-in
+Moderate, orchestrated apps
+High, distributed agents + FL
+Trust & security
+Conventional crypto, no AI trust
+Basic privacy (FL), limited XAI
+Built-in trust, auditable agents
+Energy efficiency
+Secondary objective
+AI overhead, emerging EE focus
+EE-aware AI, adaptive semantics
+control plane, its dominant optimization targets re-
+main throughput/QoS-centric, and it lacks native sup-
+port for semantic KPIs and intent-level control.
+(4) Cross-axis Enablers–Large Foundation Mod-
+els and Knowledge Graphs: Cross-layer semantic–
+agentic convergence relies on shared representations
+and reasoning interfaces.
+Large foundation mod-
+els (e.g., LLM/MLLM-based wireless agents) pro-
+vide generalizable semantic extraction across modal-
+ities and tasks, offering a reusable backbone for se-
+mantic abstraction beyond handcrafted features and
+enabling high-level task planning in AI-native RANs
+[34, 35]. Knowledge graphs (KGs) complement foun-
+dation models by organizing network state, intent,
+topology, and service knowledge into explicit rela-
+tional structures that support explainable inference,
+policy constraints, and long-horizon coordination [36,
+37].
+Recent studies indicate that KG-augmented agents
+can infer latent dynamics and transfer policies across
+scenarios, while exchanging compact semantic sym-
+bols rather than raw observations [36].
+(i) Infer-
+ence latency: LLM-based agents typically incur sub-
+stantially higher per-decision delay than lightweight
+RL xApps, especially under multi-step reasoning or
+tool-calling; hence they are usually placed in non-
+RT or near-RT loops, while fast PHY/MAC ac-
+tions remain delegated to smaller distilled policies
+[34, 38, 30].
+(ii) Model size and footprint: wire-
+less foundation models often reach hundreds of mil-
+lions to billions of parameters, exceeding the mem-
+ory/compute budget of typical edge nodes; practical
+prototypes therefore rely on parameter-efficient tun-
+ing, pruning/distillation, or GPU-class edge/cloud ex-
+ecution [35]. (iii) DT/offloading dependence: to re-
+duce trial-and-error cost and ensure safe orchestra-
+tion, foundation-model/KG agents are frequently cou-
+pled with digital twins for what-if evaluation and with
+edge offloading for heavy inference, introducing addi-
+tional DT synchronization overhead and offloading la-
+tency [39, 38, 40, 32]. Overall, foundation-model/KG
+agents are best positioned as slow-timescale se-
+mantic planners or coordinators complementary to
+lightweight real-time controllers, rather than drop-in
+replacements for near-RT xApps.
+(5) Standard-Readiness: We emphasize that cur-
+rent O-RAN specifications remain largely bit-centric
+and do not yet define native semantic KPIs or seman-
+tic information elements in O1/A1/E2 service mod-
+els. Therefore, semantic-native AI-RAN should be in-
+terpreted as a forward-looking extension: (i) seman-
+tic embeddings can be carried as payloads over exist-
+ing E2 service models or via vendor-specific E2SM
+extensions; (ii) task/semantic KPIs such as TSR can
+be mapped to new KPM groups in O1 and gradually
+standardized. Throughout this survey, we distinguish
+standard-ready components (e.g., RL xApps/rApps,
+CTDE/MARL control placement) from vision-only
+components (e.g., semantic KPIs, semantic routing
+primitives), so as to avoid over-claiming standard ma-
+turity.
+In summary, existing research has made strong
+progress along individual axes—semantic abstraction
+for task-oriented communication, distributed learning
+for autonomous RAN control, and O-RAN for de-
+ployable AI controllers—but lacks an integrated view
+that jointly considers what semantics are exchanged,
+how autonomous agents collaborate, and where intel-
+ligence is placed in the RAN hierarchy. This motivates
+the taxonomy and survey scope of this paper, which
+systematically maps existing contributions onto these
+three axes and identifies the remaining gaps toward
+operational 6G semantic-agentic AI-RAN.
+3. 6G Semantic-Agentic AI-RAN Framework
+A growing body of literature indicates that 6G ra-
+dio access networks (RANs) will evolve from AI-
+assisted optimization toward intelligence-native oper-
+ation, where semantic-level information exchange and
+autonomous decision-making become first-class de-
+sign objectives. In this context, recent works on Sem-
+Com and on distributed/agentic network intelligence
+are increasingly viewed as complementary rather than
+independent.
+In this work, we summarize a lay-
+ered semantic–agentic AI-RAN stack that has emerged
+across representative studies, clarify the role of each
+functional layer, and discuss how semantic and agentic
+components interact to enable task-oriented and scal-
+able 6G services.
+Towards 6G Native-AI Edge Networks: A Semantic-Aware and Agentic Intelligence Paradigm
+5
+3.1. System Architecture
+Fig. 1. Illustration of a 6G Native-AI architecture.
+Fig. 1 presents a consolidated view of the emerg-
+ing 6G Native-AI architecture. Different from con-
+ventional RANs where AI is appended as a standalone
+optimizer, recent semantic- and agent-centric works
+advocate embedding intelligence across the protocol
+stack and treating the network as an adaptive ecosys-
+tem that (i) communicates meaning through seman-
+tic representations and (ii) reasons/acts autonomously
+through distributed agents. Conceptually, the archi-
+tecture can be organized as a multi-layer stack from
+radio/physical functions up to application services,
+with SemCom and agentic intelligence acting as cross-
+cutting enablers.
+(1) Radio Access and Physical Foundation:
+At the foundation of the 6G Native-AI architec-
+ture, multiple studies have shifted from block-wise
+PHY/MAC designs toward end-to-end or partially
+end-to-end learned transceivers. Typical examples in-
+clude deep joint source–channel coding (JSCC) and
+neural transceiver pipelines that jointly optimize mod-
+ulation, coding, beamforming, and scheduling under
+task-oriented objectives.
+In these designs, the per-
+formance target moves beyond pure bit reconstruc-
+tion (e.g., BER/BLER) toward task success and se-
+mantic fidelity, especially for perception- and intent-
+driven services.
+Complementary research exploits
+reinforcement learning (RL) or self-learning mecha-
+nisms for beamforming, link adaptation, and dynamic
+spectrum access, enabling proactive reactions to traffic
+heterogeneity [30]. Since 6G edge devices remain re-
+source constrained, model pruning, quantization, and
+adaptive-complexity inference are commonly adopted
+to keep real-time feasibility and energy cost under
+control [41].
+(2) AI-native Orchestration Layer: Above the
+radio foundation, the AI-native network layer mech-
+anisms the control and learning fabric that sus-
+tains long-term evolution.
+Recent studies empha-
+size continual/self-supervised learning to cope with
+non-stationary environments, and distributed learn-
+ing paradigms such as federated learning (FL) and
+split learning to avoid centralizing sensitive data
+while maintaining scalability. Model compression and
+knowledge distillation further allow lightweight de-
+ployment of inference modules on edge nodes. In par-
+allel, network slicing is increasingly revisited through
+a semantic-aware perspective: rather than allocating
+resources solely to meet throughput or latency con-
+straints, slices are shaped to maximize task-level util-
+ity (e.g., maintaining XR scene coherence or V2X in-
+tent reliability). This layer also hosts non-real-time
+optimization, digital-twin-assisted planning, and pol-
+icy governance are typically placed in O-RAN-aligned
+systems.
+(3) Agentic Intelligence Layer: A key trend in
+the AI-RAN literature is to conceptualize network
+elements as autonomous agents that perceive local
+state, take actions, and learn reward-driven policies.
+Such agents may reside at base stations, edge servers,
+or terminals, and are often coordinated using multi-
+agent reinforcement learning (MARL) variants such as
+centralized-training-decentralized-execution (CTDE)
+or hierarchical MARL to stabilize learning under par-
+tial observability. Importantly, an increasing subset of
+works further argues that agent coordination should be
+mediated by task-relevant semantic messages rather
+than raw telemetry, thereby reducing signaling over-
+head while enhancing cooperative efficiency. Knowl-
+edge graphs (KGs) and multi-modal foundation mod-
+els are often introduced as contextual reasoning sub-
+strates: KGs encode structured relationships among
+network state, service intent, and environment seman-
+tics, while foundation models provide generalizable
+semantic extraction and planning priors. Trust and ro-
+bustness are also recurrent themes; representative ap-
+proaches include secure aggregation in FL, policy au-
+diting, and ledger-style mechanisms for model prove-
+nance.
+Overall, the agentic layer provides scalable
+autonomy, especially when intelligence must be dis-
+tributed across dense and heterogeneous 6G deploy-
+ments.
+(4) Semantic Layer: Complementary to agentic
+control, SemCom redefines what is exchanged over
+the air. Instead of transmitting raw symbols, seman-
+tic encoders and decoders extract task-relevant embed-
+dings (features, intents, or knowledge) and reconstruct
+outcomes with acceptable meaning distortion. Conse-
+quently, task success rate (TSR) and semantic fidelity
+become natural KPIs, often instantiated via similar-
+ity measures in embedding space (e.g., cosine or dis-
+tributional distances). This layer is not a monolithic
+module in practice; several proposed systems place se-
+mantic encoding either close to perception/application
+endpoints (for task-level semantics) or within cross-
+layer PHY stacks (for feature-level semantics), de-
+pending on latency and standardization constraints.
+(5) Semantic–Agentic Coupling: Among the ex-
+6
+C. Feng, et al.
+isting work, the semantic and agentic layers are in-
+trinsically intertwined.
+Semantics extracted at one
+node serve as compact, meaning-rich inputs for agent
+collaboration and policy selection, while agent deci-
+sions adapt which semantic units need transmission
+and when they should be prioritized to meet system-
+wide objectives.
+This closed-loop coupling is cen-
+tral to the vision of semantic–agentic AI-RAN: com-
+munication efficiency is aligned with task relevance,
+and autonomy is grounded in shared semantic context.
+Compared with AI-driven O-RAN that often confines
+AI to modular controllers, the semantic–agentic archi-
+tecture positions intelligence as a native network at-
+tribute spanning fast local loops and slow orchestrated
+evolution.
+(6)
+Cost
+Dimensions
+of
+Large-Foundation-
+Model/Knowledge-Graph
+(LFM/KG)
+Agents:
+While LFMs and KG reasoning offer strong gener-
+alization and planning capabilities for 6G AI-native
+RANs, existing studies consistently reveal non-trivial
+cost dimensions that must be addressed for practical
+deployment. (i) Inference latency: LLM-based agents
+typically introduce 10–100× higher per-decision
+latency than lightweight RL/xApp policies, especially
+when multi-step reasoning or tool-calling is required.
+As a result, most works place LLM agents in non-RT
+or near-RT control loops and keep fast PHY/MAC
+decisions to smaller models or distilled policies. Rep-
+resentative 6G agentic studies explicitly adopt such
+slow/fast separation through split execution or hierar-
+chical orchestration [34, 35, 38]. (ii) Model size and
+memory footprint: Wireless foundation models and
+LLM agents often span hundreds of millions to bil-
+lions of parameters, exceeding the memory/compute
+budget of typical RAN edge devices. Recent research
+and prototypes therefore employ parameter-efficient
+finetuning, pruning/distillation, and model caching to
+reduce edge footprint, or offload heavy reasoning to
+GPU-class edge/cloud servers [34]. (iii) Dependence
+on DT / edge offloading: To reduce trial-and-error cost
+and improve safety, LLM/KG agents are frequently
+coupled with digital twins (DTs) for what-if analysis
+and policy validation, and/or with edge offloading for
+large-model inference. DT-copilot or LLM-DT hierar-
+chical control frameworks are now a prevalent pattern
+for complex RAN orchestration [39, 38, 40].
+This
+also implies extra system complexity (DT fidelity,
+synchronization overhead, and offloading latency) that
+does not exist in purely lightweight MARL designs.
+Overall, foundation-model/KG agents are best viewed
+as high-level semantic planners or coordinators (slow
+timescale), complementary to small RT controllers. A
+balanced AI-RAN design therefore requires explicit
+latency/footprint/offloading
+budgeting
+instead
+of
+treating LLM/KG agents as drop-in replacements for
+near-RT xApps.
+The interconnection of these layers forms a closed-
+loop system. Semantic information guides agent in-
+teractions, agents generate adaptive policies that feed
+into the native-AI orchestration, and the orchestration
+mechanisms provide updated models that refine both
+semantic encoders and agent policies.
+This cyclic
+interaction yields a network that is not only self-
+optimizing but also self-evolving, continuously adapt-
+ing to dynamic environments and emerging applica-
+tions. In contrast to AI-driven O-RAN where intelli-
+gence is largely confined to modular controllers, the
+proposed architecture embodies intelligence as a na-
+tive property of the communication system, enabling a
+transition from bit pipes to knowledge-driven ecosys-
+tems.
+3.2. Problem Formulation
+To connect heterogeneous studies under a common
+analytical umbrella, a large fraction of recent works
+adopt a joint optimization view where semantic-aware
+transmission and agentic decisions are co-designed.
+While individual formulations vary across tasks and
+control locations, they can be interpreted through a
+representative abstraction that couples semantic fi-
+delity with multi-agent utility [42, 18, 23, 24].
+Consider a set of network entities N = {1, 2, . . . , N},
+where each entity may be modeled as an autonomous
+agent. Agent i observes a local state si (e.g., chan-
+nel indicators, queue states, service context), selects
+an action ai (e.g., spectrum/power/scheduling deci-
+sions), and updates a policy πi(ai|si) to maximize a
+task-oriented reward Ri [22, 23].
+On the SemCom
+side, an encoder fθ(·) maps raw data x into an embed-
+ding z = fθ(x), and a decoder gϕ(·) reconstructs a task-
+relevant outcome ˆx = gϕ(z) [14, 16, 17]. Semantic dis-
+tortion is typically measured via an embedding-space
+fidelity metric
+Dsem(x, ˆx) = 1 −Sim E(x), E(ˆx),
+(1)
+where E(·) denotes a task-appropriate embedding op-
+erator (often a transformer/foundation model), and
+Sim(·) is instantiated as cosine similarity or distribu-
+tional distances depending on the modality [18, 16].
+With these ingredients, many semantic–agentic AI-
+RAN systems can be interpreted as optimizing a cou-
+pled objective that balances task-level utility and se-
+mantic fidelity under practical constraints:
+max
+{πi},θ,ϕ
+X
+i∈N
+
+α E[Ri(si, ai)] −β E[Dsem(x, ˆx)]
+
+,
+(2)
+subject to bandwidth, energy, and latency budgets
+X
+i∈N
+bi ≤B,
+X
+i∈N
+ei ≤E,
+ℓ(x, ˆx) ≤L,
+(3)
+where α and β trade off task-level benefits (through
+agent rewards) against semantic distortion, reflect-
+ing the inherently multi-objective nature of semantic–
+agentic RAN design [42, 18].
+Towards 6G Native-AI Edge Networks: A Semantic-Aware and Agentic Intelligence Paradigm
+7
+Table 3
+Cost dimensions of Large-Foundation-Model/Knowledge-Graph (LFM/KG) agents in AI-RAN.
+Cost
+Existing Pattern in literature
+Implication to AI-RAN placement
+Inference
+la-
+tency
+Multi-step reasoning/tool-calling yields high per-decision de-
+lay; often mitigated by split or hierarchical execution [34, 35].
+Prefer Non-RT/Near-RT loops; keep PHY/MAC actions to
+small distilled models.
+Model size
+0.1-10B+ parameters; edge memory limits require PEFT,
+pruning, caching, or distillation [34].
+Large models reside on GPU edge/cloud; edge devices run
+lightweight surrogates.
+DT/offloading
+dependence
+LLM/KG agents frequently rely on DT for safe planning and
+on edge offloading for heavy inference [39, 38, 40].
+Adds DT fidelity/sync overhead; offloading latency must be
+budgeted in control loop.
+Fig. 2. Illustration of the proposed 6G native-AI edge networks from a semantic-aware and agentic intelligence perspective.
+Rather than a single prescriptive algorithm, the pro-
+posed framework follow a few recurring patterns: (i)
+semantic models are trained (often self-supervised) to
+minimize Dsem under resource constraints [14, 17];
+(ii) agent policies are learned via RL/MARL using re-
+wards that incorporate task utility and semantic penal-
+ties [22, 23]; and (iii) an AI-native orchestration layer
+governs slow-timescale model evolution through FL
+rounds, periodic retraining, or digital-twin-assisted re-
+finement [24, 28].
+A widely adopted engineering intuition is to
+separate timescales:
+fast-timescale agentic control
+(e.g., near-RT RIC / edge agents) adapts rapidly to
+channel and traffic dynamics, while semantic en-
+coders/decoders evolve more slowly (e.g., non-RT
+controllers or background edge jobs) due to higher
+training cost and stability considerations [23, 24].
+Overall, this unified view highlights the core de-
+sign principle shared across semantic–agentic AI-
+RAN studies: communication resources and control
+actions are no longer optimized for bit accuracy alone,
+but for maximizing end-to-end task success in a dis-
+tributed and resource-limited 6G environment.
+3.3. Two-timescale Optimization Algorithm
+A recurrent design choice in the semantic–agentic
+AI-RAN literature is to update agentic control policies
+on a fast timescale (to track short-term radio dynam-
+ics), while adapting semantic encoder/decoder models
+on a slow timescale (due to heavier training cost and
+to avoid destabilizing multi-agent learning). Similar
+two-timescale separations are widely used in hierar-
+chical MARL and cross-layer learning systems, and
+provide a useful conceptual template for practical de-
+ployments.
+A typical semantic–agentic formulation
+8
+C. Feng, et al.
+couples multi-agent utility with semantic distortion:
+J(θ, ϕ, {πi}) =
+X
+i∈N
+(α E[Ri(si, ai)] −β E[Dsem(x, ˆx)]) ,
+(4)
+where {πi} denote agent policies, (θ, ϕ) denote se-
+mantic encoder/decoder parameters, and Dsem is an
+embedding-space semantic distortion metric.
+To analyze the algorithm convergence performance,
+we adopt the following assumptions:
+Assumption 1 (Objective smoothness and gradi-
+ent noise). For every agent i, the reward functional
+Ri is bounded and LR-Lipschitz with respect to the
+joint policy parameters through the induced state–
+action distribution. The semantic distortion is defined
+by Dsem(x, ˆx) = 1 −Sim(E(x), E(ˆx)), where the en-
+coder E(·) and similarity map Sim(·, ·) are LE- and LS -
+Lipschitz, respectively. Stochastic gradients of J with
+respect to θ, ϕ, and {πi} are unbiased, and their second
+moments are uniformly bounded.
+Assumption 2 (Policy parametrization and ergodic-
+ity). Each policy is parametrized by ψi (e.g., an actor
+network) taking values in a compact feasible set. For
+any fixed (θ, ϕ, {ψi}), the resulting Markov chain is er-
+godic and admits a unique stationary distribution.
+Assumption 3 (Learning rates and scale separation).
+Let ηt denote the policy learning rate and γt the seman-
+tic learning rate. They satisfy Robbins–Monro condi-
+tions P
+t ηt = ∞, P
+t η2
+t < ∞, P
+t γt = ∞, P
+t γ2
+t < ∞,
+and enforce a strict timescale separation γt/ηt →0 as
+t →∞.
+Assumption 4 (Critic reliability). The critic is con-
+sistent in the sense that its Bellman error converges to
+zero in expectation (e.g., via tabular estimation with
+sufficient visitation, or function approximation with
+vanishing residual). The associated estimation noise
+forms a martingale difference sequence with bounded
+variance.
+Proposition
+1.
+(Two–Timescale
+Convergence
+of
+the
+Semantic–Agentic
+Learning):
+Con-
+sider
+the
+joint
+objective
+J(θ, ϕ, {πi}i∈N)
+=
+P
+i∈N(α E[Ri(si, ai)] −β E[Dsem(x, ˆx)]), optimized by
+stochastic gradient updates on the fast timescale for
+the multi-agent policies {πi} and on the slow timescale
+for the semantic encoder–decoder (θ, ϕ). Then, almost
+surely, the coupled iterates  θt, ϕt, {ψi,t} generated by
+policy-gradient (or actor–critic) updates on the fast
+timescale and semantic SGD on the slow timescale
+converge to the internally chain transitive set of the
+limiting ODE system: ˙ψi ∈ΠXi
+h
+∇ψi J(θ, ϕ, {ψ j})
+i
+, ˙θ =
+∇θ J(θ, ϕ, {ψ⋆
+j (θ, ϕ)}), ˙ϕ = ∇ϕ J(θ, ϕ, {ψ⋆
+j (θ, ϕ)}), where
+ΠXi[·] denotes projection onto the feasible policy set
+and {ψ⋆
+j (θ, ϕ)} is the (set-valued) stationary solution
+of the fast dynamics for fixed (θ, ϕ).
+In particular,
+every limit point is a stationary point of J under the
+two–timescale decomposition; if the fast subsystem
+admits a unique Nash equilibrium and J is locally
+smooth around that equilibrium manifold, the joint
+process converges almost surely to a locally stationary
+solution of the full problem.
+Proof. The
+argument
+follows
+the
+classical
+two–timescale
+stochastic
+approximation
+method-
+ology. For fixed (θ, ϕ), the policy updates evolve on
+the fast timescale according to a noisy discretiza-
+tion of the ODE ˙ψi = ΠXi[∇ψiJ(θ, ϕ, {ψ j})]. Under
+Assumptions 1 & 2 and standard policy-gradient regu-
+larity, Bena¨ım–Hofbauer–Sorensen and Kushner–Yin
+theory imply that the fast iterates track the internally
+chain transitive set of the fast ODE; when the induced
+general-sum game admits a unique stationary Nash,
+the attractor is a singleton {ψ⋆(θ, ϕ)}.
+Because γt/ηt
+→0, the slow variables (θ, ϕ)
+are quasi-static to the fast loop.
+Replacing {ψi}
+with {ψ⋆
+i (θ, ϕ)} yields the averaged slow ODE ˙θ =
+∇θJ(θ, ϕ, {ψ⋆}), ˙ϕ = ∇ϕJ(θ, ϕ, {ψ⋆}). By Assumptions
+1 and bounded second moments, the semantic SGD
+is an asymptotic pseudo-trajectory of the slow ODE.
+The Robbins–Monro step-size conditions ensure that
+the martingale noise vanishes in aggregate; thus, the
+coupled process converges almost surely to the chain-
+recurrent set of the product ODE. Smoothness then
+gives stationarity of all limit points. If, in addition,
+the fast equilibrium is unique and the Jacobian of the
+slow vector field is Hurwitz in a neighborhood, stan-
+dard Lyapunov arguments establish local asymptotic
+stability of the joint fixed point.
+Corollary 1. (Non-asymptotic Tracking/Finite-time
+tracking bound): If gradients are L-Lipschitz and
+mini-batches of size m are used in both loops, then
+after T fast-timescale iterations the expected squared
+gradient norm of the joint objective along the slow
+manifold satisfies mint≤T
+E∥∇J(θt, ϕt, {ψt})∥2
+=
+O
+
+1
+√
+T +
+1
+√m
+
++ O(δT), where δT is the manifold track-
+ing error induced by the finite separation of timescales
+and vanishes as γt/ηt →0. This provides a practical
+guideline for selecting batch sizes and learning-rate
+schedules to meet wall-clock convergence targets.
+Remark 1: The proposition justifies the algorithmic
+template used in your architecture: keep policy learn-
+ing fast (near-real-time RIC or edge agents) while
+updating semantic encoders/decoders slowly (non-RT
+controller or background edge jobs).
+The assump-
+tions map cleanly to engineering knobs: bounded re-
+wards arise from reward clipping and QoS caps; Lip-
+schitz conditions are encouraged by spectral normal-
+ization of actors/encoders; ergodicity is promoted via
+ε-greedy or entropy regularization; and the step-size
+separation is realized by setting γt = c ηt with c ≪1
+(e.g., c = 0.1). In federated deployments, the same
+proof path applies by treating each global aggrega-
+tion round as one slow step; consensus or blockchain-
+backed model registries preserve the martingale prop-
+erty of update noise under honest-majority assump-
+tions. Finally, the non-asymptotic bound clarifies the
+Towards 6G Native-AI Edge Networks: A Semantic-Aware and Agentic Intelligence Paradigm
+9
+accuracy–overhead trade-off: increasing batch sizes
+or communication periods reduces gradient noise,
+while stronger separation (smaller c) tightens δT at
+the expense of slower semantic adaptation—exactly
+the knob you will sweep in experiments.
+3.4. Proposed Workflow for Semantic–Agentic Loops
+To bridge vision-only semantic primitives with
+standard-ready O-RAN control, we proposed a de-
+ployable workflow:
+Step 1-Semantic encoder placement: Lightweight
+L1/L2 semantic encoders run at UE/edge (or DU)
+to extract task-relevant tokens, while large founda-
+tion/KG reasoning models remain at edge cloud or
+non-RT domains due to latency/compute costs.
+Step 2-Near-RT semantic telemetry via E2: The
+gNB/DU packages semantic telemetry as candidate
+E2SM vendor extensions, e.g., task-id, semantic-
+token-size, semantic-confidence, TSR-proxy, and re-
+ports them over the E2 interface to the near-RT RIC.
+Near-RT xApps jointly consume semantic teleme-
+try and classical KPMs (SINR/BLER/PRB/queue)
+to perform fast control: semantic-aware scheduling,
+MCS/HARQ adaptation, or redundancy suppression
+across UEs/cells.
+Step 3-Slow-timescale model/policy update via
+A1/O1: The near-RT RIC periodically uploads traces
+(semantic KPIs,radio KPIs,context) to the non-RT
+RIC/SMO. Non-RT rApps retrain/distill semantic en-
+coders or refine MARL reward/policies using FL/DT
+tools, then push updated model versions and policy in-
+tents back through A1 policies, while O1 handles life-
+cycle management and rollback.
+Step 4-Semantic message-based negotiation among
+agents: Multi-agent coordination can leverage a low-
+rate semantic side-channel (e.g., exchanging L2 in-
+tents or L3 KG deltas rather than raw states), reduc-
+ing signaling overhead and stabilizing CTDE/MARL
+negotiation.
+To make the proposed semantic–agentic AI-RAN
+actionable in practice, we first present an O-RAN–
+oriented deployment workflow.
+Algorithm 1 sum-
+marizes how the fast policy-control loop and the
+slow semantic-learning loop are instantiated across
+PHY/MAC, near-RT RIC (xApps), and non-RT RIC
+(rApps), together with the required E2/A1/O1 inter-
+actions. For clarity, Algorithm 1 focuses on where
+each function runs and how information flows across
+O-RAN components, while deferring the detailed two-
+timescale learning updates to Algorithm 2.
+3.5. Engineering Criteria for Time-scale Separation
+Proposition 1 assumes semantic models evolve suf-
+ficiently slowly compared to fast-loop control.
+In
+practice, this can be verified using measurable online
+proxies: (i) Representation drift rate. Let zt denote
+semantic embeddings. Over a sliding window ∆, de-
+fine Drift = E[(1 −cos)(zt, zt−∆)]. If Drift stays below
+Algorithm 1 Deployment Workflow for Semantic–
+Agentic Two-Timescale AI-RAN Closed Loops.
+1: Input: Task ID set T ; semantic encoder family {Eϕ}; founda-
+tion/KG models {Fψ};near-RT xApps X; non-RT rApps R;radio
+KPMs kradio (e.g., SINR/BLER/PRB/queue); semantic KPM
+candidates ksem (e.g., TSR/intent-acc/latent-fidelity).
+2: Output: Fast-loop semantic-aware control actions at (schedul-
+ing/MCS/HARQ/beam/slicing); slow-loop semantic encoder
+and MARL policy updates (ϕ, θ) with versioning.
+3: (Step-1: Semantic encoder placement)
+4: for all UEs or edge nodes u do
+5:
+Deploy lightweight E(u)
+ϕ for L1/L2 token extraction;
+6:
+Keep heavy Fψ in edge cloud / non-RT domain for slow rea-
+soning/planning;
+7: end for
+8: (Step-2: Near-RT semantic telemetry over E2)
+9: for all gNB/DU cells c do
+10:
+Extract semantic tokens zt = Eϕ(xt) for task t∈T ;
+11:
+Pack candidate semantic IEs as E2SM vendor extensions:
+{task-id, |zt|, conf(zt), d
+TSRt};
+12:
+Report (kradio
+t
+, ksem
+t
+) to near-RT RIC via E2;
+13: end for
+14: (Step-3: Fast-loop control in near-RT RIC)
+15: for all xApp x ∈X per control period do
+16:
+Consume (kradio
+t
+, ksem
+t
+);
+17:
+Compute semantic-aware actions at (e.g., semantic-aware
+scheduling/MCS/HARQ/PRB/beam);
+18:
+Push actions to E2 nodes and execute in ms-level loop;
+19: end for
+20: (Step-4: Slow-loop update in non-RT RIC/SMO)
+21: Near-RT RIC uploads traces D = {(kradio
+t
+, ksem
+t
+, contextt)} to
+non-RT;
+22: for all rApp r ∈R per slow period do
+23:
+Retrain / distill semantic encoders Eϕ using D (optionally
+FL/DT-assisted);
+24:
+Re-optimize MARL reward/policies πθ with global objec-
+tives;
+25:
+Version models (ϕ, θ) and validate against semantic SLAs;
+26:
+Deliver updates to near-RT via A1 policies; manage lifecy-
+cle/rollback via O1;
+27: end for
+28: (Step-5: Semantic message-based multi-agent negotiation)
+29: Agents exchange low-rate L2/L3 messages (intents or KG
+deltas) as a semantic side-channel;
+30: Update cooperative MARL policies under CTDE/hierarchical
+roles.
+a tunable threshold ϵ1 within each fast-loop policy up-
+date horizon, embeddings are quasi-static and the two-
+timescale assumption holds. Otherwise, slow seman-
+tic updates should be throttled or paused. (ii) Reward
+non-stationarity proxy: Track distribution shift of per-
+agent rewards, e.g., NS = DKL (p(r|t)∥p(r|t −∆)).
+When NS exceeds ϵ2, the critic/environment is ef-
+fectively drifting, signaling that semantic updates (or
+context changes) are too rapid for stable MARL. (iii)
+Policy oscillation metric: Monitor consecutive pol-
+icy parameter changes Osc =
+∥θt−θt−∆∥
+∥θt−∆∥, or behavioral
+TV distance. Persistent Osc ≥ϵ3 indicates time-scale
+coupling or credit-assignment instability; mitigations
+include increasing separation (smaller c = γt/ηt) or
+rolling back semantic versions via O1. These crite-
+ria translate the mathematical separation intuition into
+operational knobs: measure Drift/NS/Osc online, and
+adapt semantic update periodicity K or step-ratio c to
+maintain stable fast-loop learning.
+10
+C. Feng, et al.
+Algorithm 2 Generic Template of Two-timescale
+Semantic-Agentic Learning
+1: Initialization: Initialize semantic encoder–decoder parameters
+(θ0, ϕ0), multi-agent policies {πi,0} for i ∈N, and step sizes ηt
+(fast) and γt (slow), with γt/ηt →0.
+2: for each time slot t do
+3:
+Fast loop (agentic policy update):
+4:
+for each agent i do
+5:
+Observe local state st
+i.
+6:
+Select action at
+i ∼πi,t(st
+i).
+7:
+Receive reward Rt
+i reflecting both task utility and seman-
+tic penalty.
+8:
+Update policy πi,t using policy-gradient or actor–critic
+update with step ηt.
+9:
+end for
+10:
+if t mod K = 0 then
+11:
+Slow loop (semantic model update):
+12:
+Collect minibatch of transmitted–reconstructed pairs
+(x, ˆx).
+13:
+Compute semantic loss Dsem(x, ˆx).
+14:
+Update encoder–decoder (θ, ϕ) using SGD with step γt.
+15:
+end if
+16: end for
+17: Stopping criterion: Terminate when average task success rate
+(TSR) saturates and gradient norms ∥∇J∥fall below threshold.
+Fig. 3. Illustration of experiment testbed.
+Practical caveats: In large-scale deep MARL with
+semantic coupling, Assumptions 2-4 may only hold
+approximately.
+The fast subsystem can admit mul-
+tiple equilibria, and semantic representation updates
+may induce reward/observation drift that violates strict
+quasi-static assumptions. Hence, most existing works
+validate two-timescale designs primarily via digital-
+twin or hardware-in-the-loop evidence, rather than re-
+lying on global convergence guarantees.
+4. Case Study
+In this work, we conduct a two-timescale semantic–
+agentic case study by reproducing representative Sem-
+Com and AI-RAN baselines from prior work under a
+unified AI-RAN setting. Fig. 3 presents our experi-
+mental testbed.
+4.1. Experiment Setup
+(1) Datasets: Following common practice in se-
+mantic communication studies, we reproduce two task
+families that are widely used to quantify semantic fi-
+delity and task-level success. Specifically, we adopt (i)
+MS-COCO Captions for image-to-text semantic deliv-
+ery and (ii) LibriSpeech ASR for speech-to-text se-
+mantic delivery. Both datasets provide aligned raw
+inputs, ground-truth semantic outcomes, and standard
+task metrics, enabling faithful reproduction of prior
+evaluation protocols. In addition, to emulate vehicu-
+lar V2X semantics, we reproduce an intent/trajectory
+exchange pipeline using CARLA: each vehicle agent
+transmits compact embeddings of planned maneuvers,
+object states, or driving intent. This setting is consis-
+tent with L2/L3 semantic levels in Table 1 and matches
+the simulator-based semantics adopted in recent stud-
+ies.
+(2) Testbed topology: Our reproduced RAN topol-
+ogy follows a 3GPP-inspired heterogeneous layout
+commonly used in the referenced baselines. We con-
+sider 5–10 base stations, multiple edge servers, and on
+the order of 102 mobile devices with clustered mobil-
+ity. Cells are deployed on a hexagonal grid with wrap-
+around boundaries, and channels follow TR 38.901
+pedestrian/vehicular profiles. For multi-agent control
+baselines, devices are partitioned into local groups
+(typically 10–20 agents per cluster) to reproduce co-
+ordination and non-stationarity conditions reported in
+prior MARL-RAN evaluations.
+(3) Prototype hardware patterns: To remain con-
+sistent with the prototype patterns in the reproduced
+references, our Hardware-in-the-Loop (HIL) configu-
+ration couples GPU servers for semantic model train-
+ing with edge accelerators for near-RT agentic control.
+Concretely, we use (i) A100-class GPUs for training
+transformer-based semantic encoders/decoders, (ii)
+Jetson/Xavier-class edge nodes for semantic inference
+and on-device MARL policies, and (iii) SDR plat-
+forms (e.g., USRP B210/X310) for PHY-layer emula-
+tion. This division mirrors the control-placement axis
+(Axis-3): semantic adaptation and global orchestra-
+tion are mapped to non-RT resources, while fast policy
+execution resides at the edge or near-RT control plane.
+(4) System Parameters and Hyper-parameters:
+We reproduce the main physical-layer and learning
+settings from the corresponding baselines as closely as
+possible. Bandwidths set to 10–20 MHz in sub-6 GHz
+bands (e.g., 3.5 GHz) with UE power caps around
+23 dBm. Delay budgets are set to ∼1 ms for real-
+time services and 5–10 ms for best-effort services. On
+the agentic side, we reproduce MAPPO/CTDE-style
+MARL baselines with discount factor γ ≈0.99, PPO
+clipping ≈0.2, and entropy regularization ≈10−2. Se-
+mantic encoders/decoders are transformer-based with
+embedding dimension 256–512, trained using Adam
+with learning rate around 10−4.
+For two-timescale
+variants, we follow the stability-driven schedule used
+in prior two-timescale MARL studies and set the fast-
+loop step size roughly one order larger than the slow
+semantic-update step size, consistent with Section 3.3.
+Towards 6G Native-AI Edge Networks: A Semantic-Aware and Agentic Intelligence Paradigm
+11
+(5) Baselines and metrics:
+We reproduce and
+compare three baseline families that represent domi-
+nant paradigms in the literature: (i) Bit-centric RAN
+(TR-RAN): symbol-level transmission optimized for
+throughput/BER with heuristic or centralized schedul-
+ing; (ii) AI-driven O-RAN (AI-O-RAN): near-RT RIC
+hosting RL-based xApps for scheduling/power control
+without explicit semantic abstraction; (iii) Semantic-
+only communication (SemCom-only): end-to-end se-
+mantic encoder–decoder minimizing semantic distor-
+tion without distributed agentic coordination.
+Metrics follow the reproduced protocols and extend
+beyond BER to task and system KPIs: (i) Task Success
+Rate (TSR): probability of correct task-level recon-
+struction (e.g., intent accuracy, caption correctness)
+[43, 44]; (ii) Semantic Bandwidth Efficiency (TSR/Hz):
+TSR per unit bandwidth [43, 45]; (iii) End-to-end la-
+tency: time from semantic generation to task com-
+pletion; (iv) Learning stability/convergence: iterations
+(or wall-clock time) until MARL policies stabilize,
+tracked via reward variance or regret.
+4.2. Representative Results & Cross-Study Trends
+Unless otherwise stated, the following figures report
+results from our reproduced implementations under
+the unified setup above. While absolute values may
+vary with task specifics, the reproduced experiments
+consistently reflect the qualitative trends summarized
+next.
+Fig. 4. Task success rate (TSR) versus SNR under channel variation
+for representative reproduced paradigms.
+4.2.1. TSR under Channel Variation
+As shown in Fig. 4, all schemes exhibit a monotone
+TSR improvement with increasing SNR, consistent
+with enhanced link reliability. Bit-centric baselines
+(TR-RAN and AI-O-RAN) show the lowest TSR,
+while semantic-native approaches deliver clear gains
+in the low-to-mid SNR range (approximately 0–15
+dB). In particular, the two-timescale semantic–agentic
+design achieves the highest TSR across this regime,
+whereas at high SNR (≥20 dB) the curves gradually
+converge toward a common saturation level.
+The performance ordering is primarily driven by
+the communication abstraction and control coupling.
+Semantic-native transmission improves TSR at mod-
+erate SNR by conveying task-relevant embeddings
+rather than raw symbols, thereby reducing redundancy
+and focusing channel uses on information that directly
+impacts task outcomes. This yields higher task-level
+robustness under noise compared with bit-level deliv-
+ery, even when the latter is optimized for throughput
+or BER. The additional margin of the two-timescale
+semantic–agentic approach over SemCom-only arises
+from agentic coordination and timescale separation.
+Fast-loop agents incorporate semantic distortion and
+task utility into their scheduling and power deci-
+sions, prioritizing critical semantic packets and mit-
+igating collisions or congestion through cooperative
+policies. Meanwhile, slow-loop semantic model adap-
+tation evolves on a coarser timescale, keeping repre-
+sentations quasi-stationary during fast policy learning.
+This reduces training non-stationarity and supports
+more stable near-real-time control, which translates
+into higher TSR under fluctuating channels. As SNR
+becomes large, channel-induced errors are no longer
+the bottleneck; consequently, the achievable TSR is
+dominated by the intrinsic accuracy ceiling of the se-
+mantic encoder–decoder and task models, leading to
+the observed saturation and diminishing inter-scheme
+gaps.
+Fig. 5. Semantic bandwidth efficiency versus allocated bandwidth
+for four representative paradigms.
+4.2.2. Semantic Bandwidth Efficiency
+Fig.
+5 compares semantic bandwidth efficiency,
+defined as TSR achieved per unit bandwidth, under
+progressively larger spectrum budgets. Two consis-
+tent trends are observed. First, all schemes exhibit a
+mild efficiency increase as bandwidth grows, reflect-
+ing reduced congestion and fewer resource-contention
+losses.
+Second, semantic-native approaches sub-
+stantially outperform bit-centric baselines across the
+entire bandwidth range.
+The two-timescale se-
+mantic–agentic design remains the most bandwidth-
+efficient, followed by SemCom-only, while AI-O-
+RAN and TR-RAN form the lower-efficiency group.
+Notably,
+the efficiency gap is most pronounced
+in tight-bandwidth regimes, where semantic–agentic
+control sustains high TSR despite limited spectrum.
+These trends can be explained by how each
+paradigm uses spectrum relative to task relevance.
+In TR-RAN and AI-O-RAN, transmissions remain
+12
+C. Feng, et al.
+bit-level, so a sizable fraction of bandwidth is con-
+sumed by payload redundancy, protocol overhead,
+and retransmissions that do not directly contribute to
+task success; consequently, TSR-per-Hz remains low,
+especially under constrained budgets.
+In contrast,
+SemCom-only compresses raw data into task-oriented
+semantic embeddings, removing non-essential bits
+and improving the useful information density per
+channel use. This directly elevates TSR-per-Hz, par-
+ticularly when bandwidth is scarce. The further ad-
+vantage of the two-timescale semantic–agentic ap-
+proach stems from semantic-aware multi-agent co-
+ordination layered on top of semantic compression.
+Fast-loop agents prioritize high-utility semantic pack-
+ets and suppress redundant semantic reports across
+users/cells, while slow-loop slicing/budget updates
+adapt resource shares to longer-term task demands.
+This coordinated, timescale-separated control reduces
+duplicate transmissions and prevents bandwidth waste
+during traffic bursts, yielding consistently higher TSR-
+per-Hz. As bandwidth becomes abundant, all methods
+approach a flatter efficiency slope because task success
+begins to saturate and additional spectrum offers di-
+minishing returns; nevertheless, semantic–agentic de-
+signs retain an efficiency lead due to their inherently
+task-focused transmission and coordinated resource
+usage.
+Fig. 6. Learning stability and convergence of RAN control policies
+for four representative paradigmss.
+4.2.3. Learning Stability with Agentic Coordination
+Fig. 6 depicts the policy learning dynamics mea-
+sured by average return over training iterations. Three
+salient behaviors emerge.
+First, TR-RAN (heuris-
+tic control) stays nearly flat, reflecting the absence
+of learning.
+Second, AI-O-RAN improves grad-
+ually but converges to a lower steady return than
+semantic-native schemes. Third, semantic-native ap-
+proaches achieve higher asymptotic returns, with the
+two-timescale semantic–agentic method converging
+faster and exhibiting markedly reduced oscillations
+compared with SemCom-only. In contrast, SemCom-
+only shows persistent reward fluctuations during mid-
+training, indicating unstable adaptation before set-
+tling.
+The stability differences are rooted in how rep-
+resentation learning and control learning interact.
+In SemCom-only, semantic encoders/decoders adapt
+concurrently with per-slot control, but without ex-
+plicit multi-agent coordination.
+As semantic repre-
+sentations drift, the effective environment observed
+by each controller becomes non-stationary: the same
+physical state may map to evolving semantic features,
+and agents’ actions can conflict due to missing co-
+ordination, leading to oscillatory rewards. The two-
+timescale semantic–agentic design mitigates both ef-
+fects. On the fast timescale, edge agents learn coop-
+erative policies with rewards that explicitly penalize
+semantic distortion and prioritize task utility, which
+reduces conflicting actions and accelerates consen-
+sus. On the slow timescale, semantic models update
+less frequently, rendering the semantic feature space
+quasi-static during fast-loop policy optimization. This
+separation reduces non-stationarity in multi-agent re-
+inforcement learning and allows policies to track a
+slowly moving optimum, producing smoother conver-
+gence and higher final return.
+AI-O-RAN benefits
+from learning-based control, but remaining bit-centric
+means rewards are less aligned with task success and
+semantic utility, limiting achievable return even after
+convergence.
+Fig. 7. Latency–energy trade-off (Pareto illustration) of four repre-
+sentative paradigms; lower-left indicates better joint efficiency.
+4.2.4. Latency and Energy Trade-offs
+Fig. 7 plots the achievable latency–energy operat-
+ing points for the four paradigms, where each series
+represents a typical trade-off frontier under different
+control/traffic settings.
+All methods exhibit the ex-
+pected tension between delay and energy: reducing la-
+tency generally requires more aggressive resource us-
+age, while energy saving tends to increase queueing or
+retransmission delays. Among the compared designs,
+the two-timescale semantic–agentic approach forms
+the most favorable (lower-left) frontier, achieving both
+lower end-to-end latency and lower energy per suc-
+cessful task.
+SemCom-only provides a visible im-
+provement over bit-centric baselines but remains dom-
+inated by the semantic–agentic frontier. AI-O-RAN
+reduces latency relative to TR-RAN yet incurs higher
+energy than semantic-native schemes, while TR-RAN
+occupies the upper-right region, reflecting the least ef-
+ficient joint performance.
+Towards 6G Native-AI Edge Networks: A Semantic-Aware and Agentic Intelligence Paradigm
+13
+Table 4
+Cross-study Trend and Representative Gains.
+Ref.
+Task/Scenario
+Semantic
+level
+Channel / SNR / BW
+Baseline
+Metric & Gain (relative)
+[43]
+V2X intent exchange/ ma-
+neuver negotiation
+L2/L3
+Urban fading; SNR −2–8
+dB; 5–15 MHz
+SemCom-only
+Semantic Bandwidth Efficiency (TSR/Hz):
+1.6–2.3× under BW≤12 MHz
+[44]
+V2X cooperative percep-
+tion/collision avoidance
+L2
+Rayleigh; SNR 0–10 dB;
+10 MHz
+Bit-centric
+V2X
++ heuristic RA
+TSR: +18% @ 2 dB; +9% @ 5 dB
+[45]
+Edge perception (vision/
+speech)
+L1
+AWGN; SNR −5–5 dB; 1–
+4 MHz
+JSCC
+/
+digital
+comm.
+Downstream acc.: +10–15% @ low SNR
+[46]
+Two-timescale
+DT-
+assisted slicing MARL
+L1/L2
+HetNet
+load
+traces
+(system-level)
+Single-timescale
+MARL
+Learning stability/regret:
+Faster conver-
+gence; reduced oscillation
+[47]
+O-RAN closed-loop RL
+slicing prototype
+L2
+HIL; bursty traffic traces
+AI-O-RAN
+heuristic
+Latency/energy trad-off:
+Latency ↓25–
+40%; energy per task ↓10–20%
+These differences follow from how each paradigm
+balances communication and computation for task de-
+livery.
+TR-RAN relies on bit-level reliability with
+limited task awareness, leading to larger payloads
+and more retransmissions, which jointly inflate de-
+lay and energy. AI-O-RAN introduces learning-based
+scheduling to mitigate congestion and improve la-
+tency, but its bit-centric transmission still carries sub-
+stantial redundancy; thus, energy per successful task
+remains comparatively high, especially under bursty
+loads.
+SemCom-only reduces payload size through
+task-oriented semantic embeddings, lowering airtime
+and retransmission needs, which translates into tan-
+gible latency and energy savings. However, without
+agentic coordination, devices may still generate redun-
+dant semantic updates or contend inefficiently for re-
+sources, leaving part of the potential gain unrealized.
+The two-timescale semantic–agentic design addresses
+this gap by combining semantic compression with co-
+operative multi-agent control: fast-loop agents pri-
+oritize high-utility semantic packets and proactively
+shape traffic to avoid bottlenecks, while slow-loop
+semantic/cross-slice updates provide stable budgets
+that prevent oscillatory overreaction. Consequently,
+fewer transmissions are needed to reach a successful
+task outcome, queueing delays are reduced, and com-
+putational effort is amortized more effectively, yield-
+ing the observed Pareto superiority. Overall, this re-
+sults indicates that jointly optimizing meaning-level
+communication and distributed agentic scheduling is
+essential to achieve energy- and latency-efficient AI-
+native RAN operation.
+We summarize the reproduced cross-study trends in
+Table 4. For each reproduced reference, we explicitly
+list the task, channel/SNR/bandwidth regime, baseline
+family, and task-aligned KPIs, and we report relative
+gains as (Mprop −Mbase)/Mbase.
+4.3. Discussion
+Taken together, our reproduced experiments and
+the surveyed results in the literature point to three
+consistent, survey-level implications.
+First, seman-
+tic abstraction shifts RAN optimization from sym-
+bol fidelity to task effectiveness: in our reproduced
+settings, semantic-native designs improve TSR and
+semantic bandwidth efficiency for perception- and
+intent-driven services, especially under moderate SNR
+or tight bandwidth. Second, agentic coordination is
+required to scale semantic-aware control over dense
+and heterogeneous deployments.
+This is supported
+by both reproduced MARL baselines and prior pro-
+totypes, where distributed agents negotiating semantic
+relevance and resource usage yield higher task perfor-
+mance than non-coordinated semantic-only schemes.
+Third, timescale separation emerges as a practical de-
+sign motif: across reproduced two-timescale variants
+and related prior studies, maintaining a fast policy
+loop while updating semantic models on a slower loop
+stabilizes learning and reconciles near-real-time con-
+trol needs with slower semantic evolution.
+At the same time, the reproduced evaluations and
+surveyed prototypes also expose several limitations
+that remain open.
+(i) Transformer-scale seman-
+tic encoders can impose non-trivial computational
+overhead at the edge; lightweight foundation mod-
+els and hardware-aware semantic coding remain ac-
+tive research directions.
+(ii) Trust/security mecha-
+nisms (such as secure aggregation, provenance track-
+ing, or ledger-backed coordination) are often vali-
+dated only in simulation, and real-time integration
+in O-RAN/HIL platforms is still nascent. (iii) Most
+reported testbeds cover small- to medium-scale net-
+works; scaling to thousands of agents will likely re-
+quire hierarchical coordination and more standardized
+semantic interfaces.
+Finally, performance compar-
+isons are sometimes affected by heterogeneity in tasks,
+fidelity metrics, and control placements, reinforcing
+the need for community benchmarks and standardized
+semantic KPIs.
+Overall, while the field is still emerging, both our
+reproduced results and the broader literature consis-
+tently suggest that the convergence of SemCom and
+agentic intelligence is a promising pathway toward
+14
+C. Feng, et al.
+task-effective, scalable, and energy-aware 6G Native-
+AI RANs.
+5. Application Scenarios
+Our reproduced evidence, together with a growing
+body of recent work, indicates that semantic–agentic
+AI-RAN is most impactful in 6G services where task
+outcome, intent exchange, and distributed autonomy
+matter more than exact bit recovery. Recent surveys
+and vision papers consistently identify vehicular au-
+tonomy, immersive XR, industrial digital twins, and
+edge intelligence as key first-wave beneficiaries, and
+our reproduced case-study trends align with these pri-
+orities [18, 44].
+Autonomous vehicular networks (V2X): V2X
+is widely recognized as a primary driver for task-
+oriented SemCom in 6G. In cooperative perception,
+platooning, and collision avoidance, vehicles must ex-
+change trajectory, intent, and environment semantics
+under stringent latency and reliability constraints. In
+line with reproduced V2X SemCom baselines and
+prior simulator-based studies, transmitting raw sen-
+sor streams is bandwidth-prohibitive and often un-
+necessary for decision-making, motivating semantic
+V2X where vehicles share intent- or object-level em-
+beddings instead of raw data [48, 49]. These meth-
+ods align with L1–L3 semantic levels (Table 1), e.g.,
+feature-level object embeddings or knowledge-level
+maneuver graphs.
+On top of semantic exchange,
+reproduced multi-agent/intent-driven control at vehi-
+cles and roadside units enables cooperative negoti-
+ation of maneuvers and proactive resource schedul-
+ing [24, 47]. Consequently, task-oriented KPIs such
+as TSR for collision avoidance or platoon stabil-
+ity are increasingly adopted, complementing classical
+BER/throughput metrics.
+Immersive XR and metaverse services: Immer-
+sive XR and metaverse applications demand ultra-low
+motion-to-photon latency, high-rate multi-modal de-
+livery, and stable perceptual quality under mobility
+and load fluctuations. Consistent with reproduced XR
+SemCom pipelines and recent surveys, semantic ab-
+straction can reduce redundant transmissions by prior-
+itizing perceptually or task-relevant components (e.g.,
+scene semantics, user intent, salient regions), partic-
+ularly under constrained bandwidth [18, 16]. Mean-
+while, distributed agents at edge servers and RICs or-
+chestrate compute and radio resources in real time,
+adapting to user density, viewpoint changes, and ser-
+vice priorities, following Axis-2/Axis-3 hierarchical
+control [24, 47].
+Recent work demonstrates that
+the semantic-aware streaming combined with agentic
+edge control improves semantic fidelity and QoE sta-
+bility while lowering latency relative to bit-centric de-
+livery.
+Industrial digital twins and massive IoT: Digi-
+tal twin (DT) networks in industrial automation and
+smart grids require scalable and timely synchroniza-
+tion between physical processes and their cyber repli-
+cas.
+Both reproduced DT-oriented SemCom base-
+lines and surveyed work show that massive sensor
+outputs are highly redundant with respect to control
+objectives, motivating semantic-aware encoding that
+transmits only task-relevant knowledge (e.g., anoma-
+lies, deviations, state summaries) [44]. Agentic in-
+telligence embedded in edge controllers enables lo-
+cal inference, predictive maintenance, and multi-agent
+consensus for distributed actuation. In parallel, KG-
+assisted reasoning is increasingly explored to structure
+DT state, intent, and cross-layer context, improving
+explainability and transferability of decisions [19, 50].
+These trends point to semantic–agentic DT-RANs that
+maintain control-loop stability under limited radio re-
+sources.
+Edge intelligence and collaborative AI services:
+Edge intelligence provides a unifying scenario where
+mobile devices, drones, and robots collaborate on in-
+ference and learning tasks. Reproduced systems and
+surveyed works commonly model these entities as co-
+operative agents that share semantic representations
+of local observations rather than raw data, reducing
+uplink load and enabling faster collective awareness
+[16]. AI-native orchestration (e.g., FL/split learning,
+DT-guided scheduling) coordinates training/inference
+placement across edge and cloud, while MARL or hi-
+erarchical agents resolve real-time resource conflicts
+[24, 23].
+Across these domains, reproduced results and exist-
+ing evidence suggest that semantic–agentic AI-RAN is
+most beneficial when (i) task outcome dominates over
+symbol fidelity, (ii) many distributed entities must co-
+ordinate under real-time constraints, and (iii) network
+resources are scarce and heterogeneous.
+6. Challenges and Open Issues
+While SemCom and agentic intelligence have pro-
+gressed rapidly, our reproduced evaluations and the
+latest surveyed studies highlight several failure modes,
+risks, and unresolved challenges spanning semantics,
+learning, systems, and standardization [18, 44, 50, 51].
+6.1. Failure Modes and Risks:
+While semantic–agentic AI-RAN shows consistent
+gains, several failure modes must be anticipated before
+large-scale deployment.
+Semantic Mismatch and Representation Drift:
+Semantic encoders are typically trained on specific
+datasets, yet deployment traffic can be non-IID or
+rapidly shifting. When the learned embedding space
+no longer preserves task-relevant invariances, TSR can
+drop sharply even at unchanged SNR, leading to brittle
+operation. Mitigation includes online domain adapta-
+tion, OOD/drift detection, and version-aware rollback
+through non-RT controllers.
+Towards 6G Native-AI Edge Networks: A Semantic-Aware and Agentic Intelligence Paradigm
+15
+Table 5
+Failure Modes and Risks in Semantic–Agentic AI-RAN.
+Failure mode
+Root cause
+Observable symptom
+Impact on KPI
+Mitigation
+Semantic
+mis-
+match / represen-
+tation drift
+Domain shift; non-IID traffic;
+outdated encoder version
+TSR drops sharply at similar
+SNR; embedding similarity no
+longer correlates with success
+L2 TSR ↓; unstable
+SLA
+OOD/drift detection;
+online
+adaptation; version-aware roll-
+back
+Multi-agent pol-
+icy
+collapse
+/
+non-stationarity
+Mis-specified rewards; credit
+assignment failure; mixed lo-
+cal/global objectives
+Policy oscillation; selfish equi-
+libria; convergence stalls
+Latency ↑; TSR ↓;
+Pareto frontier de-
+grades
+Game-theoretic reward shap-
+ing; CTDE; hierarchical roles
+Semantic
+adver-
+sarial / injection
+attacks
+Small embedding perturbations
+flip intent; prompt/semantic in-
+jection into LFM/KG agents
+Intent
+flip
+without
+bit-
+level
+alarms;
+unsafe
+plan-
+ning/execution
+Safety
+constraints
+violated;
+L3 con-
+sistency ↓
+Robust semantic coding; se-
+mantic authentication; cross-
+agent consistency checks
+Multi-agent Policy Collapse under Mis-specified
+Rewards:
+In dense RANs, credit assignment and
+mixed local/global objectives can yield unstable
+MARL dynamics, including oscillatory behavior or
+selfish equilibria.
+Such collapse manifests as re-
+turn oscillation and degraded latency/energy frontiers,
+consistent with non-stationarity concerns raised in
+large-scale agentic control. Remedies include game-
+theoretic reward shaping, centralized training with de-
+centralized execution (CTDE), and hierarchical agent
+roles.
+Semantic Adversarial and Injection Attacks: Be-
+cause small perturbations in embedding space may flip
+meaning without large bit-level deviations, semantic
+layers open new attack surfaces. Adversarial semantic
+perturbations or prompt-style injections into LFM/KG
+agents can cause incorrect intent decoding or unsafe
+planning actions, with direct consequences in V2X
+or industrial DT services. Robust semantic coding,
+semantic authentication, and cross-agent consistency
+checks are therefore essential.
+6.2. Standardization Issues
+Standardization of semantic representations and
+metrics: A foundational barrier is the lack of stan-
+dardized semantic abstractions and fidelity measures.
+Classical wireless systems rely on Shannon’s bit-level
+framework with universally accepted tools such as ca-
+pacity bounds and error probabilities. SemCom, how-
+ever, requires task-oriented embeddings and similar-
+ity metrics that capture meaning rather than symbol
+sequences.
+Current works employ diverse embed-
+ding operators and task-specific KPIs, complicating
+interoperability and cross-paper comparison [18, 44].
+Emerging standardization roadmaps and community
+calls emphasize the need for portable semantic in-
+terfaces and KPIs, as well as semantic information-
+theoretic foundations that link TSR/fidelity to resource
+budgets [50].
+Hierarchical semantic KPIs and standard map-
+ping:
+Semantic-native RANs require task-aligned
+KPIs beyond BER/BLER. To make semantic evalua-
+tion portable across services, we organize candidate
+KPIs by semantic abstraction levels (Axis-1) and dis-
+cuss how they could map to O-RAN KPM and 3GPP
+service/QoS frameworks. Specifically,
+L1 (feature/latent-level semantics): L1 exchanges
+modality-specific latent features (e.g., image/speech
+embeddings) that remain close to physical observa-
+tions. Suitable KPIs include reconstruction/feature fi-
+delity: MSE/NMSE, PSNR/SSIM, latent cosine sim-
+ilarity or CKA; downstream task accuracy: detec-
+tion mAP, segmentation IoU, ASR WER, top-1/F1
+on the target model.
+L1 KPIs can be reported
+as near-RT xApp KPM extensions (e.g., “latent-
+fidelity”, “downstream-acc”) co-measured with radio
+KPIs (SINR/BLER/throughput). A practical compos-
+ite KPI is Acc@BLER ≥τ, enabling a smooth bridge
+to existing RAN2/RAN3 controls.
+L2 (intent/task-level semantics): L2 directly con-
+veys intents, task states, or decisions.
+Candidate
+KPIs include:
+intent accuracy / command success
+rate; task success rate (TSR); semantic confusion cost
+that weights errors by task criticality (e.g., safety-
+critical V2X). L2 KPIs naturally form semantic SLAs
+at the O-RAN near-RT RIC: xApps optimize fast
+control loops for TSR/intent-accuracy, while non-RT
+rApps/SMO track long-term KPI curves across model
+versions via A1/O1.
+L3 (knowledge/graph-level semantics):
+L3 ex-
+changes structured knowledge (KG/scene graphs)
+aimed at reasoning and explainability. Candidate KPIs
+include constraint satisfaction rate (e.g., collision-risk
+below threshold, industrial control constraints met);
+knowledge consistency (e.g., KG triple consistency,
+belief KL divergence); explainability/causality scores
+evaluated by human or model-based judges. L3 KPIs
+are better placed in non-RT RIC/SMO slow loops
+as they rely on global context and versioned knowl-
+edge bases. Standardization likely starts from SA6/CT
+service definitions, then flows down into O-RAN
+information-element (IE) extensions. Overall, L1–L3
+KPI families provide a structured path to semantic
+standardization, clarifying what should be measured
+at near-RT versus non-RT timescales and how seman-
+tic objectives can coexist with classical radio KPMs.
+16
+C. Feng, et al.
+6.3. Open Issues
+Scalability and stability of large-scale agentic
+control: Agentic AI-RAN studies commonly rely on
+MARL or intent-driven orchestration, yet performance
+can degrade sharply as agent populations and coupling
+graphs grow. Non-stationarity, partial observability,
+delayed feedback, and signaling overhead remain bot-
+tlenecks [23, 24]. Ensuring fairness and stability un-
+der mixed local/global objectives is still unresolved.
+Promising routes include hierarchical agents, game-
+theoretic coordination, semantic message-based nego-
+tiation, and hybrid learning–optimization aligned with
+near-RT/non-RT placement [24, 52].
+Security, trustworthiness, and explainability:
+Semantic and agentic layers introduce new attack
+surfaces, including adversarial semantic perturbations
+and malicious agent behaviors. Since small embed-
+ding perturbations can change meaning without large
+bit-level deviations, classical cryptography alone is in-
+sufficient [51].
+Recent surveys propose combining
+robust semantic modeling, secure/federated aggrega-
+tion, provenance tracking (sometimes ledger-style),
+and explainable AI to defend semantic–agentic loops
+[51, 19]. Real-time trust frameworks compatible with
+O-RAN interfaces remain open.
+Energy-efficient
+semantic
+and
+agentic
+AI:
+Transformer-scale semantic models and multi-agent
+policies impose substantial compute footprints at the
+edge. Although compression, pruning, and distillation
+are widely explored,
+trade-offs among semantic
+fidelity, TSR, latency, and energy are still poorly
+characterized [18]. Lightweight foundation models,
+energy-aware semantic coding, and adaptive inference
+scheduling are therefore central to deployment.
+Rigorous theoretical guarantees: Current theoret-
+ical understanding remains nascent.
+Two-timescale
+learning provides stability intuition, but global opti-
+mality and guarantees in non-convex, dynamic multi-
+agent environments are largely open. Key directions
+include semantic information-theoretic bounds, Pareto
+trade-offs among TSR/distortion/resources, and con-
+vergence analyses for large-scale MARL under se-
+mantic coupling [44, 50].
+7. Conclusion
+This work has examined the emerging paradigm
+of semantic–agentic AI-RAN for 6G Native-AI net-
+works, where SemCom and agentic intelligence are
+treated as first-class design principles rather than aux-
+iliary enhancements. Prior studies collectively indi-
+cate that shifting the abstraction from bits to task-
+relevant semantics improves task effectiveness and
+spectrum efficiency, while distributed agentic con-
+trol is essential for scalable autonomy in dense het-
+erogeneous RANs.
+Furthermore, we synthesized a
+layered architectural view integrating semantic en-
+coders/decoders, multi-agent control, and AI-native
+orchestration across PHY/MAC, near-RT RIC, and
+non-RT RIC placements. A unified optimization per-
+spective was proposed to connect diverse works bal-
+ancing semantic fidelity and task-level utility under
+bandwidth, latency, and energy constraints.
+Repre-
+sentative case studies show consistent gains in TSR
+and efficiency over bit-centric RANs and AI-driven
+O-RAN baselines, while also highlighting the impor-
+tance of agentic coordination and timescale separation
+for training stability. Despite encouraging progress,
+open challenges remain in semantic KPI standard-
+ization, scalable trustworthy multi-agent coordina-
+tion, semantic/agentic security, and energy-efficient
+deployment of foundation-scale models. Advancing
+this vision will require tighter coupling among theory,
+prototyping, and standardization efforts in 3GPP and
+O-RAN, supported by reproducible benchmarks and
+interoperable semantic/agentic interfaces.
+References
+[1] H. Ahmadi, M. Rahmani, S. B. Chetty, E. E. Tsiropoulou,
+H. Arslan, M. Debbah, T. Q. S. Quek, Toward sustainability in
+6G and beyond: Challenges and opportunities of open RAN,
+IEEE Communications Standards Magazine 9 (3) (2025) 126–
+135.
+[2] M. Na, J. Lee, G. Choi, T. Yu, J. Choi, J. Lee, S. Bahk, Op-
+erator’s perspective on 6G: 6G services, vision, and spectrum,
+IEEE Communications Magazine 62 (8) (2024) 178–184.
+[3] B. Brik, H. Chergui, L. Zanzi, F. Devoti, A. Ksentini, M. S.
+Siddiqui, X. Costa-P´erez, C. Verikoukis, Explainable AI in
+6G O-RAN: A tutorial and survey on architecture, use cases,
+challenges, and future research, IEEE Communications Sur-
+veys & Tutorials 27 (5) (2025) 2826–2859.
+[4] X. Lin, L. Kundu, C. Dick, S. Velayutham, Embracing AI in
+5G-Advanced Toward 6G: A Joint 3GPP and O-RAN perspec-
+tive, IEEE Communications Standards Magazine 7 (4) (2023)
+76–83.
+[5] P. S. Upadhyaya, N. Tripathi, J. Gaeddert, J. H. Reed, Open
+AI cellular (OAIC): An open source 5G O-RAN testbed for
+design and testing of AI-based ran management algorithms,
+IEEE Network 37 (5) (2023) 7–15.
+[6] B. Tang, V. K. Shah, V. Marojevic, J. H. Reed, AI testing
+framework for Next-G O-RAN networks: Requirements, de-
+sign, and research opportunities, IEEE Wireless Communica-
+tions 30 (1) (2023) 70–77.
+[7] M. Kouchaki, S. B. H. Natanzi, M. Zhang, B. Tang, V. Maro-
+jevic, O-RAN performance analyzer: Platform design, devel-
+opment, and deployment, IEEE Communications Magazine
+63 (2) (2025) 152–159.
+[8] X. Chen, Z. Guo, X. Wang, C. Feng, H. H. Yang, S. Han,
+X. Wang, T. Q. S. Quek, Toward 6G Native-AI network:
+Foundation model-based cloud-edge-end collaboration frame-
+work, IEEE Communications Magazine 63 (8) (2025) 23–30.
+[9] D. N. Nguyen, B. Chen, T. Q. S. Quek, Operation-aware dig-
+ital twin for improving performance and sustainability of AI-
+driven radio access networks, in: IEEE INFOCOM 2025 -
+IEEE Conference on Computer Communications Workshops
+(INFOCOM WKSHPS), 2025, pp. 1–6.
+[10] S. Guo, A. Zhang, Y. Wang, C. Feng, T. Q. S. Quek, Semantic-
+enabled 6g communication:
+A task-oriented and privacy-
+preserving perspective, IEEE Network (2025) 1–1.
+[11] X. Wang, D. Ye, C. Feng, H. H. Yang, X. Chen, T. Q. S. Quek,
+Trustworthy image semantic communication with genai: Ex-
+plainablity, controllability, and efficiency, IEEE Wireless
+Communications 32 (2) (2025) 68–75.
+[12] Y. Wang, R. Li, C. Wang, J. Ye, C. Feng, S. Guo, Collab-
+orative learning for task-oriented semantic communications:
+Towards 6G Native-AI Edge Networks: A Semantic-Aware and Agentic Intelligence Paradigm
+17
+Overcoming data mismatch between transceivers, IEEE Open
+Journal of the Communications Society 6 (2025) 5778–5794.
+[13] M. Tang, C. Feng, G. Min, T. Q. S. Quek, H-infinity tracking
+for intelligent edge-controlled systems over fading channels
+in ai-ran, IEEE Transactions on Vehicular Technology (2025)
+1–6.
+[14] T. Park, E. Hong, Y.-S. Jeon, N. Lee, Y. Kim, Robust deep
+joint source-channel coding for task-oriented semantic com-
+munications, arXiv preprint arXiv:2503.12907.
+[15] D. G¨und¨uz, M. A. Wigger, T.-Y. Tung, P. Zhang, Y. Xiao, Joint
+source–channel coding: Fundamentals and recent progress in
+practical designs, Proceedings of the IEEE (2024) 1–32.
+[16] F. Jiang, L. Dong, Y. Peng, K. Wang, K. Yang, C. Pan, X. You,
+Large AI model empowered multimodal semantic communi-
+cations, IEEE Communications Magazine 63 (1) (2025) 76–
+82.
+[17] C. Liang, H. Du, Y. Sun, D. Niyato, J. Kang, D. Zhao,
+M. A. Imran, Generative ai-driven semantic communication
+networks: Architecture, technologies, and applications, IEEE
+Transactions on Cognitive Communications and Networking
+11 (1) (2025) 27–47.
+[18] L. X. Nguyen, A. D. Raha, P. S. Aung, D. Niyato, Z. Han, C. S.
+Hong, A contemporary survey on semantic communications:
+Theory of mind, generative ai, and deep joint source-channel
+coding, IEEE Communications Surveys & Tutorials (2025) 1–
+1.
+[19] Y. Huang, X. You, H. Zhan, S. He, N. Fu, W. Xu, Learning
+wireless data knowledge graph for green intelligent commu-
+nications: Methodology and experiments, IEEE Transactions
+on Mobile Computing 23 (12) (2024) 12298–12312.
+[20] N. Hello, P. Di Lorenzo, E. C. Strinati, Semantic communica-
+tion enhanced by knowledge graph representation learning, in:
+2024 IEEE 25th International Workshop on Signal Processing
+Advances in Wireless Communications (SPAWC), 2024, pp.
+876–880.
+[21] X. Du, T. Wang, Q. Feng, C. Ye, T. Tao, L. Wang, Y. Shi,
+M. Chen, Multi-agent reinforcement learning for dynamic re-
+source management in 6G in-X subnetworks, IEEE Transac-
+tions on Wireless Communications 22 (3) (2023) 1900–1914.
+[22] Y. Zhang, D. Guo, Multi-agent reinforcement learning for
+multi-cell spectrum and power allocation, IEEE Transactions
+on Communications 73 (8) (2025) 5980–5992.
+[23] Z. Liu, J. Zhang, E. Shi, Z. Liu, D. Niyato, B. Ai, X. Shen,
+Graph neural network meets multi-agent reinforcement learn-
+ing: Fundamentals, applications, and future directions, IEEE
+Wireless Communications 31 (6) (2024) 39–47.
+[24] A. Elyasi, A. Ashdown, K. M. Rumman, F. Restuccia, O-RAN
+xApps: Survey and research challenges, Computer Network-
+sAvailable at SSRN: https://ssrn.com/abstract=5236117.
+[25] X. Wu, J. Farooq, Y. Wang, J. Chen, LLM-xApp: A large lan-
+guage model empowered radio resource management xApp
+for 5G O-RAN, in: FutureG / NDSS Workshop, 2025, pp. 1–
+5.
+[26] L. Bao, S. Yun, J. Lee, T. Q. S. Quek, LLM-hRIC: LLM-
+empowered Hierarchical RAN Intelligent Control for O-RAN,
+arXiv preprint arXiv:2504.18062.
+[27] A. Salama, Z. Nezami, M. M. H. Qazzaz, M. Hafeez, S. A. R.
+Zaidi, Edge agentic AI framework for autonomous network
+optimisation in O-RAN, arXiv preprint arXiv:2507.21696.
+[28] M. M. H. Qazzaz, et al., Machine learning-based xApp for dy-
+namic resource allocation in O-RAN systems, arXiv preprint
+arXiv:2401.07643.
+[29] T. V. Ngo, M. V. Ngo, B. Chen, G. Gemmi, E. Baena,
+M. Polese, T. Melodia, W. Chien, T. Quek, Consistent and
+repeatable testing of O-RAN distributed unit (O-DU) across
+continents, in: 2024 IEEE 100th Vehicular Technology Con-
+ference (VTC2024-Fall), 2024, pp. 1–5.
+[30] N.-B.-L. Tran, M. V. Ngo, Y. H. Pua, T.-L. Le, B. Chen,
+T. Quek, Ai-driven rapps for reducing radio access network
+interference in real-world 5G deployment, in: IEEE INFO-
+COM 2024 - IEEE Conference on Computer Communications
+Workshops (INFOCOM WKSHPS), 2024, pp. 1–2.
+[31] T.-T. Nguyen, M. V. Ngo, B. Chen, M. Kuchitsu, S. Wai,
+S. Kawai, K. Suzuki, E. W. Koo, T. Quek, Consistent and
+repeatable testing of mMIMO O-RU across labs: A japan-
+singapore experience, in: 2024 IEEE 100th Vehicular Tech-
+nology Conference (VTC2024-Fall), 2024, pp. 1–5.
+[32] Y. Ren, L. Zhou, S. Guo, X. Qiu, T. Q. S. Quek, Traffic dig-
+ital twin-enabled orchestration and scheduling in O-RAN: A
+multi-timescale joint optimization approach, IEEE Transac-
+tions on Mobile Computing (2025) 1–18.
+[33] S. Li, Y. Wang, S. Guo, C. Feng, Task-oriented communica-
+tion for graph data: A graph information bottleneck approach,
+IEEE Transactions on Cognitive Communications and Net-
+working 11 (3) (2025) 1723–1737.
+[34] M. Xu, D. Niyato, J. Kang, Z. Xiong, S. Mao, Z. Han, D. I.
+Kim, K. B. Letaief, When large language model agents meet
+6G networks: Perception, grounding, and alignment, IEEE
+Wireless Communications 31 (6) (2024) 63–71.
+[35] J. Tong, J. Shao, Q. Wu, W. Guo, Z. Li, Z. Lin, J. Zhang,
+WirelessAgent: Large language model agents for intelligent
+wireless networks, arXiv preprint arXiv:2409.07964.
+[36] A. Zolghadr, J. F. Santos, L. A. DaSilva, J. Kibiłda, Learning
+and reconstructing conflicts in o-ran: A graph neural network
+approach, arXiv preprint arXiv:2412.14119.
+[37] M. A. Shami, J. Yan, E. T. Fapi, O-RAN xApps conflict man-
+agement using graph convolutional networks, arXiv preprint
+arXiv:2503.03523.
+[38] S. Jiang, B. Lin, Y. Wu, Y. Gao, LINKs: large language model
+integrated management for 6G empowered digital twin net-
+works, in: 2024 IEEE 100th Vehicular Technology Confer-
+ence (VTC2024-Fall), 2024, pp. 1–6.
+[39] Z. Xiao, C. Ye, Y. Hu, H. Yuan, Y. Huang, Y. Feng,
+L. Cai, J. Chang, LLM Agents as 6G Orchestrator:
+A
+paradigm for task-oriented communications, arXiv preprint
+arXiv:2410.03688.
+[40] M. Haider, I. Ahmed, Z. Hassan, K. Hasan, H. V. Poor, Llm-
+integrated digital twins for hierarchical resource allocation in
+6g networks, arXiv preprint arXiv:2506.18293.
+[41] C. You, X. He, Y. Sun, G. Feng, T. Q. S. Quek, GreenRAN:
+A channel-aware green O-RAN framework for NextG mobile
+systems, in: IEEE INFOCOM 2025 - IEEE Conference on
+Computer Communications, 2025, pp. 1–10.
+[42] Y. Sun, L. Zhang, L. Guo, J. Li, D. Niyato, Y. Fang, S-ran:
+Semantic-aware radio access networks, IEEE Communica-
+tions Magazine 63 (4) (2025) 207–213.
+[43] W. Zhang, Q. Wu, F. Pingyi, K. Wang, N. Cheng, W. Chen,
+K. B. Letaief, Semantic-aware resource management for C-
+V2X platooning via multi-agent reinforcement learning, arXiv
+preprint arXiv:2411.04672.
+[44] Y. E. Sagduyu, T. Erpek, A. Yener, S. Ulukus, Will 6G be se-
+mantic communications? opportunities and challenges from
+task oriented and secure communications to integrated sens-
+ing, IEEE Network 38 (6) (2024) 72–80.
+[45] M. Zhang, M. Abdi, V. R. Dasari, F. Restuccia, Semantic edge
+computing and semantic communications in 6G networks: A
+comprehensive survey, arXiv preprint arXiv:2411.18199.
+[46] J. Cong, G. Cheng, C. You, X. Huang, W. Wu, Two-timescale
+digital twin assisted model inference and retraining for edge
+intelligence, arXiv preprint arXiv:2411.18329.
+[47] R. Barker, A. E. Dorcheh, T. Seyfi, F. Afghah, REAL: rein-
+forcement learning-enabled xApps for experimental closed-
+loop optimization in O-RAN with OSC RIC and srsRAN,
+in: 2025 IEEE International Conference on Communications
+Workshops (ICC Workshops), 2025, pp. 389–395.
+[48] T. Lyu, M. Noor-A-Rahim, A. O’Driscoll, D. Pesch, Seman-
+tic vehicle-to-everything (V2X) communications towards 6G,
+arXiv preprint arXiv:2407.17186.
+[49] L. Lusvarghi, J. Gozalvez, B. Coll-Perales, M. I. Khan,
+M. Sepulcre, S. Ucar, O. Altintas, The search for relevance:
+A context-aware paradigm shift in semantic v2x communica-
+tions, arXiv preprint arXiv:2508.07394.
+[50] P. Zhang, et al., Towards native AI in 6G standardization:
+The roadmap of semantic communications, arXiv preprint
+arXiv:2509.12758.
+[51] R. Meng, et al., A survey of secure semantic communications,
+18
+C. Feng, et al.
+arXiv preprint arXiv:2501.00842.
+[52] P. Gajjar, V. K. Shah, ORANSight-2.0: Foundational LLMs
+for O-RAN, IEEE Transactions on Machine Learning in Com-
+munications and Networking 3 (2025) 903–920.

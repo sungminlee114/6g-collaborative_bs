@@ -1,0 +1,2219 @@
+Environment Sensing-aided Beam Prediction with
+Transfer Learning for Smart Factory
+Yuan Feng, Chuanbing Zhao, Feifei Gao, Yong Zhang, and Shaodan Ma
+Abstract—In this paper, we propose an environment sensing-
+aided beam prediction model for smart factory that can be
+transferred from given environments to a new environment. In
+particular, we first design a pre-training model that predicts the
+optimal beam by sensing the present environmental information.
+When encountering a new environment, it generally requires
+collecting a large amount of new training data to retrain
+the model, whose cost severely impedes the application of the
+designed pre-training model. Therefore, we next design a transfer
+learning strategy that fine-tunes the pre-trained model by limited
+labeled data of the new environment. Simulation results show that
+when the pre-trained model is fine-tuned by 30% of labeled data
+from the new environment, the Top-10 beam prediction accuracy
+reaches 94%. Moreover, compared with the way to completely
+re-training the prediction model, the amount of training data and
+the time cost of the proposed transfer learning strategy reduce
+70% and 75% respectively.
+Index Terms—Environment sensing, mmWave, transfer learn-
+ing, beam prediction.
+I. INTRODUCTION
+T
+HE fourth generation industrial revolution (Industry 4.0)
+integrates artificial intelligence, the Internet of Things,
+big data analysis, and automation technologies into manu-
+facturing and production, which requires vast amounts of
+real-time data transmission [1]–[3]. The coming 6G system,
+as a key enabling technology for Industry 4.0, is urgently
+seeking for new technological breakthroughs, particularly in
+exploring entirely new resource dimensions [4]–[6]. Since the
+wireless channel, characterized by the propagation of elec-
+tromagnetic waves through reflection, scattering, refraction,
+and multipath effects, is intricately linked to the communica-
+tions environment [7], exploiting out-of-band information from
+environmental sensing presents a novel resource dimension
+and could benefit channel-related tasks like beam prediction,
+codebook design, blockage prediction, and received signal
+power prediction [8]–[19].
+Specifically, the authors of [8] extract environmental fea-
+tures from sub-6 GHz channels to predict the beam direction
+of high-frequency millimeter waves, which greatly reduces
+the downlink training overhead of mmWave communications.
+Y.
+Feng,
+C.
+Zhao,
+and
+F.
+Gao
+are
+with
+the
+Department
+of
+Automation,
+Tsinghua
+University,
+State
+Key
+Lab
+of
+Intelligent
+Technologies and Systems, Tsinghua University, State Key for Information
+Science and Technology (TNList), Beijing 100084, P. R. China (e-
+mail:
+feng-y22@mails.tsinghua.edu.cn;
+zcb23@mails.tsinghua.edu.cn;
+feifeigao@ieee.org).
+Y. Zhang is with School of Electronic and Information Engineering, Beijing
+Jiaotong University, 100044, P. R. China (e-mail: zhangy@bjtu.edu.cn).
+S. Ma is with the State Key Laboratory of Internet of Things for Smart
+City and the Department of Electrical and Computer Engineering, University
+of Macau, Macao SAR, China (e-mail: shaodanma@um.edu.mo).
+In [9], the authors use millimeter wave radar to sense user’s
+locations in a real-world traffic scenario and design a beam
+prediction network based on deep learning. Experiment re-
+sults show that the Top-5 beam prediction accuracy is over
+90% which saves 93% of the beam training overhead. The
+authors of [10] design a deep neural network (DNN) with
+LIDAR data as input to detect the line-of-sight (LOS) path
+of communications links. Then the detection results are used
+to assist base station (BS) to select the optimal beam. When
+there is a LOS path, the Top-10 beam prediction accuracy
+reaches 90%, whereas when there is no LOS path, the Top-
+10 beam prediction accuracy is only 50%. In [11], the point
+cloud of indoor environment is collected by the LIDAR, and
+then a long short-term memory (LSTM) network is used
+to predict the movement trajectory of people to determine
+blockage. In addition, since visual images contain rich en-
+vironmental information, some scholars use environmental
+images to assist in completing channel related tasks. The
+authors of [12] extract communications-related features from
+environmental images in a smart factory to predict blockage,
+reference signal receiving power (RSRP), and beam direction.
+The authors of [13] utilize a camera installed on BS to
+capture images of the communications environment. Then,
+the environmental images and the sub-6 GHz channels are
+both input into a neural network (NN) to predict millimeter-
+wave beam and blockage. In [14], the authors leverage images
+taken by user cameras to extract the size and the location
+information of the dynamic vehicles, and design a DNN to
+infer the optimal beam pair for transceivers without any pilot
+signal overhead. With the assistance of environmental images
+from different perspective, the authors of [15] only need a
+simple snapshot of the environment to design a codebook
+for a specific site, which saves the cost of time, human
+resources, as well as hardware installation. In [16], the authors
+install access points (APs) and stations on both sides of the
+indoor corridor, and use a depth camera to capture the depth
+images of communications environment. The convolutional
+long short-term memory (ConvLSTM) network [17] is used
+to extract depth features and predict the received signal power
+when pedestrians pass through the corridor, thereby assessing
+whether the link is blocked. The authors of [18] utilize visual
+data captured by red-green-blue (RGB) cameras at the BSs
+to predict incoming blockages. Then, the prediction results
+are used by the wireless network to proactively initiate hand-
+off decisions and to avoid any unnecessary latency. In [19],
+semantic information is extracted from environmental image
+data, selectively encoded based on its task-relevance, and
+then fused to make decisions for channel related tasks. This
+arXiv:2405.15339v1  [eess.SP]  24 May 2024
+2
+scheme can reduce system overheads such as storage space
+and computational cost while achieving satisfactory prediction
+accuracy and protecting user privacy.
+From [8]–[19], it is seen that environment sensing-aided
+wireless communications schemes does not require accurate
+channel models or any pilot overhead. However, the existing
+works all focus on designing models for a specific environ-
+ment, and every time when facing a new environment, they
+need to re-collect the entire dataset and retrain the model,
+whose cost significantly hinders the real-world application.
+Hence, there is a pressing need to develop a new scheme that
+can efficiently adapt to a new environment with a small amount
+of data.
+In this paper, we propose an environment sensing-aided
+beam prediction model that can be transferred from the given
+environments to a new environment with limited labeled data.
+Considering that smart factory is a typical scenario in Industry
+4.0 [20], we take it as a case study. The main contributions of
+this paper are as follows:
+• We first design an environment-sensing framework for
+dynamic scatterers detection and static environment re-
+construction. Dynamic scatterers are separated from con-
+tinuous frame semantic segmentation maps, while dy-
+namic features are extracted by 2D convolutional neural
+network (CNN). Static environments are characterized by
+pseudo image sequence and static features are extracted
+by 3D CNN. Then, we propose a pre-training model
+that predicts the optimal beam with dynamic and static
+features.
+• We design a transfer learning methodology for the pro-
+posed beam prediction model, where the pre-training
+model is trained using the dataset from given environ-
+ments, while the pre-trained model is fine-tuned using
+the dataset from a new environment. Then, the proposed
+pre-training model is transferred from given environments
+to a new environment.
+• Simulation results show that the Top-5 beam prediction
+accuracy of pre-trained model reaches 97% in given en-
+vironments. When the pre-trained model is fine-tuned by
+30% of labeled data of the new environment, the Top-10
+beam prediction accuracy reaches 94%. Compared with
+completely re-training the prediction model, the amount
+of training data and the time cost of the proposed transfer
+learning strategy reduce 70% and 75% respectively.
+The rest of this paper is organized as follows. Section II
+describes the system model. Section III presents the design
+of the environment sensing framework for dynamic scatterers
+detection and static environments reconstruction. Section IV
+proposes the beam prediction pre-training model and transfer
+learning strategy. Section V shows the performance of the
+proposed scheme and discusses the simulation results. Finally,
+Section VI draws the conclusions.
+Notation: A is a matrix or tensor; A is a set; a is a vector;
+ai is the i-th element of a; a is a scalar; aj
+i is the element of
+the i-th column and the j-th row in A; ai is the i-th column of
+A; CN(mg, Rg) is the complex Gaussian random distribution
+with mean mg and covariance Rg.
+Base Station 1
+Base Station  2
+UE
+Controller
+Engineering 
+Vehicle
+Machine Tool
+Mechanical 
+Arm
+bucket
+Base Station 1
+Base Station  2
+UE
+Controller
+Engineering 
+Vehicle
+Machine Tool
+Mechanical 
+Arm
+bucket
+Column
+Base Station 1
+Base Station  2
+UE
+Controller
+Engineering 
+Vehicle
+Machine Tool
+Mechanical 
+Arm
+bucket
+Column
+Fig. 1. Smart factory scene and equipment such as UE, engineering vehicles,
+mechanical arms, machine tools, controllers, etc.
+II. SYSTEM MODEL
+Let us consider a downlink orthogonal frequency-division
+multiplexing (OFDM) mmWave communications system in a
+smart factory, as shown in Fig. 1. The length, width, and height
+of the factory space are l m, w m, and h m respectively.
+There are many types of industrial equipment in the factory
+like machine tools, mechanical arms, engineering vehicles,
+steel crossbeams, and steel columns. Multiple downward-
+looking cameras and a LIDAR are deployed on the ceiling to
+capture environmental images and 3D point clouds. Moreover,
+multiple BSs equipped with a uniform planar array (UPA) of
+Nt = N x
+t × N y
+t antennas are mounted at a height of hB m.
+The user equipment (UE) could be any engineering vehicle in
+the factory and is equipped with a UPA of Nr = N x
+r × N y
+r
+antennas. Considering the cost and the practicality, the BSs
+and the UE are assumed to have only one radio frequency
+chain. The downlink received signal at the UE for the k-th
+subcarrier can be expressed as
+yk = wH
+r,iHk,iwt,isk + wH
+r,ink,
+(1)
+where Hk,i ∈CNr×Nt is the downlink channel matrix at
+the k-th subcarrier between the i-th BS and the UE, yk ∈C
+and sk ∈C are the received and the transmitted signals
+respectively, wr,i ∈CNr×1 and wt,i ∈CNt×1 are the received
+beam selection vector and the transmitted beam selection
+vector respectively, and nk ∈CNr×1 is the Gaussian noise
+vector at the k-th subcarrier with nk ∼CN(0, σ2INr). The
+transmitted signal sk satisfies E{|sk|2} = Pk. According to
+the widely used geometric channel model [21], the channel
+matrix Hk can be expressed as
+Hk =
+N−1
+X
+n=0
+R
+X
+r=1
+αre−j 2πk
+K ngT (nTs−τr)ar(ϕA
+r , θA
+r )aH
+t (ϕD
+r , θD
+r ),
+(2)
+where R is the number of signal propagation paths between
+each pair of the transmitter and the receiver; αr = √PrejΦr is
+complex path gain of the r-th path; Pr and Φr are the received
+signal power and the received signal phase of the r-th path
+respectively; K is the number of subcarriers; gT (nTs −τr)
+is the shaping pulse that is usually set as the raised cosine
+function with roll off coefficient 0.1; Ts represents the sam-
+pling time while N denotes the cyclic prefix length (assuming
+3
+Encoder
+Atrous Conv
+Rate=1
+Rate=2
+Rate=3
+Atrous Conv
+Rate=1
+Rate=2
+Rate=3
+1x1 Conv
+3x3 Conv
+Rate 6
+3x3 Conv
+Rate 12
+3x3 Conv
+Rate 18
+Image
+Pooling
+1x1 Conv
+Decoder
+1x1 Conv
+Upsample by 4
+Concat
+Upsample by 4
+3x3 Conv
+Encoder
+Atrous Conv
+Rate=1
+Rate=2
+Rate=3
+1x1 Conv
+3x3 Conv
+Rate 6
+3x3 Conv
+Rate 12
+3x3 Conv
+Rate 18
+Image
+Pooling
+1x1 Conv
+Decoder
+1x1 Conv
+Upsample by 4
+Concat
+Upsample by 4
+3x3 Conv
+Low-Level 
+Features
+Encoder
+Atrous Conv
+Rate=1
+Rate=2
+Rate=3
+1x1 Conv
+3x3 Conv
+Rate 6
+3x3 Conv
+Rate 12
+3x3 Conv
+Rate 18
+Image
+Pooling
+1x1 Conv
+Decoder
+1x1 Conv
+Upsample by 4
+Concat
+Upsample by 4
+3x3 Conv
+Low-Level 
+Features
+Fig. 2.
+Diagram of the semantics segmentation using Deeplabv3+ model. The encoder module encodes multi-scale contextual information through atrous
+convolution at various scales, while decoder module refines the segmentation results along object boundaries.
+that the maximum delay is less than NTs), and τr is the time
+delay of the r-th path; ϕA
+r and θA
+r are the azimuth and the
+elevation angles of arrival (AOA) for the r-th path; ϕD
+r and θD
+r
+are the azimuth and the elevation angles of departure (AOD)
+corresponding to the r-th path; ar(ϕA
+r , θA
+r ) ∈CNr×1 and
+at(ϕD
+r , θD
+r ) ∈CNt×1 are the corresponding steering vectors
+given by
+ar(ϕA
+r , θA
+r ) = ay
+r(ϕA
+r , θA
+r ) ⊗ax
+r(ϕA
+r , θA
+r ),
+(3)
+where ax
+r(·), ay
+r(·) are the steering vectors in the x, y
+directions respectively, and ⊗represents Kronecker product.
+Moreover, ax
+r(·), ay
+t (·) can be expressed as
+ax
+r(ϕA
+r , θA
+r ) = [1, ejπ sin θA
+r cos ϕA
+r , ..., ejπ(Nx
+r −1) sin θA
+r cos ϕA
+r ]T ,
+ay
+r(ϕA
+r , θA
+r ) = [1, ejπ sin θA
+r sin ϕA
+r , ..., ejπ(Ny
+r −1) sin θA
+r sin ϕA
+r ]T ,
+(4)
+where N x
+r , N y
+r are the numbers of the received antennas in
+the x, y directions and Nr = N x
+r N y
+r . The steering vectors
+for the AOD are defined similarly. The optimal beam pair
+(wopt
+r , wopt
+t
+) will be selected from the transmit beam code-
+book Wr = {wr,1, wr,2, ..., wr,Nr} and the receive beam
+codebook Wt = {wt,1, wt,2, ..., wr,Nt} by maximizing the
+transmission rate, i.e.,
+(wopt
+r , wopt
+t
+) = arg max 1
+K
+K
+X
+k=1
+log2(1 + Pk
+σ2 |wH
+r Hkwt|2).
+(5)
+III. ENVIRONMENT SENSING STRATEGY
+In this section, we develop an environment sensing frame-
+work for dynamic scatterer detection and static environment
+reconstruction. Here, “dynamic scatterers” broadly refer to
+moving or rotating objects, while “static environment” encom-
+passes long-term fixed objects and buildings, etc. It needs to
+be mentioned that the proposed framework can be extended
+to any indoor environment.
+A. Dynamic Scatterers Detection
+We utilize red-green-blue (RGB) cameras to capture envi-
+ronmental images for dynamic scatterers detection. Consid-
+ering that the environmental images contain both dynamic
+scatterers and static environment, we first utilize semantic
+segmentation techniques [22] to obtain the segmentation maps
+of all objects within the environmental images. We utilize con-
+tinuous frames segmentation maps to discern the motion status
+of each object, which could facilitate the automatic removal of
+static environment while preserving dynamic scatterers. Next,
+we design a 2D CNN network to extract dynamic features
+from dynamic scatterer segmentation maps.
+1) The semantic segmentation network: The semantic seg-
+mentation network Deeplabv3+ [23] utilizes spatial pyra-
+mid pooling module and encode-decoder structure to achieve
+higher mean intersection over union (mIOU). Specifically,
+spatial pyramid pooling module is able to encode multi-scale
+contextual information by probing the incoming features with
+filters or pooling operations at multiple rates and multiple
+effective fields-of-view, while encode-decoder structure can
+capture sharper object boundaries by gradually recovering
+the spatial information. The Deeplabv3+ model combines
+the advantages of both structures to achieve high-precision
+semantic segmentation and sharper object boundaries.
+Here, we utilize Deeplabv3+ model to segment environmen-
+tal images, as shown in Fig. 2. Denote the environmental
+image captured by the c-th camera as Xc ∈RC×H×W ,
+where C, H, and W are the channel number, the height,
+and the width of RGB image respectively. Assuming there
+are m rows and n columns of cameras in the factory, a global
+environmental image X ∈RC×mH×nW can be obtained by
+stitching the images captured by all cameras. The label and the
+output of Deeplabv3+ model are denoted as G ∈RmH×nW
+and ˆG ∈RQ×mH×nW , where the (i, j)-th entry of G is
+the label of the semantic class at the pixel coordinate (i, j),
+i.e., G(i, j) = 0, · · · , Q −1. Moreover, Q is the number of
+semantic classes and ˆG(q, i, j) represents the probability that
+the (i, j)-th pixel belongs to the q-th class. The loss function
+of the Deeplabv3+ is cross entropy, which can be expressed
+as
+Loss{Dpv3+} = −
+1
+mnHW
+X
+i,j
+log
+ 
+exp( ˆG(G(i, j), i, j))
+PQ−1
+q=0 exp( ˆG(q, i, j))
+!
+.
+(6)
+Using the stochastic gradient descent (SGD) algorithm [24]
+to minimize Loss{Dpv3+} until convergence, the segmentation
+4
+Algorithm 1 Two-pass algorithm for connected component
+analysis
+Input: Gseg,q ∈RmH×nW
+Output: Gseg,q,d ∈RmH×nW , d = 1, 2, · · · , D
+1: Step1: the first pass
+2: for i = 1 to mH do
+3:
+for j = 1 to nW do
+4:
+if Gseg,q(i, j) = q then
+5:
+if Gseg,q(i −1, j) = 0 and Gseg,q(i, j −1) = 0
+then
+6:
+label = label + 1, Gseg,q(i, j) = label
+7:
+else if Gseg,q(i −1, j) > 1 or Gseg,q(i, j −1) > 1
+then
+8:
+Gseg,q(i, j)
+=
+min{Gseg,q(i
+−
+1, j),
+Gseg,q(i, j −1)}
+9:
+Record the connectivity area set labelSet[k] to
+which label belongs
+10:
+end if
+11:
+end if
+12:
+end for
+13: end for
+14: Step2: the second pass
+15: for i = 1 to mH do
+16:
+for j = 1 to nW do
+17:
+if Gseg,q(i, j) > 1 and Gseg,q(i, j) ∈labelSet[k]
+then
+18:
+Gseg,q(i, j) = k
+19:
+end if
+20:
+end for
+21: end for
+22: Gseg,q,d = 1(Gseg,q = d) ⊙Gseg,q
+map can be obtained from
+Gseg = arg max
+q=0,··· ,Q−1
+ˆG(q, i, j).
+(7)
+The performance of the semantics segmentation can be eval-
+uated by the segmentation precision and the mIOU. The
+segmentation precision is given by
+ADpv3+ =
+P
+i,j
+PN
+n=1 1
+
+G(n)
+seg(i, j) = G(n)(i, j)
+
+mnHWN
+,
+(8)
+where the superscript (n) denotes the n-th sample, N is the
+number of testing samples, and 1 is the indicator function.
+The mIOU is given by
+mIOU =
+1
+QN
+N
+X
+n=1
+Q−1
+X
+q=0
+H(n)
+qq
+PQ−1
+p=0 H(n)
+qp + PQ−1
+p=0 H(n)
+pq −H(n)
+qq
+,
+(9)
+where H(n)
+pq
+represents the number of pixels that predict the
+p-th class as the q-th class. Based on Gseg, the segmentation
+maps of all classes such as “engineering vehicle”, “mechanical
+arm”, “controller”, “machine tool”, etc, can be easily separated
+by multiplying zero-masks.
+Algorithm 2 Instance refinement
+Input: Gseg,q,d ∈RmH×nW , d = 1, 2, · · · , D
+Output: Gseg,q,d ∈RmH×nW , d = 1, 2, · · · , D
+′
+1: Initialize pixel ratio µ
+2: Count
+the
+pixel
+number
+of
+D
+instances:
+np
+=
+[Np,1, Np,2, · · · , Np,D]
+3: while True do
+4:
+Np,min = min{np}, Imin = arg min{np}
+5:
+if
+Np,min
+(Pdim(np)
+i=1
+Np,i−Np,min)/(dim(np)−1) < µ then
+6:
+D = D −1, remove Gseg,q,Imin and np(Imin)
+7:
+else
+8:
+break
+9:
+end if
+10: end while
+11: D
+′ = D, Gseg,q,d, d = 1, 2, · · · , D
+′
+Segmentation Map
+Mechanical Arm
+Controller
+Machine Tool
+Bucket
+Engineering Vehicle
+...
+Tow-pass algorithm 
+Instance refinement 
+Segmentation Map
+Mechanical Arm
+Controller
+Machine Tool
+Bucket
+Engineering Vehicle
+...
+Tow-pass algorithm 
+Instance refinement 
+Fig. 3. Illustration of the instance separation and refinement.
+2) Instance separation and refinement: Denote the q-th
+class segmentation map as Gseg,q, which can be expressed
+as
+Gseg,q = M q ⊙Gseg,
+(10)
+where M q = 1(Gseg = q), q = 0, · · · , Q−1 is the zero-mask
+of the q-th class, and ⊙represents the Hadamard product of
+a matrix. Since the same class of semantics often contains
+multiple instances and each instance is usually a connected
+entity, we propose to utilize the two-pass algorithm [25]
+to separate and refine instances within the same class. The
+core idea of two-pass algorithm is that the first pass assigns
+different label values for the pixels of interest and records the
+label sets to which the label belongs, while the second pass
+unifies the different labels in the same label set to separate each
+connected instance. The detailed steps of two-pass algorithm
+are given in Algorithm 1.
+Assuming that there are D connected entities in the q-th
+semantic class maps, we can obtain D segmentation maps
+Gseg,q,d ∈RmH×nW , d = 1, 2, · · · , D. Due to the errors
+of semantic segmentation model, the q-th class of semantics
+actually only contains D
+′ instances (D
+′ < D), and thus
+we need to refine the results of the two-pass algorithm.
+Considering that semantic segmentation errors often yield a
+small range of connected entities, we count the pixel number
+of instance in D segmentation maps and select the map with
+the smallest pixel number of instance each time. If the pixel
+number is significantly fewer than the mean of other instance
+pixel number, then the instance will be considered as an
+error and will be deleted. The detailed algorithm to determine
+whether the instance is generated by semantic segmentation
+errors is shown in Algorithm 2.
+5
+3) Dynamic scatterers separation: The set of segmentation
+maps for the d-th instance of the q-th class with consecutive
+l frames can be represented by
+Gq,d = {G(n)
+seg,q,d, G(n+1)
+seg,q,d, · · · , G(n+l−1)
+seg,q,d },
+(11)
+where d = 1, 2, · · · , D
+′, q = 1, 2, · · · , Q. Considering that the
+locations or angles of dynamic scatterers vary regularly over
+time while static scatterers remain stationary, we propose to
+utilize the difference of continuous frame segmentation maps
+to separate dynamic scatterers. The number of different pixel
+values between the (n + t)-th frame and the n-th frame for
+the d-th instance map of the q-th class can be expressed as
+s(n+t)
+q,d
+=
+mH
+X
+i=1
+nW
+X
+j=1
+1(∥G(n+t)
+seg,q,d(i, j) −G(n)
+seg,q,d(i, j)∥> 0),
+(12)
+where t
+=
+1, 2, · · · , l −1. Then we can obtain a dif-
+ference sequence {s(n+t)
+q,d
+}t=1,2,··· ,l−1, where the length of
+{s(n+t)
+q,d
+}t=1,2,··· ,l−1 is l −1. Due to the continuity of the
+rotation or movement of dynamic scatterers, the difference
+sequence of dynamic scatterers will exhibit strong autocor-
+relation, while the difference sequence of static environment
+due to semantic segmentation errors can be considered as
+white noise with zero autocorrelation coefficient, as shown
+in Fig 4. Therefore, we propose to utilize the Ljung-Box
+test method [26] to statistically separate the dynamic scat-
+terers and static environment. The Ljung-Box test uses the
+autocorrelation coefficients of samples to construct statistics
+that follow a specific distribution, and then uses hypothesis
+testing to determine whether a series of observations within a
+certain time period are white noise. If the number of different
+pixel values between the (n + t)-th frame and the n-th frame
+for the d-th instance map of the q-th class is a random
+variable S(n+t)
+q,d
+, then continuous l −1 random variables
+can form a discrete stochastic process {S(n+t)
+q,d
+}t=1,2,··· ,l−1.
+The sample {s(n+t)
+q,d
+}t=1,2,··· ,l−1 is a realization of stochastic
+process {S(n+t)
+q,d
+}t=1,2,··· ,l−1. Assuming {S(n+t)
+q,d
+}t=1,2,··· ,l−1
+is a wide-sense stationary stochastic process [27], the auto-
+correlation coefficient with an interval of r can be expressed
+as
+ρr =
+Cov
+
+S(n+t)
+q,d
+, S(n+t−r)
+q,d
+
+r
+Var
+
+S(n+t)
+q,d
+
+Var
+
+S(n+t−r)
+q,d
+
+=
+Cov
+
+S(n+t)
+q,d
+, S(n+t−r)
+q,d
+
+Var
+
+S(n+t)
+q,d
+
+,
+(13)
+where Cov and Var represent the covariance and variance of
+random variables. However, the probability distribution that
+S(n+t)
+q,d
+follows is often difficult to obtain, and in practice,
+only one sample {s(n+t)
+q,d
+}t=1,2,··· ,l−1 can be obtained. Then,
+the autocorrelation coefficient of the sample with an interval
+of r can be expressed as
+Algorithm 3 Dynamic scatterers detection algorithm
+Input: Environment image sequence X(n), X(n+1), · · · ,
+X(n+l−1).
+Output: Dynamic
+scatterers
+map
+sequence
+D(n),
+D(n+1), · · · , D(n+l−1).
+1: Step1: Semantic segmentation
+2: G(n)
+seg, G(n+1)
+seg
+, · · · , G(n+l−1)
+seg
+←
+X(n), X(n+1), · · · ,
+X(n+l−1).
+3: Step2: Instance separation and refinement
+4: for t = 0 to l −1 do
+5:
+for q = 1 to Q do
+6:
+G(n+t)
+seg,q = M (n+t)
+q
+⊙G(n+t)
+seg
+7:
+Two-pass algorithm: G(n+t)
+seg,q,d
+←
+G(n+t)
+seg,q , d
+=
+1, 2, · · · , D
+8:
+Instance refinement: G(n+t)
+seg,q,d(d = 1, 2, · · · , D
+′) ←
+G(n+t)
+seg,q,d(d = 1, 2, · · · , D)
+9:
+end for
+10: end for
+11: Step3: Dynamic semantics separation
+12: for q = 1 to Q do
+13:
+for d = 1 to D
+′ do
+14:
+for t = 1 to l −1 do
+15:
+s(n+t)
+q,d
+=
+PmH
+i=1
+PnW
+j=1 1(G(n+t)
+seg,q,d(i, j)
+−
+G(n)
+seg,q,d(i, j) > 0)
+16:
+end for
+17:
+ˆρr
+=
+PT
+t=r+1
+
+s(n+t)
+q,d
+−¯sq,d
+
+s(n+t−r)
+q,d
+−¯sq,d
+
+PT
+t=1
+
+s(n+t)
+q,d
+−¯sq,d
+2
+, r
+=
+1, 2, · · · , m.
+18:
+Q(m) = T(T + 2) Pm
+j=1
+ˆρ2
+j
+T −j
+19:
+if Q(m) ≤χ2
+1−α(m) then
+20:
+Remove G(n)
+seg,q,d, G(n+1)
+seg,q,d, · · · , G(n+l−1)
+seg,q,d .
+21:
+end if
+22:
+end for
+23: end for
+24: D(n), D(n+1), · · · , D(n+l−1)
+←
+G(n)
+seg, G(n+1)
+seg
+, · · · ,
+G(n+l−1)
+seg
+ˆρr =
+PT
+t=r+1
+
+s(n+t)
+q,d
+−¯sq,d
+ 
+s(n+t−r)
+q,d
+−¯sq,d
+
+PT
+t=1
+
+s(n+t)
+q,d
+−¯sq,d
+2
+,
+0 < r < T −1,
+(14)
+where T = l −1 is the length of the sequence and ¯sq,d =
+PT
+t=1 s(n+t)
+q,d
+/T is the mean of the samples. If the elements
+of sequence {s(n+t)
+q,d
+}t=1,2,··· ,T are independent of each other,
+then there are ˆρ1 =
+ˆρ2 = · · · =
+ˆρm = 0; otherwise
+ˆρ1, ˆρ2, · · · , ˆρm are not all zero. Therefore, we can formulate
+the following null hypothesis and alternative hypothesis:
+H0 : ˆρ1 = ˆρ2 = · · · = ˆρm = 0;
+H1 : ˆρ1, ˆρ2, · · · , ˆρm
+are not all zero.
+(15)
+The statistics Q(m) proposed by Ljung and Box [26] asymp-
+totically follow the m-order chi square distribution [28] χ2(m)
+6
+Dynamic scatters
+Static environment
+Rotating
+Moving
+Engineering Vehicle
+Mechanical Arm
+Bucket, Controller, Machine Tool
+Ljung-Box test
+Filter out static environment while  
+retaining dynamic scatterers
+...
+...
+Fig. 4. Illustration of the dynamic scatterer separation. Based on the autocorrelation of difference sequence between the dynamic scatterers and the static
+environment, the dynamic scatterers will be separated from the static environment.
+and Q(m) can be expressed as
+Q(m) = T(T + 2)
+m
+X
+j=1
+ˆρ2
+j
+T −j .
+(16)
+The decision rule is that when Q(m) > χ2
+1−α(m), H0 will be
+rejected. The sequence is considered to exhibit autocorrelation
+and the instance is a dynamic scatterer. When Q(m) ≤
+χ2
+1−α(m), H0 will be accepted. The sequence is considered
+as white noise and the instance belongs to static environment.
+The entire process of dynamic scatterer separation is shown
+in Algorithm 3.
+4) Dynamic feature extraction: The residual structures fa-
+cilitate the training of deeper networks by mitigating the
+vanishing gradient and enabling effective feature reuse across
+layers [29]. Here, we take the dynamic scatterer segmentation
+maps extracted from Section III-A3 as input and design a
+network with residual structure stacked by 2D convolution,
+BatchNorm, and ReLU to extract dynamic features. After the
+feature layer is flattened, a fully connected network is added
+to the output layer to obtain a dynamic feature vector. The
+detailed dynamic feature extraction network structure is shown
+in Tab. I. Denote the mathematical function of the dynamic
+feature extraction module as f{dy}. Then the dynamic feature
+of the n-th frame can be expressed as
+d(n) = f{dy}(D(n)),
+(17)
+where d(n) ∈RND×1 and ND is the number of neurons in
+the output layer of module f{dy}.
+B. Static Environment Reconstruction
+Static environment mainly includes steel crossbeams, steel
+columns, machine tools, controllers, factory building, etc.
+The downward-looking cameras can only capture objects on
+the floor, while static environment such as steel crossbeams
+at the ceiling of the factory and the structure of buildings
+cannot be captured by cameras. Therefore, we utilize a LIDAR
+equipped on the ceiling to capture 3D point clouds of the static
+environment and convert the point cloud into fixed dimensional
+pseudo image sequences by a grid based approach. Next, we
+design a 3D CNN network to extract static features from
+pseudo image sequences.
+1) Point cloud to Pseudo Image sequence: The scanned
+point cloud by LIDAR can be represented as a set P =
+{p1, p2, · · · , pG}, where G denotes the number of points
+in the point cloud and each element pg ∈R3×1 represents
+the three-dimensional coordinates of one point. Due to the
+varying number of G generated each time, we cannot use
+CNN structure for feature extraction. Therefore, we propose to
+utilize a grid based approach to convert point clouds into fixed
+dimensional pseudo image sequences. Specifically, we can find
+a suitable cube C that includes the entire static environment.
+Then the length, the width, and the height of the cube C can
+be evenly divided into a, b, and c parts respectively to obtain
+a × b × c small cubes. We establish a local coordinate system
+with the center point of each small cube as the origin, and
+convert all points contained in this small cube to the local
+coordinate system. Denote the (i, j, k)-th small cube as Ci,j,k,
+and then the point cloud set contained in Ci,j,k after coordinate
+system transformation can be expressed as
+Pi,j,k = {pg −¯ci,j,k|pg ∈Ci,j,k}
+(18)
+where ¯ci,j,k is the three-dimensional coordinate of the center
+point of Ci,j,k. In order to convert the point cloud into a
+fixed dimensional format without changing its spatial structure,
+we use the mean value of local coordinates of all points
+within Ci,j,k as a representation of these points, i.e., ¯pi,j,k =
+1
+|Pi,j,k|
+P
+g pg, pg ∈Pi,j,k. If there is no point in Ci,j,k, then
+¯pi,j,k is set to 0. We partition the G points into a×b×c spatial
+blocks and obtain the pseudo image sequence P ∈Ra×b×c×3,
+where a, b, c, and “3” are equivalent to the length of sequence,
+the height, the width, and the number of channels of a pseudo
+image, respectively. Compared with the original point cloud
+P, the dimension of pseudo image sequence P is significantly
+reduced, and the fixed dimensional data format makes it
+convenient to use 3D CNNs for feature extraction. Note that
+the grid size can be adjusted according to the complexity of the
+actual static environment. When the environment is complex,
+we could reduce the grid size to obtain more detailed features,
+and when the environment is simple, we could increase the
+grid size to reduce computational complexity.
+2) Static feature extraction: The traditional 2D CNN can
+only extract features from a single image, but cannot ex-
+tract temporal correlation information from consecutive frame
+7
+TABLE I
+THE NETWORK PARAMETERS OF DYNAMIC, STATIC, USER IDENTIFICATION FEATURE EXTRACTION
+Module
+Layer
+Kernel
+Stride
+Neuron
+Output Shape
+Dynamic-feature
+[Covn-BatchNorm-ReLU]
+7
+2
+32
+32×112×168
+MaxPool
+3
+2
+/
+32×56×84
+[Covn-BatchNorm-ReLU]×2 <Residual>
+3,3
+1,1
+64, 64
+64×56×84
+[Covn-BatchNorm-ReLU]×2 <Residual>
+3,3
+2,1
+128, 128
+128×28×42
+[AdaptiveAvgPool2d-FC]
+/
+/
+128
+128
+Static-feature
+[Covn(3D)-BatchNorm-ReLU]
+3
+1
+32
+32×31×21×11
+AvgPool
+3
+2
+/
+16×20×40
+[Covn(3D)-BatchNorm-ReLU]×2 <Residual>
+3,3
+1,1
+64, 64
+64×31×21×11
+[Covn(3D)-BatchNorm-ReLU]×2 <Residual>
+3,3
+2,1
+128, 128
+128×16×11×6
+[AdaptiveAvgPool3d-FC]
+/
+/
+116
+116
+User-identification-feature
+BatchNorm
+/
+/
+3
+3
+[FC-BatchNorm-Tanh] × 2
+/
+/
+32, 12
+12
+image sequences. In comparison, the 3D CNN can extract
+relevant information between consecutive frames by intro-
+ducing time dimension, and has wide applications in video
+classification and behavior recognition [30]. Hence, we utilize
+3D CNN to extract spatial features of pseudo image sequence
+P ∈Ra×b×c×3. Similar to dynamic feature extraction, we
+take P as input and design a residual structured network
+stacked by 3D convolution, BatchNorm, and ReLU to extract
+static features. After the feature map sequence is flattened, a
+fully connected network is added to the output layer to obtain
+a static feature vector. The detailed static feature extraction
+network structure is shown in Tab. I. Denote the mathematical
+function of the static feature extraction module as f{st}. Then
+the static feature can be expressed as
+s = f{st}(P ),
+(19)
+where s ∈RNS×1 and NS is the number of neurons in the
+output layer of module f{st}.
+C. User Identification Feature Extraction
+Dynamic and static features contain all the information
+of the communication environment, but the UE at different
+locations will correspond to different channels. Therefore,
+user identification information needs to be used as the input
+to distinguish user at different locations. Considering that
+each equipment in the smart factory is under control, we
+assume that the user’s location is precisely known at BS and
+will be used as user identification information1. Denoting the
+location of the n-th frame of the user as l(n) ∈R3×1, the
+identification module is composed of several fully connected
+(FC) blocks, and each FC block is sequentially stacked by a
+FC, a BarchNorm, and a Tanh layers. The detailed network
+structure is shown in Tab. I. Denote the mathematical function
+of the user identification feature extraction module as f{U}.
+Then the user identification feature of the n-th frame can be
+expressed as
+u(n) = f{id}(l(n)),
+(20)
+where u(n) ∈RNU×1 and NU is the number of neurons in
+the output layer of module f{id}.
+1In other indoor environments, user identification information can be dis-
+tinguished using historical beam indices or other predetermined information.
+IV. BEAM PREDICTION AND TRANSFER LEARNING
+STRATEGY
+In this section, we propose a pre-training model for beam
+prediction and design a transfer learning strategy to generalize
+the proposed pre-trained model from given environments to a
+new environment.
+A. Beam Prediction
+We propose to use continuous l frames of environmental im-
+ages, UE’s locations, and static environmental point clouds to
+predict the beam pair indices of the k-th future frame between
+B BSs and the UE. Denote the dynamic feature and the user
+identity feature of the n-th frame in the e-th environment as
+d(n)
+e
+∈RND×1 and u(n)
+e
+∈RNU×1, respectively and denote
+the static feature of the e-th environment as se ∈RNS×1,
+where e ∈{1, 2, · · · , E}. Next we fuse these three features
+to form sensing feature f (n)
+e
+= [(u(n)
+e )T , (d(n)
+e )T , sT
+e ]T ∈
+R(NU+ND+NS)×1. Due to the strong temporal relationship
+in the prediction process, we utilize LSTM networks to
+predict the beam pair indices for the k-th future frame. By
+introducing forget gate, input gate, and output gate, LSTM
+can greatly improve the ability of recurrent neural network
+(RNN) to process time-series information with long time
+dependence [31]. The sensing features of consecutive l frames
+in the e-th environment will be fed into a two-layer LSTM
+network with l LSTM cells. Considering that beam prediction
+involves selecting the optimal beam pair from NtNr beam
+pairs, which is essentially a multi-classification problem, we
+add a softmax function to the output layer. To ease the
+representation, the dynamic scatterers detection and static
+environment reconstruction are recorded as operator DS(·) and
+SR(·), and the two-layer LSTM with l cells is recorded as
+operator LMST(2)
+(l) (·). The overall beam prediction algorithm
+can be expressed as
+{D(n)
+e , D(n+1)
+e
+, · · · , D(n+l−1)
+e
+}
+= DS({X(n)
+e , X(n+1)
+e
+, · · · , X(n+l−1)
+e
+}),
+(21a)
+{d(n)
+s , d(n+1)
+s
+, · · · , d(n+l−1)
+s
+}
+= f{dy}({D(n)
+e , D(n+1)
+e
+, · · · , D(n+l−1)
+e
+}),
+(21b)
+P e = SR(Pe),
+(21c)
+se = f{st}(P e),
+(21d)
+8
+3D Conv
+Flatten
+Feature Extraction
+Static 
+feature
+Flatten
+Feature Extraction
+Dynamic 
+feature
+2D Conv
+2D Conv
+Static Environment
+Static Environment
+X
+Y
+Z
+O
+X
+Y
+Z
+X
+Y
+Z
+O
+X
+Y
+Z
+Point Cloud to Pseudo Image Sequence
+X
+Y
+Z
+O
+X
+Y
+Z
+Point Cloud to Pseudo Image Sequence
+Segmentation Map
+Mechanical 
+Arm
+Controller
+Machine 
+Tool
+Bucket
+Engineering 
+Vehicle
+...
+Mechanical 
+Arm
+Controller
+Machine 
+Tool
+Bucket
+Engineering 
+Vehicle
+...
+Instance Map
+Dynamic Scatters
+Mechanical 
+Arm
+Controller
+Machine 
+Tool
+Bucket
+Engineering 
+Vehicle
+...
+Instance Map
+Dynamic Scatters
+RGB Images
+RGB Images
+...
+...
+LSTM
+LSTM
+LSTM
+LSTM
+LSTM
+LSTM
+Point Cloud
+ Generation
+Identification Feature
+ Extration
+Identification 
+feature
+Location 
+Fig. 5. Diagram of the environment sensing-aided beam prediction network architecture. The dynamic feature, the static feature, and the user identification
+feature are extracted and then fed into LSTM networks to predict the optimal beam indices in advance.
+{u(n)
+s , u(n+1)
+s
+, · · · , u(n+l−1)
+s
+}
+= f{id}({l(n)
+e , l(n+1)
+e
+, · · · , l(n+l−1)
+e
+}),
+(21e)
+f (n)
+e
+= [(u(n)
+e )T , (d(n)
+e )T , sT
+e ]T , · · · ,
+f (n+l−1)
+e
+= [(u(n+l−1)
+e
+)T , (d(n+l−1)
+e
+)T , sT
+e ]T
+(21f)
+ˆB(n) = SoftMax(Reshape(FC(NtNrB)(LSTM(2)
+(l) ({f (n)
+e ,
+f (n+1)
+e
+, · · · , f (n+l−1)
+e
+}))),
+(21g)
+where FC(NtNrB)(·) represents the FC layer with NtNrB
+output neurons. The reshape function Reshape(·) converts the
+NtNrB × 1 dimensional vector output by the FC blocks into
+the NtNr × B dimensional matrix. Moreover, matrix-form
+softmax function can be expressed as
+SoftMax([ˆb1, ˆb2, ..., ˆbB]) = [
+exp(ˆb1)
+PNtNr
+j=1
+exp(ˆbj
+1)
+,
+exp(ˆb2)
+PNtNr
+j=1
+exp(ˆbj
+2)
+, · · · ,
+exp(ˆbB)
+PNtNr
+j=1
+exp(ˆbj
+B)
+],
+(22)
+where ˆbi is the i-th column of ˆB ∈RNtNr×B and ˆbj
+i is the
+j-th element of ˆbi. The softmax function coverts ˆbi(n) into a
+probability vector, where ˆbj
+i represents the probability that the
+optimal beam pair between the i-th BS and the UE is the j-th
+beam pair. Moreover, we utilize one-hot vectors bi(n) to form
+training labels B(n) ∈RNtNr×B. If the optimal beam pair
+between the i-th BS and the UE is the j-th beam pair, then
+there are bj
+i(n) = 1 and bk
+i (n) = 0, k ̸= j. The cross entropy
+commonly used by multi-classification tasks is selected as the
+loss function, i.e.,
+Loss(B(n), ˆB(n)) = −
+B
+X
+i=1
+NtNr
+X
+j=1
+bj
+i(n) logˆbj
+i(n).
+(23)
+B. Transfer Learning Strategy
+The design of independent frameworks for dynamic and
+static feature extraction aims to adapt to variations of commu-
+nication environments. For instance, when a factory produces
+a certain type of product, dynamic scatterers and users move
+within a fixed static environment. However, when the factory
+switches to producing a new type of product, dynamic scat-
+terers and users navigate within a new static environment. In
+such cases, we can utilize LIDAR to rescan the new static envi-
+ronment to obtain 3D point clouds and capture environmental
+images during factory production to achieve rapid collection of
+environmental information. In other indoor environments, such
+as conference rooms, the static environment includes buildings
+and furniture like sofas, tables, whereas dynamic scatterers are
+moving humans within the conference room. Therefore, the
+proposed framework is applicable to any indoor environment
+and aims to overcome the transfer challenge of sensing-aided
+wireless communication models in a new static environment
+with dynamic scatterers.
+At the level of environmental sensing, dynamic features,
+static features, and user identity features already cover com-
+plete environmental and channel information. However, at the
+level of machine learning, a mapping model learned only from
+a limited number of environments in the training set often
+overfits these environments and lack the ability to generalize
+to a new environment. In real world, the variations of the
+environment are unpredictable, which means that the sample
+space of multiple environments is very large, and it is not
+possible to collect all potential environment data. Therefore,
+we propose a transfer learning strategy that can expeditiously
+adapt to new environments with limited labeled data.
+Denote the space2 of dynamic scatterers and the space3
+of user identification in the e-th environment as De and Ue,
+respectively. The static environment can be represented by 3D
+point clouds Pe. Define the space of the e-th environment
+feature and the space of beam indices as X(e) = {De, Pe, Ue}
+and Y(e). Then, the problem of transfer learning can be
+defined as follows: i) Given Es source environment features
+{XS(e)}Es
+e=1 and Es source tasks {Y (e)S}Es
+e=1, along with
+the target environment feature XT , and the target task YT .
+ii) The objective is to leverage the knowledge gained from
+{XS(e)}Es
+e=1 and {Y (e)S}Es
+e=1 to enhance the performance of
+the target task YT , where XT ̸= XS(e) for e = 1, · · · , Es.
+Consequently, we first train a sensing-aided beam prediction
+pre-training model in Es source domain environments and the
+2The space of dynamic scatterers De means the set of all possible dynamic
+scatterer maps D(n)
+e
+.
+3The space of user identification Ue means the set of all possible user’s
+locations l(n)
+e
+.
+9
+Algorithm 4 Transfer Learning Algorithm for Beam Predic-
+tion
+Input: Source environmental feature: {XS(e)}Es
+e=1, Source
+tasks: {Y (e)S}Es
+e=1, Target environmental feature: XT ,
+Target task YT
+Output: Fine-tuned parameters: Θf
+1: Pre-training Stage
+2:
+fΘp : {X(e)S}Es
+e=1 →{Y (e)S}Es
+e=1
+3:
+Save the model parameters: Θp
+4: Fine-tuning Stage
+5:
+Scan the new static environment to obtain PT
+6:
+Capture DT and UT during operations,
+7:
+XT = {DT , PT , UT }
+8:
+BSs capture optimal beam labels YT by beam scanning
+9:
+fΘvar,Θfix : XT →YT , Θf = {Θvar, Θfix}
+10: Predicting Stage
+11:
+Load fine-tuned parameters: Θf
+12:
+Capture images X(n) and user location l(n)
+13:
+(wopt
+r , wopt
+t
+) ←{X(˜n), PT , l(˜n)
+e }n+l−1
+˜n=n
+mapping function can be expressed as
+fΘ : {X(e)S}Es
+e=1 →{Y (e)S}Es
+e=1,
+(24)
+where Θ is the model parameters.
+When facing a new environment, the fine tuning procedure
+will be launched as shown in Fig. 6. The LIADR will scan the
+target environment once to capture 3D static point clouds PT ,
+and the 3D point clouds will be stored in the database. At the
+beginning stage of factory production, the cameras and the APs
+respectively capture environmental images and optimal beam
+labels YT . The environmental images are processed by dy-
+namic scatterers detection to obtain DT and controller utilizes
+user’s locations to generate UT . Then the XT = {DT , PT , UT }
+and the YT are used to fine-tune the pre-trained model. The
+fine-tuning mapping function can be expressed as
+fΘvar,Θfix : XT →YT
+(25)
+where Θvar and Θfix represent the variable and fixed param-
+eters during the fine-tuning process, respectively. Considering
+that the first several layers of CNNs extract low level in-
+formation, and that LSTM temporal prediction is consistent
+across different environments, we fix the parameters of the
+first several layers of dynamic, static, and user identity feature
+extraction and the parameters of the LSTM layer. The other
+parameters of beam prediction model will be fine-tuned by
+limited labeled data. In predicting stage, the fine-tuned param-
+eters are loaded into the prediction model through the predic-
+tion flow. It is sufficient to achieve beam prediction without
+pilot overhead in a new environment solely by obtaining real-
+time environmental images and user identities. Note that the
+LIDAR scan the static environment only once when facing a
+new environment.
+V. SIMULATION RESULTS
+In this section, we utilize simulation software to generate
+joint image-channel dataset for single environment and multi-
+Data Collection
+BS 1
+BS 2
+Data Collection
+Camera 1
+Camera 2
+LIDAR
+User
+Static Machine Tool
+Other Dynamic Scatters
+Dynamic Mechanical Arm
+Dynamic Mechanical Arm
+Beam Prediction Unit
+Fine-Tuning Sever
+Fine-tuned model parameters
+Fine-tuning flow
+Prediction flow
+Fig. 6. Diagram of the transfer learning strategy.
+environment in smart factories respectively, and evaluate the
+performance of the proposed environment sensing-aided beam
+prediction framework.
+A. Dataset Generation
+1) Image Dataset: We utilize the Blender [32], a 3D
+modeling software, to build a factory model with the length
+of 60 m (l = 60), width of 40 m (l = 40) and the height of
+20 m (h = 20). As shown in Fig 7, the area in the middle of
+the factory, with a length of 40 m and a width of 20 m, is the
+work area used to deploy equipment such as machine tools,
+mechanical arms, and controllers. The surrounding zone of
+the work area is the transportation area, where engineering
+vehicles can complete transportation tasks. To mimic the
+real world, we add randomness to the direction and speed
+of the engineering vehicles. Specifically, while ensuring that
+the engineering vehicles do not exceed the transportation
+area, their direction and speed follow a truncated Gaussian
+distribution [33]. The standard form of truncated Gaussian
+distribution can be expressed as
+ψ(µ, σ2, a, b; x) =
+
+
+
+
+
+0,
+x ≤a
+ϕ(µ,σ2;x)
+ϕ(µ,σ2;b)−ϕ(µ,σ2;a),
+a < x ≤b
+0,
+x > b
+, (26)
+where ϕ(µ, σ2; x) is the standard normal distribution with
+a mean of µ and a variance of σ2; a and b are the upper
+bound and the lower bound of truncated Gaussian distribution
+respectively. If the direction of the engineering vehicle at time
+t is θt, then the direction at time t + 1 can be expressed as
+θt+1 = ψ(θt, 7.5, −30, 30; θ).
+(27)
+We take the direction of the engineering vehicle at time t as
+the mean with 7.5 degrees as the variance, and the range is
+limited to −30 ∼30 degrees to generate the direction at time
+t + 1. This approach ensures a certain level of continuity in
+the vehicle’s direction while avoiding complete randomness,
+which makes simulation more consistent with real world.
+10
+1
+2
+3
+4
+Starting Point
+End Point
+Trajectory
+Fig. 7. The top view of the smart factory.
+(a) Mode 1
+(b) Mode 2
+(c) Mode 3
+Fig. 8. Three modes of the steel crossbeams and columns.
+Fig. 9. A visualization case of the ray tracing simulation between the BS1
+and the UE.
+Additionally, a similar method is applied to the speed of
+engineering vehicles. The speed at time t+1 can be expressed
+as
+vt+1 = ψ(vt, 0.02, 0.8, 1.2; v).
+(28)
+We take the speed of the engineering vehicle at time t as the
+mean, with 0.02 m/s as the variance, and the range is limited to
+0.8 ∼1.2 m/s to generate the speed at time t+1. As shown in
+Fig. 7, the user engineering vehicle starts from the right initial
+point and travels to the left endpoint, and its direction and
+speed also follow the above probability distribution. The user’s
+journey from the starting point to the endpoint is recorded
+as a path. Due to the randomness of direction and speed,
+the time required for the user to complete each path will be
+different. The mechanical arms will rotate randomly at a speed
+of 0 ∼36 degree/s. Then we deploy m = 2 rows and n = 3
+columns of cameras on the ceiling of the factory to capture the
+environmental images at a frame rate of 20 fps and the frame
+interval is 50 ms. Specifically, the resolution of each image is
+W ×H, with W = H = 360. The six regional images will be
+concatenated into a global image of 1080×720. The generation
+schemes for single environment and multi-environment image
+datasets are as follows:
+75
+80
+85
+90
+95
+100
+Class Precision
+Class IoU
+Fig. 10. The segmentation precision and the intersection to union (IoU) of
+all semantics using Deeplabv3+ model.
+• Single environment: Static equipment such as columns,
+machine tools, controllers, and buckets are fixed in the
+work area. The mechanical arms rotate randomly and the
+engineering vehicles travel in the transportation area. The
+user engineering vehicle starts from the initial point to the
+endpoint each time. We simulate 8 paths with each path
+ranging from 350 to 400 frames and obtain a total of
+3000 images of 1080 × 720.
+• Multi-environment: As shown in Fig. 7, the work area is
+divided into four areas and two randomly selected areas
+are used to deploy two machine tools. The machine tools
+will be placed vertically in areas 1 and 2, and horizontally
+in areas 3 and 4. The location of the machine tool
+within the area is random and the machine tool does not
+exceed the boundary of the area. The mechanical arms,
+controllers, and other equipment are randomly deployed
+in the work area and do not overlap with each other. There
+are three modes for the steel crossbeams and columns
+as shown in Fig. 8, and the environment will randomly
+choose one of the modes. The mechanical arms rotate and
+the engineering vehicles travel in the transportation area.
+The user engineering vehicle starts from the initial point
+to the endpoint each time. We simulate 15 paths with
+each path ranging from 350 to 400 frames and obtain a
+total of 5300 images of 1080 × 720.
+2) Channel Dataset:
+The channel dataset is generated
+from Wireless Insite [34], a simulation software for radio
+signals and wireless communications systems using ray tracing
+model [35]. We first import the 3D model of the building and
+scatterers into Wireless Insite frame by frame. Then we set
+the material of factory buildings as concrete, while set the
+material of equipment as metal. There are B = 2 transmitters
+with fixed locations and their coordinates are (6, 30, 8) and
+(30, 6, 8) as shown in Fig. 2. The receiver is deployed on top
+of the user engineering vehicle. Next, we set the simulation
+parameters of the wireless system including signal frequency
+as 28 GHz, waveform as sinusoid, antennas as half-wave
+dipole, polarization as vertical, voltage standing wave ratio
+(VSWR) as 1.0, and power as 0 dBm. We adopt the X3D
+ray model [36] to simulate the parameters of the ray paths.
+A visualization of the ray tracing simulation between BS1
+11
+0
+200
+400
+600
+800
+1000
+0
+100
+200
+300
+400
+500
+600
+700
+(a) Segmentation map of vehicle2
+0
+200
+400
+600
+800
+1000
+0
+100
+200
+300
+400
+500
+600
+700
+(b) Segmentation map of arm1
+0
+200
+400
+600
+800
+1000
+0
+100
+200
+300
+400
+500
+600
+700
+(c) Segmentation map of bucket
+2
+4
+6
+8
+10
+12
+14
+frame
+0.2
+0.4
+0.6
+0.8
+1.0
+1.2
+Normalized pixel difference s
+q,
+d
+(d) Pixel number difference sequence s(n)
+q,d
+of vehicle2
+2
+4
+6
+8
+10
+12
+14
+frame
+0.05
+0.10
+0.15
+0.20
+0.25
+Normalized pixel difference s
+q,
+d
+(e) Pixel number difference sequence s(n)
+q,d
+of arm1
+2
+4
+6
+8
+10
+12
+14
+frame
+0.0125
+0.0150
+0.0175
+0.0200
+0.0225
+0.0250
+0.0275
+Normalized pixel difference s
+q,
+d
+(f) Pixel number difference sequence s(n)
+q,d of
+bucket
+Fig. 11. Segmentation maps of several instances and their difference sequence s(n)
+q,d versus frame. The difference sequence of dynamic scatterers shows a
+continuous increasing trend, while the difference sequence of the stationary bucket shows an irregular fluctuation which is similar to white noise.
+and the UE is shown in Fig. 9. We select the parameters of
+the top 25 paths with the strongest power including received
+signal power Pr (dBm), received signal phase Φ (deg), azimuth
+AOA θr (deg), elevation AOA ϕr (deg), azimuth AOD θt (deg)
+and elevation AOD ϕt (deg). Then we use these simulated
+parameters to calculate the channel matrix Hk,i based on
+Eq. (2).
+B. Performance of the Semantics Segmentation and Dynamic
+Semantics Separation
+We adopt Deeplabv3+ model to segment environmental
+images. As shown in Fig. 10, the segmentation precision and
+the intersection to union (IoU) of all classes has reached over
+90% and 85% respectively. The mean precision ADpv3+ and
+mean intersection to union mIOU are 96.15% and 93.37%
+respectively. High precision and mIoU will provide support
+and guarantee for subsequent dynamic semantic separation.
+Fig. 11 exhibits the semantics segmentation and the difference
+sequence s(n)
+q,d versus frame. We can find that due to the
+movement and the rotation of dynamic scatterers, their s(n)
+q,d
+shows a continuous increasing trend. The difference sequence
+s(n)
+q,d of the stationary bucket shows an irregular fluctuation
+due to semantic segmentation error, which is similar to white
+noise. Therefore, we utilize Ljung-Box test to determine
+the autocorrelation of the sequence s(n)
+q,d, which can retain
+the dynamic scatterers and filter out the static environment.
+Specifically, we compute different pixel values number of
+continuous l = 16 frames, with dim(s(n)
+q,d) = 15. We set the
+lag order of Ljung Box test m = 4 and the significance level
+α = 0.15. The decision rule is
+H0 =
+(
+received,
+Q(4) ≤χ2
+0.85(4)
+rejected,
+Q(4) > χ2
+0.85(4).
+(29)
+When H0 is received, the instance will be judged as static
+environment and is filtered out. When H0 is rejected, the
+instance will be determined as a dynamic scatterer and is
+retained. After testing, the accuracy of dynamic scatterers
+separation reaches 95%. The reason for confusing dynamic
+scatterers and static environment is semantic segmentation
+errors. When there is a significant deviation in the semantic
+pixels of a certain frame or several frames, the difference
+sequece s(n)
+q,d will be affected, leading to the judgment errors.
+If semantic segmentation is completely accurate, then the
+accuracy of dynamic scatterers separation will be 100%.
+C. Performance of the Singe environment
+To demonstrate that a model trained in a single environment
+cannot be directly applied to multiple environments, we divide
+the single environment data into training set (2400 samples)
+and testing set (600 samples) in an 8:2 ratio. Then, we
+randomly select 3 path data (1050 samples) out of 15 paths
+in multiple environments as the multi-environment testing set.
+The Top-1 beam prediction accuracy 400 ms in advance versus
+the number of training epochs is shown in Fig. 12. It can be
+seen that as the training set accuracy of single environment
+improves, the testing set accuracy of single environment also
+continues to rise, while the testing set accuracy of the multi-
+environment remains around 0.1. The reason is that although
+dynamic features, static features, and user identity features
+12
+0
+50
+100
+150
+200
+250
+300
+Epoch
+0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+Top-1 beam prediction accuracy
+Single training accuracy
+Single testing accuracy
+Multi testing accuracy
+Fig. 12.
+The Top-1 beam prediction accuracy 400 ms in advance on
+single environment training set, single environment testing set, and multi-
+environment testing set versus the number of training epochs.
+0
+50
+100
+150
+200
+250
+Epoch
+0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+Top-1 beam prediction accuracy
+Training set
+Validation set
+Testing set
+Fig. 13. The Top-1 beam prediction accuracy 400 ms in advance on multi-
+environment training set, validation set, and testing set versus the number of
+training epochs.
+are already sufficient to characterize environment and chan-
+nel information, for data-driven NNs, a single environment
+is only one sample in all environment sample spaces. The
+mapping model that only learn from a single environment
+often overfits this single environment and do not have the
+ability to generalize to other environments. However, the
+variable space of the multiple environments is very large,
+and in practical applications, it is not possible to collect all
+potential environment data. Therefore, we propose to use fine-
+tuning techniques in transfer learning to generalize the model
+from the source domain environments to a target domain
+environment, thereby reducing the cost of data collection and
+training time.
+D. Performance of the Multi-environment
+We take the multi-environment data as the source domain
+data and the single environment data as the target domain data.
+Then we divide the 15 path data (5300 samples) from the
+multi-environment dataset into a training set (4240 samples)
+and a validation set (1060 samples) in an 8:2 ratio, and 30%
+of the single environment data (900 samples) are taken as
+0
+20
+40
+60
+80
+100
+120
+140
+160
+Epoch
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+Top-1 beam prediction accuracy
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+Loss
+Fine-tune accuracy
+Retrain accuracy
+Fine-tune loss
+Retarin loss
+Fig. 14. The Top-1 accuracy and the loss of the pre-trained model and the
+untrained model on testing set versus the number of training epochs.
+Top-1
+Top-2
+Top-3
+Top-4
+Top-5
+  0%
+ 10%
+ 20%
+ 30%
+ 40%
+ 50%
+ 60%
+ 70%
+ 80%
+ 90%
+100%
+Accuracy
+BS1
+BS2
+(a)
+Top-1
+Top-2
+Top-3
+Top-4
+Top-5
+Top-6
+Top-7
+Top-8
+Top-9
+Top-10
+  0%
+ 10%
+ 20%
+ 30%
+ 40%
+ 50%
+ 60%
+ 70%
+ 80%
+ 90%
+100%
+Accuracy
+BS1
+BS2
+(b)
+Fig. 15. The Top-5 beam prediction accuracy on multi-environment validation
+set and the fine-tuned Top-10 beam prediction accuracy on testing set.
+the testing set. Fig. 13 displays the Top-1 beam prediction
+accuracy 400 ms in advance on training set, validation set,
+and testing set versus the number of training epochs. It can
+be seen that the accuracy of the training set and validation
+set increase synchronously, while the accuracy of the testing
+set is around 0.2∼0.3. This indicates that the model trained
+in a limited number of environments has better generalization
+performance than the model trained in one environment, but
+still cannot be transferred to a new environment. The reason
+is that the sample space of the environment is large, and
+the mapping model learned from only a limited number of
+environments often overfits these environments and do not
+have the ability to generalize to other environments. However,
+there are commonalities in feature extraction for different
+environments, and the factors that affect channel variations
+are also consistent. Therefore, a part of the pre-trained model
+parameters for a limited number of environments can be fixed
+and a small portion of data from the target environment
+can be used to fine tune the model to achieve environment
+generalization. Specifically, we save the model parameters
+with the highest accuracy in the validation set, with a Top-
+1 accuracy of 82%. Then, we fix the parameters of the first
+two layers of feature extraction and the parameters of the
+LSTM layer. The 30% of the single environment data (900
+samples) are selected to fine tune the pre-trained model, while
+the remaining 70% are used as the testing set. Moreover, as
+13
+a comparison, we retrain a beam prediction model using 30%
+of the single environment data. The accuracy and the loss of
+the pre-trained model and the untrained model on testing set
+versus the number of training epochs are shown in Fig. 14. It
+can be seen that the Top-1 accuracy of the pre-trained model
+rapidly increases to 61% at the 40-th epoch, while the Top-
+1 accuracy of the untrained model did not reach the same
+level until the 160-th epoch, which indicates that there is
+indeed a certain similarity between the source environments
+and the target environment and pre-training can save 75% of
+the training time. After fine-tuned by 30% data from target
+environment, the pre-trained model can be well transferred to
+the a new environment. Fig. 15 displays the Top-5 accuracy on
+the validation set and the fine-tuned Top-10 accuracy on the
+testing set. The Top-5 accuracy of the validation set reaches
+97%, while the Top-5 accuracy of fine-tuned model in target
+environment is 90%, but its Top-10 accuracy still reaches
+94%. Although the performance of the fine-tuned model in
+the target environment has decreased compared to the original
+model in the source environments, the proportion of decline is
+relatively low, and the accuracy can still meet practical needs.
+The proposed scheme transfers the environment sensing-aided
+beam prediction model from given environments to a new
+environment while only collects 30% of labeled data from
+the new environment.
+VI. CONCLUSION
+In this paper, we have proposed an environment sensing-
+aided beam prediction model that can be transferred from
+given environments to a new environment. Simulation results
+show that the Top-5 beam prediction of the pre-training model
+reaches 97% in source environments, and the Top-10 beam
+prediction accuracy of the fine-tuned model reaches 94% in
+target environment. Moreover, the amount of training data and
+the cost of training time save 70% and 75% respectively. The
+proposed transfer learning strategy enable sensing-aided beam
+prediction model to rapidly adapt to a new environment, which
+greatly saves the cost of data collection and training time,
+and enhances the ability of deep model to adapt to real-world
+variations.
+REFERENCES
+[1] A. Jabbar, Q. H. Abbasi, N. Anjum, T. Kalsoom, N. Ramzan, S. Ahmed,
+P. M. Rafi-ul Shan, O. P. Falade, M. A. Imran, and M. Ur Rehman,
+“Millimeter-wave smart antenna solutions for URLLC in Industry 4.0
+and beyond,” Sensors, vol. 22, no. 7, Mar. 2022. [Online]. Available:
+https://www.mdpi.com/1424-8220/22/7/2688
+[2] B. Meindl, N. F. Ayala, J. Mendonc¸a, and A. G. Frank, “The four
+smarts of Industry 4.0: Evolution of ten years of research and future
+perspectives,” Technol. Forecast. Soc. Chang., vol. 168, pp. 120,784,
+Jul. 2021.
+[3] H. Lasi, P. Fettke, H.-G. Kemper, T. Feld, and M. Hoffmann, “Industry
+4.0,” Business & Inf. Syst. Eng., vol. 6, no. 4, pp. 239–242, Jun. 2014.
+[4] I. F. Akyildiz, A. Kak, and S. Nie, “6G and beyond: The future of
+wireless communications systems,” IEEE Access, vol. 8, pp. 133 995–
+134 030, Jul. 2020.
+[5] H. Tataria, M. Shafi, A. F. Molisch, M. Dohler, H. Sj¨oland, and
+F. Tufvesson, “6G wireless systems: Vision, requirements, challenges,
+insights, and opportunities,” Proc. IEEE, vol. 109, no. 7, pp. 1166–1199,
+Mar. 2021.
+[6] Y. Lu and X. Zheng, “6G: A survey on technologies, scenarios,
+challenges, and the related issues,” J. Ind. Inf. Integr., vol. 19, p.
+100158, Sep. 2020. [Online]. Available: https://www.sciencedirect.com/
+science/article/pii/S2452414X20300339
+[7] J. B. Andersen, T. S. Rappaport, and S. Yoshida, “Propagation mea-
+surements and models for wireless communications channels,” IEEE
+Commun. Mag., vol. 33, no. 1, pp. 42–49, Jan. 1995.
+[8] F. Gao, B. Lin, C. Bian, T. Zhou, J. Qian, and H. Wang, “Fusionnet:
+Enhanced beam prediction for mmwave communications using sub-6
+GHz channel and a few pilots,” IEEE Trans. Commun., vol. 69, no. 12,
+pp. 8488–8500, Sep. 2021.
+[9] U. Demirhan and A. Alkhateeb, “Radar aided 6G beam prediction:
+Deep learning algorithms and real-world demonstration,” in Proc. IEEE
+Wireless Commun. Netw. Conf. (WCNC), Apr. 2022, pp. 2655–2660.
+[10] A. Klautau, N. Gonz´alez-Prelcic, and R. W. Heath, “LIDAR data for
+deep learning-based mmwave beam-selection,” IEEE Wireless Commun.
+Lett., vol. 8, no. 3, pp. 909–912, Feb. 2019.
+[11] D. Marasinghe, N. Rajatheva, and M. Latva-aho, “LiDAR aided human
+blockage prediction for 6G,” in Proc. IEEE Globecom Workshops (GC
+Wkshps), Dec. 2021, pp. 1–6.
+[12] Y. Feng, F. Gao, X. Tao, S. Ma, and H. V. Poor, “Vision-aided ultra-
+reliable low-latency communications for smart factory,” IEEE Trans.
+Commun., pp. 1–1, Jan. 2024.
+[13] M. Alrabeiah, A. Hredzak, and A. Alkhateeb, “Millimeter wave base
+stations with cameras: Vision-aided beam and blockage prediction,” in
+Proc. IEEE 91st Veh. Technol. Conf. (VTC), May. 2020, pp. 1–5.
+[14] W. Xu, F. Gao, X. Tao, J. Zhang, and A. Alkhateeb, “Computer vision
+aided mmWave beam alignment in V2X communications,” IEEE Trans.
+Wireless Commun., vol. 22, no. 4, pp. 2699–2714, Oct. 2022.
+[15] J. Chen, F. Gao, X. Tao, G. Liu, C. Pan, and A. Alkhateeb, “Computer
+vision aided codebook design for MIMO communications systems,”
+IEEE Trans. Wireless Commun., Nov. 2022.
+[16] T. Nishio, H. Okamoto, K. Nakashima, Y. Koda, K. Yamamoto,
+M. Morikura, Y. Asai, and R. Miyatake, “Proactive received power
+prediction using machine learning and depth images for mmWave
+networks,” IEEE J. Select. Areas Commun., vol. 37, no. 11, pp. 2413–
+2427, Aug. 2019.
+[17] X. Shi, Z. Chen, H. Wang, D.-Y. Yeung, W.-K. Wong, and W.-c.
+Woo, “Convolutional LSTM network: A machine learning approach
+for precipitation nowcasting,” Advances Neural Inform. Processing Syst.
+(NIPS), vol. 28, Dec. 2015.
+[18] G. Charan, M. Alrabeiah, and A. Alkhateeb, “Vision-aided 6G wireless
+communications: Blockage prediction and proactive handoff,” IEEE
+Trans. Veh. Technol., vol. 70, no. 10, pp. 10 193–10 208, Aug. 2021.
+[19] Y. Yang, F. Gao, X. Tao, G. Liu, and C. Pan, “Environment semantics
+aided wireless communications: A case study of mmWave beam pre-
+diction and blockage prediction,” IEEE J. Select. Areas Commun., May.
+2023.
+[20] M. Cheffena, “Industrial wireless communications over the millimeter
+wave spectrum: Opportunities and challenges,” IEEE Commun. Mag.,
+vol. 54, no. 9, pp. 66–72, Sep. 2016.
+[21] A. Ali, N. Gonz´alez-Prelcic, and R. W. Heath, “Millimeter wave beam-
+selection using out-of-band spatial information,” IEEE Trans. Wireless
+Commun., vol. 17, no. 2, pp. 1038–1052, Nov. 2017.
+[22] F. Lateef and Y. Ruichek, “Survey on semantic segmentation using deep
+learning techniques,” Neurocomputing, vol. 338, pp. 321–348, Apr. 2019.
+[23] L.-C. Chen, Y. Zhu, G. Papandreou, F. Schroff, and H. Adam, “Encoder-
+decoder with atrous separable convolution for semantic image segmen-
+tation,” in Proc. European Conf. Comput. Vis. (ECCV), Sep. 2018, pp.
+801–818.
+[24] S.-i. Amari, “Backpropagation and stochastic gradient descent method,”
+Neurocomputing, vol. 5, no. 4-5, pp. 185–196, Jun. 1993.
+[25] K. Wu, E. Otoo, and K. Suzuki, “Optimizing two-pass connected-
+component labeling algorithms,” Pattern Anal. Appl., vol. 12, pp. 117–
+135, Mar. 2008.
+[26] G. M. Ljung and G. E. Box, “On a measure of lack of fit in time series
+models,” Biometrika, vol. 65, no. 2, pp. 297–303, Aug. 1978.
+[27] H. Cramer, “On the theory of stationary random processes,” Annals
+of Mathematics, vol. 41, no. 1, pp. 215–230, Jan. 1940. [Online].
+Available: http://www.jstor.org/stable/1968827
+[28] H. O. Lancaster and E. Seneta, “Chi-square distribution,” Encyclopedia
+of biostatistics, vol. 2, Jul. 2005.
+[29] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for image
+recognition,” in Proc. IEEE Conf. Comput. Vis. Pattern Recog. (CVPR),
+Jun. 2016, pp. 770–778.
+[30] D. Maturana and S. Scherer, “Voxnet: A 3D convolutional neural
+network for real-time object recognition,” in Proc. IEEE/RSJ Int. Conf.
+Intell. robots Syst. (IROS), Sep. 2015, pp. 922–928.
+[31] S. Hochreiter and J. Schmidhuber, “Long short-term memory,” Neural
+Comput., vol. 9, no. 8, pp. 1735–1780, Nov. 1997.
+[32] T. Mullen, Mastering Blender.
+Hoboken, NJ, USA: Wiley, 2011.
+[33] R. J. Serfling, Approximation Theorems of Mathematical Statistics. John
+Wiley & Sons, 2009.
+[34] Remcom. “Wireless InSite”. [Online]. Available: https://www.remcom.
+com/wireless-insite-em-propagation-software
+[35] A. S. Glassner, An Introduction to Ray Tracing.
+Amsterdam, The
+Netherlands: Elsevier, 1989.
+[36] Remcom.
+“X3D”.
+[Online].
+Available:
+https://www.remcom.com/
+wireless-insite-models/high-fidelity-ray-tracing

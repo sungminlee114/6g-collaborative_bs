@@ -1,0 +1,1748 @@
+5G-Advanced AI/ML Beam Management:
+Performance Evaluation with Integrated ML Models
+Nalin Jayaweera1,2, Andrea Bonfante1, Mark Schamberger1, Amir Mehdi Ahmadian Tehrani1,
+Tachporn Sanguanpuak1, Preetish Tilak1, Keeth Jayasinghe1, Frederick W. Vook1, Nandana Rajatheva2
+1Nokia Standards, 2University of Oulu
+Abstract—The legacy beam management (BM) procedure in
+5G introduces higher measurement and reporting overheads for
+larger beam codebooks resulting in higher power consumption
+of user equipment (UEs). Hence, the 3rd generation partnership
+project (3GPP) studied the use of artificial intelligence (AI)
+and machine learning (ML) in the air interface to reduce the
+overhead associated with the legacy BM procedure. The usage
+of AI/ML in BM is mainly discussed with regard to spatial-
+domain beam prediction (SBP) and time-domain beam prediction
+(TBP). In this study, we discuss different sub-use cases of SBP
+and TBP and evaluate the beam prediction accuracy of AI/ML
+models designed for each sub-use case along with AI/ML model
+generalization aspects. Moreover, a comprehensive system-level
+performance evaluation is presented in terms of user throughput
+with integrated AI/ML models to a 3GPP-compliant system-level
+simulator. Based on user throughput evaluations, we present
+AI/ML BM design guidelines for the deployment of lightweight,
+low-complexity AI/ML models discussed in this study.
+Index Terms—Beam Management, AI/ML, Spatial-domain
+Beam Prediction, Time-domian Beam Prediction, 3GPP, 5G-
+Advanced
+I. INTRODUCTION
+F
+IVE G-Advanced (5G-Advanced) wireless networks her-
+ald the prospect of a thoroughly interconnected and
+mobile society characterized by the expectation of high
+throughput, energy efficient, immersive and data-driven ra-
+dio access networks (RANs) [1], [2]. Coupled with data-
+driven approaches, RAN has the potential to develop pre-
+dictive capabilities that learn from the environment through
+the use of artificial intelligence (AI) and machine learning
+(ML) techniques [3]. Therefore, many companies are presently
+integrating AI/ML technologies into the existing 5G network
+and devices, with AI/ML emerging as a pivotal technology
+cornerstone for 5G-Advanced once standardized within the
+air interface [4]–[6]. AI/ML 5G-Advanced can assist the
+transition to the next generation of networking, 6G, which
+is envisioned to feature an even more pronounced usage of
+AI/ML technologies in mobile communications as inherently
+designed based on AI-native interface [7]–[9].
+The recently concluded 3rd generation partnership project
+(3GPP) Rel-18, has studied the support of a new AI/ML-
+enabled radio interface for the next cellular systems [10].
+Beam management (BM) represents one of the different pilot
+use cases for applying the AI/ML model in the new radio
+(NR) air interface. These pilot use cases aim to identify a
+common AI/ML framework, including functional requirements
+of AI/ML architecture, which could be used in subsequent
+releases and will pave the way for the design of native AI/ML
+6G networks. The motivation behind the study of this use case
+stems from the increasing demand for efficient beam prediction
+schemes. One of the primary objectives of the 3GPP Rel-18
+study item (SI) was to investigate the application of AI/ML-
+driven BM schemes for reducing the measurement overhead
+– providing more flexibility for beam measurements and a
+larger room for the user equipment (UE) power saving – while
+maintaining comparable end-to-end performance of legacy BM
+procedures.
+In the legacy BM procedure, the gNodeB (gNB) configures
+UEs to measure reference signal (RSs) resources including
+synchronization signal block (SSB) and channel state infor-
+mation RSs (CSI-RS). UEs measure and provide feedback to
+a gNB to assist the legacy beam alignment process performed
+with P1, P2 and P3 procedures [11]. In the initial beam-pair
+establishment procedure (P1), gNB transmits SSB resources
+employing a beam codebook referred to as SSB beams, and
+the UE measures the reference signal received power (RSRP)
+of each SSB beam with receiver (RX) beams and reports
+the strongest set of RS identifiers and corresponding RSRP
+measurements. The beam refinement procedure (P2) finds the
+UE-specific CSI-RS beams by transmitting CSI-RS beams,
+which are more directional and provide higher received signal
+strength than SSB beams. Hence, CSI-RS beams are used
+for downlink (DL) data transmission. In the receiver beam
+refinement procedure (P3), gNB transmits the same transmitter
+(TX) beam over different time instances, and UE measures
+determine the best RX beam. The large number of beams
+included in TX and RX codebooks leads to performing a
+large number of measurements for determining the best TX-
+RX beams.
+The legacy BM process is time-inefficient and not scalable
+when the size of antenna arrays increases. ML algorithms can
+replace sequential beam sweeping by predicting beams in both
+time and spatial domains as proposed in 3GPP Rel-18 BM
+use cases. The scope of spatial-domain beam prediction (BM-
+Case1) is to predict the best DL TX beam or DL TX/RX
+beam pairs in different spatial locations. Conversely, time-
+domain beam predictions (BM-Case2) aim to predict the
+best DL TX beam or DL TX/RX beam pairs to use for
+future time instances. It has been shown that ML algorithms
+enable prediction of the serving beam for different spatial
+locations and time instances, thereby avoiding the necessity
+for exhaustive beam measurements [12]–[14].
+arXiv:2404.15326v1  [eess.SP]  6 Apr 2024
+A. Relevant Work
+The application of AI/ML for BM has attracted many
+research efforts in recent years. In [15], the legacy BM proce-
+dures and associated challenges are explained while presenting
+future trends such as AI/ML-based BM to overcome those
+challenges. Additionally, many studies and findings account
+for AI/ML BM in the literature. In [16], an overview is
+presented on the 3GPP Rel-18 studies on AI/ML to improve
+the 5G NR air interface and discuss the AI/ML BM framework
+and its functionality. Similarly, in-depth discussions related to
+AI/ML-based BM procedures and the standardization aspects
+are presented in [17].
+Many studies account for spatial-domain and time-domain
+beam prediction in the literature [18]. [19] investigates an
+ML-based BM scheme with less beam measurement over-
+head. The authors present a convolutional neural network
+(CNN) based ML model for beam pair prediction for a fixed
+beam measurement configuration, and another ML model
+to address the generalization aspect. Next, transfer learning-
+based enhancement is proposed to reduce ML model training
+time and data requirements. However, this work explores the
+ML-based spatial-domain beam predictions and evaluation is
+limited for beam prediction accuracy-related key performance
+indicators (KPIs). AI/ML-based time-domain prediction algo-
+rithms are presented in [20] with beam prediction accuracy
+and system evaluations. Additionally, the proposed models are
+integrated into a 3GPP-compliant gNB and a UE to evaluate
+the model performance in a test setup. The study [21] performs
+time-domain beam prediction and evaluates beam prediction
+accuracy-related KPIs to evaluate important aspects such as
+UE speed and required historical data volume to make better
+decisions. Wang et al. [22] study spatial-domain beam predic-
+tion and time-domain beam pair prediction, and show AI-based
+algorithms outperform non-AI/ML based solutions using beam
+pair prediction accuracy. Among all AI/ML-based beam track-
+ing methods, [23] proposes a Bayesian optimization-based best
+beam tracking technique that requires no or little training
+on historical data. Furthermore, authors in [24] propose a
+AI/ML model activation and deactivation framework to reduce
+unnecessary ML model switching by 10%.
+In addition to the RS measurement-based beam predictions,
+assisted information such as location data is used to improve
+AI/ML prediction accuracy. A recurrent neural network (RNN)
+based beam-pair prediction algorithm is proposed in [25]
+which used beam measurements as well as sensor data to
+enhance the prediction accuracy. Light detection and ranging
+(LiDAR) sensor information assisted time-domain beam pre-
+diction is proposed in [26] that reduced RS overhead by 13.2%
+for a best beam prediction accuracy of 88.7%.
+Most of the available studies explore spatial-domain or time-
+domain beam prediction and evaluation is mainly performed
+with beam prediction accuracy-related KPIs. A few works
+have considered system-level performance evaluation. System-
+level simulation (SLS) studies based on 3GPP NR Rel-16
+were performed in [27]. More recently, the work proposed
+in [20], focused on SLS evaluation of time-domain beam
+prediction adopting the latest UE mobility and orientation
+model considered in 3GPP 5G-Advanced NR Rel-18.
+B. Contributions
+This paper presents a comprehensive analysis consider-
+ing system-level performance evaluation methodologies for
+spatial-domain beam prediction and time-domain beam pre-
+diction by integrating the ML models studied in 3GPP Rel-18
+study item (SI) into a 3GPP-based system-level simulator. The
+work considered in [20] has primarily focused on time-domain
+scenarios, overlooking the spatial-domain BM use case that
+may be more commonly applied in practical environments,
+where most of the UEs are stationary. As a result, there is a
+growing need for more comprehensive studies that show the
+effectiveness of ML techniques to accurately predict beams
+both in the spatial-domain and time-domain. This paper ad-
+dresses this need by proposing novel results that consider
+both spatial-domain and time-domain beam prediction models.
+We integrate these schemes into a state-of-the-art system-level
+simulator and we evaluate them using the latest 5G-Advanced
+Rel-18 assumptions. The performance evaluation is not limited
+to the beam prediction accuracy, as compared to most of the
+existing prior works, but considers system-level KPIs such as
+user throughput and measurement overhead which shows the
+realistic gains of using AI/ML for BM. The primary aim is
+to provide new insights about the link between ML model
+performance and system-level performance. The findings are
+summarized into design guidelines to select suitable AI/ML
+models for UEs with different channel conditions. Finally, we
+highlighted future research directions based on the observa-
+tions of this study.
+The rest of the paper is organized as follows. In Section II,
+we discuss the use cases of AI/ML-based BM with problem
+formulations. AI/ML BM procedures are presented in Section
+III while the simulation framework is explained in Section IV
+with ML model descriptions and beam prediction KPIs. In
+Section V, we present an in-depth analysis of the simulation
+results including beam prediction accuracy and system level
+performance. Then we present AI/ML BM design guidelines
+based on the evaluation results. Finally, we conclude the paper
+in Section VI with the main insights of this study.
+II. AI/ML BASED BM USE-CASES
+We consider a network deployment of gNBs each one
+serving multiple UEs according to an NR system operating
+in FR2 (frequency range 2). Both gNBs and UEs use analog
+beamforming with a single radio frequency (RF) chain con-
+nected to multiple antenna elements to form beams in spatial
+directions according to the beamforming vectors bx where
+x ∈{tx, rx} is a notation to indicate the transmitter and
+receiver [28]. The gNBs and UEs are equipped with uniform
+planar arrays (UPAs) having antenna spacing λ/2 and formed
+by a number of antennas Mx = M H
+x × M V
+x
+with spacing
+dH, dV in the horizontal and vertical directions where M V
+x
+and M H
+x
+denote the vertical and the horizontal dimension
+of the UPAs, respectively. Additionally, θtx and ϕtx denote
+the azimuth and elevation angle of departure (AoD), and
+similarly θrx and ϕrx denote the azimuth and elevation angle
+of arrival (AoA). The TX beamforming vector btx(θtx, ϕtx) or
+RX beamforming vector brx(θrx, ϕrx) used to steer the beam
+is generalized and expressed as bx(θx, ϕx) that can be defined
+as following M H
+x × M V
+x matrix:
+1
+p
+MH
+x
+[1, e−j2π dH
+λ sin(ϕx)cos(θx), ..., e−j2π dH
+λ (MH
+x −1)sin(ϕx)cos(θx)]⊤⊗
+1
+p
+MV
+x
+[1, e−j2π dV
+λ cos(ϕx), ..., e−j2π dV
+λ (MV
+x −1)cos(ϕx)],
+(1)
+where j = √−1, ⊗denotes the Kronecker product and [.]⊤
+performs the transpose operation.
+Next, we consider a vector of TX beam codebook composed
+of Ntx = N A
+tx × N E
+tx beams, which can be defined as
+CBtx ={btx(θ1
+tx, ϕ1
+tx), btx(θ2
+tx, ϕ1
+tx), ..., btx(θNA
+tx
+tx , ϕ1
+tx),
+btx(θ1
+tx, ϕ2
+tx), ..., btx(θNA
+tx
+tx , ϕNE
+tx
+tx )},
+(2)
+where subscripts A and E denote the azimuth and elevation
+directions of different AoDs [29]. Similarly, we define an
+RX codebook CBrx composed of Nrx = N A
+rx × N E
+rx beams
+designed with different AoAs. In general, a TX beam is
+identified with beam index i ∈{1, 2, ..., Ntx} and RX beam
+index i′ ∈{1, 2, ..., Nrx}. At a given time instant t, the DL
+received signal at the UE from the connected gNB can be
+expressed as
+y(t) =
+√
+Ps(t)b∗
+rxH(t)btx + b∗
+rxz(t),
+(3)
+where (.)∗denotes the conjugate transpose of a vector, P is
+the total power of the gNB, s(t) represents the transmitted
+signal such that E[|s(t)|2] = 1, H(t) ∈CMrx×Mtx is the
+time-varying gain/phase response between TX and RX for an
+orthogonal frequency-division multiplexing (OFDM) system
+[30], where we have neglected the dependency on subcarrier
+for simplicity, z(t) ∈CMrx is the additive white Gaussian
+noise with zero mean and variance σ2
+z, btx and brx are
+the TX and RX beamforming vectors adopted by the gNB
+and UE, respectively, while UE measures the RSRP across
+the bandwidth occupied by RSs, which can be expressed as
+r(t) = |y(t)|2. To obtain the quality of DL TX beams in CBtx,
+we define the vector of RSRP measurements associated with
+all the Ntx RS resources as R = [r1(t), r2(t), ..., rNtx(t)]. In
+the following subsections, we consider RSRP measurements
+for a set of TX beams denoted as Set B. For spatial-domain
+beam prediction (SBP), we use the vector of RSRP values
+measured at the time instant t expressed as RSetB, whereas,
+for time-domian beam prediction (TBP), we use the history
+of RSRP measurements, including past time instants, e.g.,
+t −L, ..., t −1, and expressed with vectors of RSRPs as
+Rt−L
+SetB, ..., Rt−1
+SetB, Rt
+SetB.
+A. Spatial-domain Beam Prediction
+In SBP, the UE measures a first set of TX beams defined as
+Set B which are included in a codebook CBtx,B of dimension
+Ntx,B and predicts a second set of Tx beams defined as Set A
+included in a codebook CBtx,A of dimension Ntx,A, where Set
+B has a lower dimension than Set A, i.e., Ntx,B ⩽Ntx,A. In
+the network, this is realized by the gNB transmitting a group
+of DL RS resources associated with Set B beams while the
+UE performs Ntx,B measurements to determine the vector of
+RSRPs RSetB to be used as input for the AI/ML model. At
+each time instant t, the AI/ML model predicts K beams from
+Set A, given the measurements of Set B beams used as input.
+The best K, i.e., Top-K beams indices predicted by the AI/ML
+model can be expressed as
+ˆi1,ˆi2, ...,ˆiK
+	
+=
+arg max
+i∈{1,2,...,Ntx,A}
+ fW (RSetB)
+
+,
+(4)
+where the prediction function fW (.) depends on the AI/ML
+model training parameters W and is used to predict the Top-1
+beam in Set A, i.e. the beam having the highest RSRP in Set
+A. The operator arg max(.) selects the Top-K beam indices
+having the highest probability to be the Top-1 beam in Set
+A, where the index ˆi1 identifies the beam having the highest
+probability, while the ˆiK identifies the one having the K-th
+highest probability. Next, we present the two alternatives of
+SBP studied in 3GPP: Alt. i) Set B is different from Set A
+and Alt. ii) Set B is a subset of Set A [10].
+1) Set B is Different to Set A: In this alternative, Set B
+beams may have different characteristics like beam shape,
+width and set of angular directions in comparison to the beams
+in Set A. For instance, we consider that Set B are wide SSB
+beams generally used for transmitting synchronization signals
+and providing coverage whereas Set A are refined CSI-RS
+beams used for improving the SINR at the UE. To note that
+a wide SSB beam in Set B may be generated by the linear
+combination of adjacent CSI-RS beams in Set A as shown
+in Fig 1 where one SSB beam encompasses three adjacent
+CSI-RS beams in azimuth direction and two CSI-RS beams
+in elevation direction [31]. Thus, given the input constituted by
+the measurements of SSB beams, the AI/ML model provides
+as output the Top-K predicted CSI-RS beam indices.
+RSRPs of measured  
+SSB beams of Set B
+AI/ML model
+Predicted DL TX beam 
+indices of Set A
+Elevation
+Azimuth
+Ƹ𝑖1
+Ƹ𝑖3
+Ƹ𝑖2
+Set A
+𝐑𝑆𝑒𝑡 𝐵
+SSB 1
+SSB 2
+SSB 3
+SSB 4
+Fig. 1. Top-K TX beam prediction in SBP where Set B is different to Set A.
+2) Set B is a Subset of Set A: In this other alternative shown
+in Fig 2, Set B is a subset of the Set A beams. For instance,
+we consider that Set B are part of the refined CSI-RS beams
+which partially cover the full set of refined CSI-RS beams
+belonging to Set A. Therefore, the gNB transmits CSI-RS
+resources corresponding to Set B beams, while the UE uses
+the measurements from CSI-RS beams for input to the AI/ML
+model to obtain the Top-K predicted CSI-RS beam indices like
+for the previous alternative with Set B different from Set A.
+The selection criteria of Set B beams from Set A determines
+the performance of the AI/ML model. Thus, in this work, we
+define a CSI-RS beam codebook for Set A with a fixed Set B
+selection pattern such that Set B covers different azimuth and
+elevation angle directions of Set A beams.
+Fig. 2. Top-K TX beam prediction in SBP where Set B is a subset of Set A.
+B. Time-domain Beam Prediction
+In TBP shown in Fig. 3, the AI/ML model considers as
+input historical RSRP measurements of Set B and predicts
+the Top-K strongest beams in Set A to be used at future
+time instances. 3GPP studied different alternatives like in SBP,
+however, our focus will be limited to the cases where Set B
+and Set A are both formed by refined CSI-RS beams and
+Set B is included or the same as Set A. We consider as the
+AI/ML model input the history of RSRP measurements of the
+CSI-RS beams within an observation window that includes lo
+CSI-RS measurements. The AI/ML model provides the Top-
+K predicted CSI-RS beam indices for one or more future
+time instances within a prediction window of dimension lp.
+The Top-1 TX beam predictions of the AI/ML model can be
+expressed as
+ˆi
+t+1
+1
+, ...,ˆi
+t+lp
+1
+	
+=
+arg max
+i∈{1,2,...,Ntx,A}
+ gW ({Rt−lo+1
+SetB
+, ..., Rt
+SetB})
+
+(5)
+where the prediction function gW (.) depends on the AI/ML
+model parameters W, Rt
+SetB denotes the measured RSRPs of
+Set B at time t. Eq. (5) defines the Top-1 predicted beam.
+Yet similar to SBP, the Top-K predicted beams for time t + x
+can be expressed as [ˆi
+t+x
+1
+,ˆi
+t+x
+2
+, ...,ˆi
+t+x
+K ] where the index ˆi
+t+x
+1
+identifies the beam having the highest probability, while the
+ˆi
+t+x
+K
+identifies the one having the K-th highest probability at
+time t + x.
+III. AI/ML BM FRAMEWORK
+In this section, we discuss the AI/ML model operations
+for SBP and TBP AI/ML models, which can be trained
+and deployed at the gNB (NW-sided models) or UE (UE-
+sided models) as depicted in Fig. 4. Moreover, 3GPP Rel-18
+SI considered aspects related to the inference, performance
+monitoring and data collection, which are described in clause
+7.1.3 of technical report (TR) 38.843. As the models discussed
+in SBP and TBP require UE measurements and reporting
+configurations to support AI/ML models in different stages,
+Fig. 3. Top-K TX beam prediction in TBP where Set B is a subset of Set A.
+most of the aspects discussed in 3GPP focus on introducing
+enhancements of reporting configuration, measurement RS
+resource set configuration and overhead reduction of beams
+reporting [10].
+(a) NW-sided AI/ML model
+(b) UE-sided AI/ML model
+Fig. 4. AI/ML BM procedures.
+A. Data Collection for AI/ML Model Training
+Data collection for model training may reuse the existing
+beam measurement and reporting frameworks. For instance,
+the gNB configures the UE with a CSI reporting configuration
+to perform measurements of Set A and Set B beams as shown
+in step 1 of Fig. 4a and Fig. 4b. In step 2 of Fig. 4a and
+Fig. 4b, the measurements are collected across various UEs
+and time occasions may be uploaded to a server for offline
+model training [10]. In both SBP and TBP, the UE measures
+RS resources corresponding to different TX beams using
+an optimal RX beam determined by previous measurements.
+Also, the UE may filter the instantaneous RSRP measurements
+to mitigate the effects of fast fading with a Layer-1 (L1) filter
+and collect L1-RSRP measurements. The following differences
+may depend on whether UE-sided or NW-sided models are
+used.
+For a UE-sided model, data is collected by measuring the
+RSs corresponding to Set A and Set B beams, where Set A
+measurements to derive the best beam index to be used as
+the label and L1-RSRP measurements associated with Set B
+beams to be used as input data. For the NW-sided model, the
+UE is configured to measure Set A and Set B beams and report
+the best beam index in Set A beams to be used as the label
+in addition to the L1-RSRP measurements of Set B beams for
+the input data.
+5G NR currently supports beam reporting with a maxi-
+mum of four beams in a reporting instance [32], yet for
+the NW-sided model, AI/ML-based beam prediction requires
+enhancing the reporting to potentially support the reporting
+of all Set A beam measurements in one reporting instance.
+In this regard, the reporting overhead for NW-sided model
+training may be significantly increased compared to the UE-
+sided model training. On the other hand, the network (NW)
+has a better awareness of the conditions such as beam patterns
+and NW antenna configuration associated with the collected
+data compared to UE.
+B. AI/ML Model Inference
+Once the trained AI/ML model is deployed at UE or NW,
+the gNB configures the UE to measure Set B beams to be used
+as input to the model during inference. As shown in steps 3-4
+in Fig. 4b for UE-sided AI/ML model, the UE predicts Top-K
+beams in Set A based on L1-RSRP measurements associated
+with Set B and then reports the predicted Top-K beams to the
+gNB. For the NW-sided AI/ML model, as illustrated in steps
+3-5 in Fig. 4a, the UE is configured to report all Ntx,B of Set B
+beam measurements to be used as input of the AI/ML model
+for inference. Similar enhancements to beam measurements
+reporting described in Sec. III-A for the data collection may
+also be required for NW-sided model inference.
+After the UE performs inference and reports the predicted
+Top-K beams to gNB or after the gNB obtains the predicted
+Top-K beams based on inference, the gNB may optionally
+perform an additional step of refined measurements of the Top-
+K predicted beams. Alternatively, the predicted Top-K beam
+can be used directly without a step of refined measurements to
+make informed decisions about transmission control informa-
+tion (TCI) state activation and indication to the UE. At step 5
+of Fig. 4a (step 6 in 4b), a DL control message including the
+TCI state is transmitted to indicate the DL TX beam to use
+for receiving DL channels.
+C. AI/ML Performance Monitoring
+For various reasons such as sudden changes in channel
+conditions or other changes to the NW or UE configurations,
+both the UE-sided and the NW-sided models may not always
+provide accurate predictions. Performance monitoring is used
+to detect any degradation in the AI/ML model’s performance
+during such events [10]. Performance monitoring may be
+performed at the NW side or UE-side. Alternatively may be
+assisted by the UE. All options are applicable for SBP and
+TBP. In the following, we provide an example of performance
+monitoring.
+For NW-side performance monitoring of a UE model shown
+in step 6 of Fig. 4b, the gNB configures an RS resource set
+to be monitoring RS resources, where UE measures these
+monitoring RS resources and reports back to the gNB the
+measurements corresponding to Set A. After receiving the
+measurements and beam prediction reports, the gNB can
+calculate relevant KPIs, e.g., beam prediction accuracy, RSRP
+difference between RSRP measured and RSRP predicted, and
+other KPIs discussed in Sec. IV-D. Moreover, for UE-sided
+performance monitoring, UE calculate relevant KPI and report
+to gNB to make a decision.
+For NW-side performance monitoring with beam prediction
+at NW shown in step 7 of Fig. 4a, the gNB determines the
+relevant KPIs based on the measurements reported by the UE
+and the beam predictions obtained from the NW-side model.
+After evaluation of the performance metrics, an AI/ML
+model may continue to be used if its performance is deemed
+acceptable, otherwise beam operations may be switched back
+to the legacy non-ML BM procedure. Control signalling may
+be used for AI/ML model switching (including fallback to
+legacy) based on performance monitoring results.
+IV. SIMULATION FRAMEWORK
+In this section, we discuss the system-level simulation
+methodology and assumptions based on 3GPP 5G-Advanced
+NR Rel-18. We explain the AI/ML model training and we
+go through the steps of AI/ML model integration. Then, we
+list the AI/ML model evaluation KPIs and the system-level
+performance KPIs considered by Rel-18 SI to evaluate the
+performance of the AI/ML models. In the following our focus
+is mainly on NW-sided models (NS = Ntx,A), however, sim-
+ilar observations can be made when evaluating the UE-sided
+models although the signaling configuration for measurement
+and reporting is less obvious and will be specified in Rel-19
+work item (WI).
+A. System-Level Simulation Assumptions
+We use a proprietary simulator calibrated to the 3GPP
+reference scenarios and already used in the past for other
+3GPP-related studies [33]. We configure the simulator with the
+3GPP 5G-Advanced NR Rel-18 assumptions with an Urban
+Macro scenario and adopt the following workflow: At first, we
+use the extracted simulation statistics for generating synthetic
+data for training the AI/ML models offline. Later we integrate
+the AI/ML models in the simulation loop, and we simulate a
+second campaign for obtaining the AI/ML model performance
+KPIs and system-level KPIs. Table III summarizes the 3GPP-
+based SLS assumptions considered for the data collection
+and performance evaluation. In addition to the common SLS
+assumptions stated in Table III, SBP focus on quasi-static UEs
+with a speed of 3 kmph, whereas TBP consider a UE speed of
+30 kmph. Moreover, we use a 64-beam CSI-RS codebook and
+an 8-beam SSB codebook for SBP studies whereas a 32-beam
+CSI-RS codebook is used for TBP evaluations.
+B. AI/ML Models and Training
+We propose to use an AI/ML model based on neural
+network (NN) to predict the index of the best beam based
+Table I: Summary of the AI/ML models used for the different use cases
+Model Name
+Alternative
+Model Type
+Model Input
+Model Output
+SBP1 Ntx,B Ntx,A
+BM-Case1
+Set B is different
+to Set A
+DNN
+L1-RSRP of Ntx,B beams and
+beam indices for Ntx,B = 16
+Probability of Ntx,A beams being
+Top-1 beam for Ntx,A = 64
+SBP2
+Ntx,B Ntx,A
+BM-Case1
+Set B is subset of
+Set A
+CNN-DNN
+L1-RSRP of Ntx,B beams and
+beam indices for
+Ntx,B = {8, 16, 32}
+Probability of Ntx,A beams being
+Top-1 beam for Ntx,A = 64
+TBP Ntx,B Ntx,A
+BM-Case2
+Set B is
+same/subset of
+Set A
+LSTM-CNN
+Historic L1-RSRP of Ntx,B
+beams for
+Ntx,B = {8, 16, 32}
+Probability of Ntx,A beams being
+Top-1 beam for a future time
+instance when Ntx,A = 32
+on the objective functions stated in Eq. (4) and Eq. (5). A
+summary of AI/ML models used for both SBP and TBP is
+presented in Table I. For SBP with Set B is different from
+Set A, we consider a deep neural network (DNN) architecture
+as more complex architectures have not shown significant
+advantages when considering a limited set of SSB beams as
+input. On the other hand, for SBP with Set B is a subset of Set
+A, we adopt an AI/ML model with a CNN-DNN architecture
+that shows better results when considering a larger set of
+CSI-RS beams as input. For the TBP use case, we adopt a
+long short-term memory (LSTM) based on CNN architecture
+to better leverage the time dependencies of measurements in
+the historical data used as input of the model. The values
+considered for the observation window and prediction window
+are lo = 5 and lp = 1, respectively. Finally, the complexity of
+the model is later provided in Sec. V-F.
+The dataset for model training is obtained from 200 network
+drops with 42000 UEs in total. We split the data between
+training, validation and testing using the ratio 0.8 : 0.1 : 0.1.
+We use the “Adam” model training optimizer and we con-
+sider the “StepLR” as the learning rate scheduler set with
+an initial learning rate of 0.01. For training, we adopt a
+categorical cross-entropy loss function which can be expressed
+as L = −PN
+n
+PNtx
+k
+yn,k log(pn,k), where N is the number of
+training samples, yn,k is the ground-truth for the n-th sample,
+pn,k is the probability to predict the ground-truth for the n-th
+sample, given by a softmax function.
+C. Integration of AI/ML Model in SLS
+Fig. 5 illustrates the beam measurement and reporting
+framework developed in the SLS where the grey area rep-
+resents NW-side functionalities and the white area presents
+UE-side functionalities. Several features have been introduced
+to support the data collection for AI/ML model training, model
+inference, and model performance monitoring. Starting from
+the top of Fig. 5, we describe the different steps related to the
+NW-sided models as follows:
+• First, to generate the dataset needed for AI/ML model
+training at the NW-side, gNB transmit Set A and UE
+measures L1-RSRP of each TX beam with different RX
+beams for both UE panels. The UE determines the L1-
+RSRP measurement for each TX beam based on the
+RX beam selection criteria, e.g. considering the “best
+RX” beam which provides the highest L1-RSRP assumed
+in this study. The TX beams with the corresponding
+L1-RSRP measurements are reported to the gNB that
+performs data collection.
+• Next, for the AI/ML model inference with Set B is a
+subset of Set A case, the UE refines instantaneous RSRP
+measurements corresponding to Set B by applying an
+averaging filter which takes Set B pattern as input. If
+Set B is different to Set A, the UE measures Set A
+as well as Set B at different time instances. For both
+cases, the resulting RSetB is sorted based on filtered L1-
+RSRP measurements, and the Ns strongest beams and
+corresponding L1-RSRP measurements are reported to
+the gNB.
+• During the AI/ML model inference, the AI/ML model
+takes the measurement reports and predicts the Top-K
+TX beam indices. An additional step is considered for
+the TBP AI/ML model inference where the measurement
+reports received at the gNB during the observation win-
+dow are stored for the duration lo in a buffer before using
+them for inference. Also, the predicted Top-K TX beam
+indices from a TBP AI/ML model are stored in memory
+for lp time instances as the prediction is valid for t + lp
+future time instances. Based on the Top-1 predicted valid
+for time t, the gNB indicates to the UE which TX beam
+to use for DL data transmission.
+• Finally, for monitoring the NW-sided model performance,
+the same measurements determined in step 1 are used.
+To note that in case Set A is different from Set B, the
+gNB transmits, and the UE measures and reports Set
+B separately, similar to Set A for data collection and
+performance monitoring functionalities.
+The same framework can be utilized for integrating a UE-
+sided AI/ML model. In that case, RSetB is taken as the input
+to the AI/ML model and UE reports predicted Top-K TX
+beam indices to a gNB. Considering the ideal report, the
+performance of the UE-sided AI/ML model is equivalent to
+the ones obtained for the NW-sided AI/ML models evaluated
+in this study.
+D. Evaluation KPIs
+3GPP agreed to evaluate the performance of AI/ML-based
+BM with two KPI options that include beam prediction
+accuracy-related KPIs and system-level related KPIs [10].
+In beam prediction accuracy-related KPIs, the Top-K accu-
+racy evaluates the percentage of predictions that observed the
+Fig. 5. Illustration of beam measurement and reporting framework for a NW-sided model in SBP where Set B is a subset of Set A.
+best TX beam in one of the Top-K predicted beams. Thus, the
+Top-K accuracy can be expressed as
+ATop-K =
+K
+X
+k=1
+1(ˆik = i),
+(6)
+where ˆik is the index of the K-th beam in Top-K predicted
+beams, i is the Top-1 genie-aided beam and 1(.) is the
+indicator function. If ˆik = i, then 1(.) = 1 and 0 otherwise.
+Moreover, the Eq. (6) reduces to Top-1 accuracy when K = 1
+which indicates the best TX beam prediction accuracy. Even
+though, ATop-K is low, the predicted TX beam can still be used
+if it provides an acceptable beam gain.
+The L1-RSRP difference between the Top-1 predicted beam
+and the Top-1 genie-aided beam provides insight into the beam
+gain of the prediction which can be expressed as
+eRSRP = Ri −Rˆi,
+(7)
+where Ri denotes the L1-RSRP of the Top-1 genie-aided beam
+at one instant. Similarly, Rˆi represents L1-RSRP of predicted
+Top-1 TX beam. Furthermore, the prediction of the AI/ML
+model is reliable if eRSRP is less than 1 dB [10]. Hence, the
+beam prediction accuracy with 1 dB margin for the error is
+defined as ATop-1, 1dB margin = 1((Ri−Rˆi) < 1 dB), that defines
+the accuracy of the predicted best beam having an L1-RSRP
+error less than 1 dB. In this work, we evaluate the AI/ML
+model accuracy using the above-mentioned KPIs which can
+be used as a model performance monitoring KPI in the model
+inference stage.
+In addition to beam prediction accuracy-related KPIs,
+system-level related KPIs are needed to verify the gains of
+the AI/ML-based beam predictions in contrast to legacy BM
+procedures. Average throughput and cell-edge UE throughput
+indicate whether the AI/ML-based beam predictions can be
+used in the network. Furthermore, the key motivation of
+the AI/ML-based BM, i.e. the RS measurement overhead
+reduction (MOR) can be formulated according to the following
+conditions [10]
+• MOR = 1 −Ntx,B
+Ntx,A for SBP.
+• MOR = 1 −
+loNtx,B
+(lo+lp)Ntx,A for TBP.
+V. RESULTS AND PERFORMANCE EVALUATION
+In this section, we evaluate the beam prediction accuracy-
+related KPIs and the system-level performance-related KPIs
+for the AI/ML models trained for SBP and TBP. For perfor-
+mance evaluation, we use ten simulation drops that are not
+used for AI/ML model training and we compare the results
+with respect to baseline cases provided in each subsection.
+A. Evaluation of Different Alternatives in SBP
+This subsection evaluates a wide-to-narrow prediction
+model (denoted by SBP1) with respect to a narrow-to-narrow
+prediction model (denoted by SBP2), where SBP1 and SBP2
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+K
+0.6
+0.7
+0.8
+0.9
+1
+CDF
+SBP1_16_64
+SBP2_16_64
+Fig. 6. Evaluation of Top-K prediction accuracy (ATop-K) for varying K.
+0
+2
+4
+6
+8
+10
+eRSRP [dB]
+0.6
+0.7
+0.8
+0.9
+1
+CDF
+SBP1_16_64
+SBP2_16_64
+1-dB error margin
+Fig. 7. Evaluation of RSRP difference between predicted and genie-aided best
+beam’s.
+models consider SSB beam codebook of size 16 and a refined
+CSI-RS beam codebook of size 16 as Set B, respectively.
+Both models consider a refined CSI-RS codebook of size
+64 as Set A. Fig. 6 shows the Top-K prediction accuracy
+of wide-to-narrow prediction, which is evaluated compared to
+narrow-to-narrow prediction. Results show that the narrow-to-
+narrow prediction outperforms the wide-to-narrow prediction.
+Additionally, the Top-1 prediction accuracy of wide-to-narrow
+prediction degrades 17% compared to narrow-to-narrow pre-
+diction.
+Fig. 7 illustrates the performance evaluation of the models
+on L1-RSRP difference between Top-1 genie-aided and Top-
+1 predicted beam’s. As it can be seen, both wide-to-narrow
+prediction and narrow-to-narrow prediction achieve more than
+90% accuracy within eRSRP < 3 dB. However, wide-to-
+narrow prediction degrades approximately 15% the Top-1
+prediction accuracy with 1 dB margin of the narrow-to-narrow
+prediction, which achieves 90%.
+The results depicted in Fig. 6 and Fig. 7 show that the
+prediction of the strongest refined CSI-RS beam is more
+difficult considering SSB beam measurements as input than
+using a subset of the CSI-RS codebook measurements as
+input to the model. This is because SSB beams cover a
+wide area encompassing multiple CSI-RS beams. Thus, the
+variation of input L1-RSRP distribution of SSB measurements
+is less relevant for the AI/ML model-based narrow beam
+prediction compared to the L1-RSRP distribution of the CSI-
+5
+50
+95
+Percentile [%]
+85
+90
+95
+100
+105
+User throughput ratio [%]
+SBP1_16_64
+SBP2_16_64
+Fig. 8. Evaluation of UE throughput ratio of 5-th, 50-th and 95-th percentiles
+with respect to absolute UE throughput of [0.52, 1.59, 3.13] × 104 Mbps of
+narrow-to-narrow beam prediction, respectively.
+RS measurements.
+Fig. 8 analyzes the behaviour of the UE throughput at the
+5-th, 50-th, and 95-th percentile of the CDF. The ratio is calcu-
+lated with respect to narrow-to-narrow prediction throughput
+performance. For the 5-th percentile of the CDF, cell-edge
+UEs experience 8.2% UE throughput degradation with wide-
+to-narrow prediction compared to cell-edge UEs who used
+narrow-to-narrow prediction. The UE throughput of wide-
+to-narrow prediction matches the performance of narrow-to-
+narrow prediction for all other UEs except cell-edge UEs.
+Moreover, the wide-to-narrow prediction model eliminates
+the P2 procedure as the model requires L1-RSRP measure-
+ments obtained from SSB beams. Thus, measurement overhead
+reduction in P2 is 100%. Additionally, the performance of
+wide-to-narrow prediction model seems reasonable and can
+be used if it meets the accuracy levels required by the NW.
+However, the comparison of beam prediction accuracy-related
+KPIs and UE throughput performance shows that narrow-
+to-narrow prediction outperforms wide-to-narrow prediction.
+Therefore in the following subsection, we evaluate different
+varieties of narrow-to-narrow prediction models by varying
+the Set B size.
+B. Evaluation of SBP: Set B is a Subset of Set A
+The performance of the narrow-to-narrow beam prediction
+is evaluated with three AI/ML models with input Set B
+sizes of 8, 16, and 32 for an output Set A size of 64. The
+performance of each AI/ML model is compared with a non-
+AI/ML baseline which selects the strongest beam among the
+reported Set B beams, which also belongs to Set A (denoted
+by BL Ntx,B Ntx,A).
+Fig. 9 compares the Top-K prediction accuracy of AI/ML
+models for K ⩽10 and Top-K prediction accuracy reduces as
+the Set B size reduces for any K. Narrow-to-narrow prediction
+with Ntx,B = 8 experiences a significant degradation in terms
+of Top-K prediction accuracy for lower K values compared
+to narrow-to-narrow prediction with Ntx,B = 16. However,
+narrow-to-narrow prediction with Ntx,B = 16 and Ntx,B =
+32 achieved a Top-1 prediction accuracy above 75% and all
+three AI/ML models achieved ATop-4 greater than 90%. Results
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+K
+0.6
+0.7
+0.8
+0.9
+1
+CDF
+SBP2_8_64
+SBP2_16_64
+SBP2_32_64
+Fig. 9. Evaluation of Top-K prediction accuracy (ATop-K) for varying K.
+confirm that as Ntx,B/Ntx,A reduces, degradation in Top-K
+prediction accuracy increases significantly.
+According to Fig. 10, the Top-1 prediction accuracy
+with 1 dB margin of narrow-to-narrow predictions are
+{0.95, 0.90, 0.75} for Ntx,B = {32, 16, 8}, respectively. In
+comparison to corresponding baselines, all AI/ML models
+in SBP where Set B is a subset of Set A, significantly
+reduce the RSRP difference. Additionally, results emphasize
+that the capability of the AI/ML model to predict the correct
+beam increases as Ntx,B/Ntx,A approaches 1, confirming that
+having more beam measurements is beneficial to yield a better
+prediction accuracy.
+Fig. 11 shows the gain in the UE throughput ratio in
+comparison to its corresponding baseline case. The cell-edge
+UEs experience a UE throughput gain of {27%, 13%, 4%}
+with narrow-to-narrow predictions for Ntx,B = {8, 16, 32}
+compared to corresponding baseline cases. Observations show
+that the UE throughput performance increases with narrow-
+to-narrow predictions in contrast to the baseline case when
+Ntx,B/Ntx,A decreases. A similar trend can be seen for cell-
+median UEs. Comparing narrow-to-narrow prediction models,
+the UE throughput ratio observed at 95-th percentile of the
+CDF does not reflect a performance degradation as Ntx,B
+varies.
+UE throughput performance at cell-edge is degraded in
+narrow-to-narrow predictions when the number of Ntx,B mea-
+surements decrease. Similarly, the throughput of cell-edge UEs
+reduces as UE predicts a beam with a lower gain compared to
+the best beam. On the other hand, UEs in the 95-th percentile
+of the CDF do not experience a throughput loss even if the
+predicted beam is not the best beam because UE may have
+more than one strong beam. Therefore, the modulation and
+coding schemes (MCS) used in the data transmission do not
+significantly change.
+The MOR in SBP where Set B is a subset of Set A, is equal
+to 87.5%, 75% and 50% for narrow-to-narrow predictions with
+Ntx,B = {8, 16, 32}, respectively. Similarly, corresponding
+baseline algorithms achieve the same MOR. According to the
+above observations, cell-edge UEs are more susceptible to
+throughput degradation as Set B size reduces to obtain a higher
+MOR. Additionally, the results emphasize the importance of
+0
+2
+4
+6
+8
+10
+eRSRP [dB]
+0.2
+0.4
+0.6
+0.8
+1
+CDF
+SBP2_8_64
+BL_8_64
+SBP2_16_64
+BL_16_64
+SBP2_32_64
+BL_32_64
+1-dB error margin
+Fig. 10. Evaluation of RSRP difference between predicted and genie-aided
+best beam’s.
+5
+50
+95
+Percentile [%]
+50
+60
+70
+80
+90
+100
+User throughput ratio [%]
+BL_8_64
+SBP2_8_64
+BL_16_64
+SBP2_16_64
+BL_32_64
+SBP2_32_64
+Fig. 11. Evaluation of 5-th, 50-th and 95-th percentiles in user throughput
+ratio with respect to absolute user throughput of [0.54, 1.64, 3.15] × 104
+Mbps of narrow-to-narrow beam prediction.
+having different AI/ML models on the UE-side or NW-side.
+For example, if a UE using narrow-to-narrow prediction with
+Ntx,B = 8 starts to experience poor channel conditions, UE
+may enable with an AI/ML model applying with Ntx,B = 16
+or Ntx,B = 32 to continue the narrow-to-narrow prediction
+avoiding the user throughput degradation.
+Even though the deployed narrow-to-narrow prediction
+AI/ML models exhibit performance enhancement compared
+to non-AI/ML baseline schemes, the NW configurations used
+for the data collection phase can differ in the inference
+phase. Therefore, the following subsection explores the model
+generalization aspect of narrow-to-narrow prediction models
+as the antenna configuration of the NW changes.
+C. Evaluation of Generalization Aspects of SBP
+In this subsection, we evaluate the AI/ML model general-
+ization aspect of SBP. Evaluation is done with the narrow-to-
+narrow prediction with Ntx,B = 16 and Ntx,A = 64 model,
+which is trained in a gNB composed of an antenna array
+equipped with M V
+tx = 4, M H
+tx = 8 denoted by 4x8. Then, the
+AI/ML model is integrated and tested with two more wireless
+networks composed of gNB with antenna array 4x4 and 4x16.
+Fig. 12 depicts the variation of RSRP difference of narrow-
+to-narrow prediction with different antenna configurations.
+Note that the Top-1 prediction accuracy is equal to the ratio at
+which eRSRP = 0 and it is observed that Top-1 prediction
+0
+2
+4
+6
+8
+10
+eRSRP [dB]
+0.5
+0.6
+0.7
+0.8
+0.9
+1
+CDF
+SBP2_16_64 (Antenna:4x4)
+SBP2_16_64 (Antenna:4x8)
+SBP2_16_64 (Antenna:4x16)
+1-dB error margin
+Fig. 12. Evaluation of RSRP difference between predicted and genie-aided
+best beam’s.
+accuracy drops by a minimum 25% if the model is used
+in a gNB with different antenna configurations. However,
+the narrow-to-narrow prediction with antenna 4x4 achieves
+77% of Top-1 prediction accuracy with 1 dB margin and
+shows a better generalization ability compared to narrow-to-
+narrow prediction with antenna 4x16 which yields a 63%
+Top-1 prediction accuracy with 1 dB margin. The observation
+concludes that the RSRP difference of more narrow beams
+generated by the antenna 4x16 is higher compared to the RSRP
+difference of relatively wider beams created by antenna 4x4
+if the predicted Top-1 beam differs from the best genie-aided
+beam.
+The narrower beams generated by a 4x16 antenna array
+provide a higher beam gain compared to a 4x8 antenna array.
+Similarly, antenna 4x4 reduces the beam gain compared to
+antenna 4x8. Thus, Fig. 13 presents the evaluation of the UE
+throughput ratio corresponding to the baseline case (denoted
+by BL in Fig. 13) with the same antenna array configuration.
+BL cases represent the non-AI/ML beam selection approach
+where the best beam selected with respect to exhaustive beam
+search, i.e. Set B is same as Set A. The gNB equipped
+with the 4x16 antenna enhances throughput of cell-edge UEs
+by 20.5% compared to gNB with antenna 4x8. Yet, the UE
+throughput gain achieved with a larger antenna compared to
+4x8 is reduced by 15% due to AI/ML model generalization
+impact. The same trend is visible for UEs at the 50-th and 95-
+th percentile of UE throughput. Moreover, using a small 4x4
+array reduces the overall throughput as shown by the baseline,
+and the poor performance is further degraded due to AI/ML
+model generalization impacts.
+These results suggest that the AI/ML model performs the
+best when the specified antenna configuration is the same for
+both model training and inference. Otherwise, beam prediction
+accuracy and UE throughput degrade due to model general-
+ization impacts. Alternatively, the model can be trained with
+mixed dataset that include multiple gNB antenna configu-
+rations and achieve satisfactory performance [10]. Still, the
+problem persist if a new configuration is adopted by gNB.
+Note that the UEs in different channel conditions such as cell-
+edge, cell-center, etc. may use different models to increase or
+5
+50
+95
+Percentile [%]
+50
+60
+70
+80
+90
+100
+110
+120
+User throughput ratio [%]
+BL (Antenna: 4x4)
+SBP2_16_64 (Antenna: 4x4)
+BL (Antenna: 4x8)
+SBP2_16_64 (Antenna: 4x8)
+BL (Antenna: 4x16)
+SBP2_16_64 (Antenna: 4x16)
+Fig. 13. Evaluation of UE throughput ratio with respect to the baseline case
+of trained antenna configuration 4x8 which yields a 5-th, 50-th and 95-th
+percentiles of absolute UE throughput of [0.49, 1.56, 3.20] × 104 Mbps.
+decrease the prediction accuracy as shown in Sec. V-B. Yet,
+the NW antenna panel may impact all UEs, and the cell-edge
+UE performance degradation is unavoidable, thus these UEs
+may only fallback to legacy non-AI/ML BM procedures.
+D. Evaluation of TBP
+In this subsection, we evaluate the beam prediction accuracy
+and UE throughput performance of both alternatives in TBP,
+i.e. Set B is equal/subset of Set A. AI/ML models discussed in
+this subsection consider refined CSI-RS codebooks with sizes
+of 8, 16, and 32 as the Set B. Moreover, the input to each
+AI/ML model consists of Set B beam measurements over an
+observation window size of 5. All models consider a refined
+CSI-RS beam codebook of size 32 as Set A, which is used after
+a prediction window size of 1 (denoted by TBP Ntx,B 32).
+Additionally, we use a non-AI/ML baseline method; sample
+and hold (SnH), which selects the strongest Set B beam at
+time t and is used at t and t + 1 as the predicted TX beam.
+Fig. 14 depicts the Top-K prediction accuracy evaluation
+for TBP models along with the corresponding SnH cases.
+It is observed that the model with Ntx,B = 32 degrades
+on Top-K prediction accuracy compared to the corresponding
+SnH scheme due to the dominant temporal correlation of
+the channel. However, models with Set B is a subset of Set
+A; Ntx,B = {16, 8} achieve 11% and 30% gain on Top-1
+prediction accuracy compared to corresponding SnH schemes,
+respectively. Hence, results show that when Ntx,B/Ntx,A
+reduces, the Top-K prediction accuracy improves in contrast
+to corresponding SnH schemes. However, employing a higher
+number of measured beams helps to improve the beam pre-
+diction accuracy.
+The RSRP difference evaluation of TBP models along with
+corresponding SnH schemes are depicted in Fig. 15. The
+AI/ML model with Set B codebook size of 32 suffers a loss
+of 10.4% with respect to Top-1 prediction accuracy with 1
+dB margin loss of 91.5% obtained by the corresponding SnH
+scheme. The result also confirms that models with Ntx,B
+= {16, 8} perform better compared to corresponding SnH
+schemes. Yet, Top-1 prediction accuracy with 1 dB margin for
+models with Ntx,B = {16, 8} are 65% and 59%, respectively.
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+K
+0.2
+0.4
+0.6
+0.8
+1
+CDF
+SnH_32_32
+TBP_32_32
+SnH_16_32
+TBP_16_32
+SnH_8_32
+TBP_8_32
+Fig. 14. Evaluation of Top-K prediction accuracy (ATop-K) for varying K.
+0
+2
+4
+6
+8
+10
+eRSRP [dB]
+0.2
+0.4
+0.6
+0.8
+1
+CDF
+SnH_32_32
+TBP_32_32
+SnH_16_32
+TBP_16_32
+SnH_8_32
+TBP_8_32
+1-dB error margin
+Fig. 15. Evaluation of RSRP difference between predicted and genie-aided
+best beam’s.
+Additionally, 20% or more UEs experience more than 3
+dB RSRP difference between predicted and genie-aided best
+beam’s for both AI/ML models with Ntx,B = {16, 8}.
+The observed trends in beam prediction KPIs are further
+confirmed by the UE throughput performance shown in Fig.
+16. The cell-edge UEs using the AI/ML model with Ntx,B =
+32 experience a 7.7% loss of throughput in contrast to the
+corresponding SnH scheme. Yet, cell-edge UEs using the
+AI/ML model with Ntx,B = 8 experience a 6.4% gain in
+throughput compared to corresponding SnH. The throughput
+of cell-median UEs who use models with Ntx,B = {16, 32}
+show similar performance compared to corresponding baseline
+cases. Yet, 50-th percentile UEs in the CDF who use the
+AI/ML model with Ntx,B = 16 experience a throughput
+improvement of 10% in comparison to similar UEs who
+use the corresponding SnH scheme. The AI/ML model with
+Ntx,B = 8 performs better at 95-th percentile of UE through-
+put compared to 5-th and 50-th, and yet it is less than
+90% of UE throughput obtained by SnH scheme with Set B
+equals to Set A. Importantly, the evaluated AI/ML models
+with Set B codebook sizes 32, 16, and 8 provide a MOR of
+16.7%, 58.3%, and 80%, respectively. In a mobile network,
+the speeds of the UEs may vary from time to time. Hence,
+the following subsection evaluates the model generalization
+impact for varying UE speeds.
+5
+50
+95
+Percentile [%]
+50
+60
+70
+80
+90
+100
+110
+User throughput ratio [%]
+SnH_32_32
+TBP_32_32
+SnH_16_32
+TBP_16_32
+SnH_8_32
+TBP_8_32
+Fig. 16. Evaluation of UE throughput ratio with respect to SnH 32 32 which
+yields an absolute per UE throughput of [0.09, 0.70, 2.49] × 104 Mbps at
+5-th, 50-th and 95-th percentiles.
+E. Evaluation of Generalization Aspects of TBP
+In this subsection, we evaluate the generalization capability
+of the TBP AI/ML model with Set B and Set A codebooks
+of size 32 trained with a UE speed of 30 kmph and used
+in UEs with higher speeds (60 kmph and 120 kmph). Fig.
+17 shows the variation of Top-K prediction accuracy with
+different UE speeds when K ⩽10. UEs with 60 kmph
+speed experience a loss of 3% in Top-1 prediction accuracy
+compared to UEs trained at 30 kmph. For an even higher speed
+of 120 kmph, the loss in Top-1 prediction accuracy increases
+to 6.7%. As the UE speed increases compared to the trained
+speed, the input distribution of the L1-RSRP measurements
+changes. Moreover, the beam measurements become outdated
+within a shorter time duration, since higher speeds introduce
+a significant change in UE position.
+Fig. 18 depicts 2.9% loss in Top-1 prediction accuracy with
+1 dB margin when UE speed is 60 kmph compared to 30
+kmph. The degradation becomes even higher for UEs with
+120 kmph as 7% in comparison to UEs with a speed of 30
+kmph. According to beam prediction accuracy related results,
+the model generalization impact of TBP models for higher
+speeds is insignificant.
+In Fig. 19, throughput at cell-median UEs use AI/ML model
+with speeds of 60 and 120 kmph show 6.3% and 10.4%
+degradation compared to UEs maintaining the model trained
+speed of 30 kmph. However, throughput at cell-median UEs
+who used the SnH scheme with higher speeds of 60 and
+120 kmph also show a similar degradation as seen with the
+AI/ML model performance. Hence, the cell-median UEs who
+used the AI/ML model at higher speeds compared to the
+trained speed experienced a throughput degradation mainly
+due to the more challenging channel conditions in mobility.
+The cell-edge UEs experience a very low throughput for higher
+speeds compared to cell-median UEs due to mobility and
+channel uncertainties. Moreover, the UEs at 95-th percentile of
+throughput are resilient to throughput degradation and achieve
+more than 95% of throughput with higher speeds compared
+to the trained UE speed of 30 kmph. User throughput results
+explain the AI/ML model generalization impact is insignificant
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+K
+0.6
+0.7
+0.8
+0.9
+1
+CDF
+TBP_32_32 (UE speed: 30 kmph)
+TBP_32_32 (UE speed: 60 kmph)
+TBP_32_32 (UE speed: 120 kmph)
+Fig. 17. Evaluation of Top-K prediction accuracy for varying K.
+0
+2
+4
+6
+8
+10
+eRSRP [dB]
+0.6
+0.7
+0.8
+0.9
+1
+CDF
+TBP_32_32 (UE speed: 30 kmph)
+TBP_32_32 (UE speed: 60 kmph)
+TBP_32_32 (UE speed: 120 kmph)
+1-dB error margin
+Fig. 18. Evaluation of RSRP difference between predicted and genie-aided
+best beam’s.
+for the TBP model where Set B is the same as Set B.
+F. Design Guidelines for AI/ML-Based BM
+In this subsection, we provide some recommendations for
+AI/ML model usage based on the evaluation results in the
+previous subsections. We assume that an AI/ML model can
+be recommended for use in a situation if it can achieve a
+minimum of 95% UE throughput compared to the best baseline
+case observed. The AI/ML model use guidelines for different
+UE scenarios are presented in Table II.
+Table II: Recommendations for AI/ML model selection.
+AI/ML
+model
+MOR
+(%)
+Cell-edge
+UEs
+Cell-median
+UEs
+Best
+UEs
+SBP1 16 64
+100
+✗
+✓
+✓
+SBP2 8 64
+87.5
+✗
+✓
+✓
+SBP2 16 64
+75
+✓
+✓
+✓
+SBP2 32 64
+50
+✓
+✓
+✓
+TBP 8 32
+80
+✗
+✗
+✗
+TBP 16 32
+58.3
+✗
+✗
+✓
+TBP 32 32
+16.7
+✗
+✓
+✓
+Firstly, the AI/ML models discussed in SBP where Set B
+is a subset of Set A decreases the UE throughput of cell-edge
+UEs while reducing the measurement overhead. Hence, cell-
+edge UEs may required to use narrow-to-narrow prediction
+models requiring a larger number of measurements compared
+5
+50
+95
+Percentile [%]
+65
+70
+75
+80
+85
+90
+95
+100
+User throughput ratio [%]
+SnH_32_32 (UE speed: 30 kmph)
+TBP_32_32 (UE speed: 30 kmph)
+SnH_32_32 (UE speed: 60 kmph)
+TBP_32_32 (UE speed: 60 kmph)
+SnH_32_32 (UE speed: 120 kmph)
+TBP_32_32 (UE speed: 120 kmph)
+Fig. 19. Evaluation of UE throughput ratio with respect to TBP 32 32 trained
+for 30 kmph UE speed, which yields an absolute per UE throughput of
+[0.09, 0.69, 2.48] × 104 Mbps at 5-th, 50-th and 95-th percentiles.
+ 
+   
+   
+   
+   
+   
+    
+    
+ 
+   
+   
+ 
+ 
+ 
+ 
+ 
+ 
+Antenna
+boresight
+(a) Distribution of minimum K value such
+that Top-K prediction accuracy is 100%.
+ 
+   
+   
+   
+   
+   
+    
+    
+ 
+   
+   
+ 
+   
+ 
+   
+ 
+   
+ 
+Antenna
+boresight
+(b) Distribution of RSRP error between
+predicted beam and Top-1 genie aided
+beam’s.
+Fig. 20. The spatial distribution of beam prediction accuracy of narrow-to-
+narrow prediction with Set B size 8, with a gNB located in x = 0, y = 0.
+to other UEs in the cell, which can use narrow-to-narrow pre-
+diction models with higher MOR (e.g. MOR = 87.5), as their
+throughput difference compared to legacy BM is negligible.
+With further experiments using a simpler network deployment,
+we observed that the Top-K prediction accuracy does not
+show significant differences among UEs in the coverage area
+(i.e. the AI/ML model does not discriminate between UEs)
+as shown in Fig 20a. However, on the other hand, Fig 20b
+depicts that the RSRP difference between predicted and Top-
+1 genie-aided beam increases significantly especially for some
+elevation/azimuth directions, where the penalized areas could
+be at the beam-boundaries or cell-boundaries. Such areas
+may likely include cell-edge UEs, where the throughput is
+impacted.
+At the same time, the wide-to-narrow beam prediction
+model, which could avoid CSI-RS beam transmissions in the
+P2 procedure, may be applied for all UEs, except for cell-
+edge UEs, as they experience some throughput degradation
+compared to the narrow-to-narrow prediction model. More-
+over, the AI/ML model generalization aspects of SBP show
+that the expected gain on UE throughput performance using
+a high number of antenna elements is degraded due to the
+SBP AI/ML models trained with a lower number of antenna
+elements. Thus, UE throughput gains provided by enabling
+the transmission with a larger antenna size may be limited
+by generalization. This is because the SBP models need to
+be used for the configurations in which the AI/ML model is
+trained or in case of a configuration change, the AI/ML model
+needs to be fine-tuned to support the new configuration. In all
+of the cases, performance monitoring procedure may allow the
+UEs to fallback to legacy non-ML BM procedures in case of
+severe performance degradation of the model.
+Conversely, the TBP studies of narrow-to-narrow beam
+prediction AI/ML models show marginal performance gains
+compared to the sample and hold baseline. Thus, a second-
+round of beam measurements based on AI/ML model pre-
+diction may be used to improve the performance. Generally,
+the AI/ML model with Set B and Set A size of 32 can be
+used for UEs with strong channel conditions and cell-median
+UEs even though the advantages of measurements overhead
+are less compared to SBP models. The AI/ML model with
+Set B size of 16 and Set A size of 32 can be used for UEs
+with strong channel conditions, and the model with Set B
+size of 8 and Set A size of 32 is not suitable for any UE
+due to its low performance. Finally, according to the given
+results, the degradation in generalization due to UE speed is
+less compared to the changes in the NW antenna configuration
+which applies also to TBP. Overall, the poor performance with
+AI/ML models at cell-edge because of wrong beam prediction
+highlights the need for improving the AI/ML model training.
+For instance, by penalizing the prediction errors of cell-edge
+UEs compared to other UEs, which could be realized by
+adopting more sophisticated loss functions or using different
+sampling of training data.
+An additional important aspect is the computational com-
+plexity of AI/ML model. All SBP AI/ML models consist of
+50 × 103 to 150 × 103 hyper-parameters where the AI/ML
+model size is less than 1 MB. Additionally, the computational
+complexity of models is less than 1.2 × 106 floating point op-
+erations per second (FLOPS). TBP AI/ML models composed
+of 100×103 to 200×103 hyper-parameters which also require
+less than 1 MB of memory to store the model and less than
+2 × 106 FLOPS. Hence, the AI/ML models evaluated in this
+study have moderate computational complexity and limited
+memory occupation. The computational complexity can be
+further reduced considering the designs as in [34], which
+provides a promising direction to make the AI/ML models
+studied in this work to be easily transferred, deployed and
+stored at the UE.
+In summary, according to Table II, most of the AI/ML
+models failed to deliver more than 90% throughput for cell-
+edge UEs compared to baseline cases. Improvement of cell-
+edge UE performance using assisted information such as
+UE positions, AoA and AoD can be considered as a future
+research direction. Moreover, we assumed ideal L1-RSRP
+measurements and reporting from a UE, inaccurate L1-RSRP
+measurements may degrade the beam prediction accuracy as
+well as system-level performance. Also, we assumed UE report
+all Set B beams and corresponding RSRP measurements to
+gNB. However, the UE may consider reporting partial beam
+measurements (NS ⩽Ntx,B) and adopt adaptive quantization
+to limit the reporting overhead. Finally, the AI/ML model
+activation and deactivation based on performance monitoring
+and coexistence between AI/ML-based BM and legacy BM
+are other interesting research directions.
+VI. CONCLUSION
+In this paper, we presented an in-depth analysis of SBP
+and TBP AI/ML models and their generalization abilities
+to investigate the link between ML model performance and
+system-level performance. The analysis covered sub-use cases
+of SBP, Set B is different from Set A and Set B is a subset of
+Set A, and sub-use cases of TBP where Set A equals Set B and
+Set B is a subset of Set A as discussed in 3GPP Rel-18 SI. We
+derived AI/ML BM design guidelines based on the throughput
+performances, which showed the necessity of using AI/ML
+models with higher Set B size for cell-edge UEs. Moreover,
+the AI/ML model generalization issues studied in this paper
+suggested that the future research directions may address UE-
+sided AI/ML model generalization capabilities to different
+conditions (e.g, NW antenna configurations, beam patterns,
+etc.), reinforcement learning (RL) could be a direction as
+it may update the model depending on the new-conditions.
+Moreover, the beam prediction framework studied and cur-
+rently under consideration for specification in 3GPP Rel-19 WI
+is intended to be generic therefore RL and other model training
+enhancements may be supported as well. Model complexity is
+also another important aspect and can be reduced to improve
+inference latency. As beamforming aspects are not impacting
+only FR2 but also FR1, we envision the usage of beam
+prediction approaches in different bands. In addition, multiple
+TX/RX point (multi-TRP) scheme and efficient handover in
+mobility scenarios can be other venues where to apply beam
+prediction. Lastly, in future systems prediction reports and
+measurement reports may be used for power control, link
+adaptation, among other procedures, which could be designed
+to use or discard predicted beams measurements depending on
+AI/ML model accuracy.
+VII. APPENDIX
+Table III provides the set of simulation parameters used to
+configure the system-level simulator.
+REFERENCES
+[1] Nokia, “5G-Advanced: Expanding 5G for the connected world,” Nokia,
+White paper CID210984, February 2023.
+[2] Nokia, “Taking 5G-Advanced to the next level and bridging into the 6G
+era,” Nokia, White paper CID213705, January 2024.
+[3] M. Chen, U. Challita, W. Saad, C. Yin, and M. Debbah, “Artificial
+Neural Networks-Based Machine Learning for Wireless Networks: A
+Tutorial,” IEEE Communications Surveys & Tutorials, vol. 21, no. 4,
+pp. 3039–3071, 2019.
+[4] J. Pihlajasalo, D. Korpi, M. Honkala, J. M. J. Huttunen, T. Riihonen,
+J. Talvitie, A. Brihuega, M. A. Uusitalo, and M. Valkama, “Hybrid-
+DeepRx: Deep Learning Receiver for High-EVM Signals,” in 2021 IEEE
+32nd Annual International Symposium on Personal, Indoor and Mobile
+Radio Communications (PIMRC), 2021, pp. 622–627.
+[5] A. Kelkar and C. Dick, “NVIDIA Aerial GPU Hosted AI-on-5G,” in
+2021 IEEE 4th 5G World Forum (5GWF), 2021, pp. 64–69.
+[6] J. Pihlajasalo, D. Korpi, M. Honkala, J. M. J. Huttunen, T. Riihonen,
+J. Talvitie, A. Brihuega, M. A. Uusitalo, and M. Valkama, “Deep Learn-
+ing OFDM Receivers for Improved Power Efficiency and Coverage,”
+IEEE Transactions on Wireless Communications, vol. 22, no. 8, pp.
+5518–5535, 2023.
+Table III: 3GPP-based SLS parameters
+Parameter
+Value
+Frequency range
+FR2 with a carrier frequency of 30 GHz
+Network deployment
+500 m inter-site distance (ISD), gNB
+antenna height: 25 m, 7 sites with 3
+sectors/gNB per site with wrap-around
+Channel mode
+Urban
+macro
+(UMa)
+scenario
+with
+distance-dependent LoS probability
+System bandwidth
+80 MHz, subcarrier spacings: 120 kHz
+UE distribution
+10 UEs per sector/gNB, UE antenna
+height: 1.5 m, 100% outdoor UEs
+gNB antenna configu-
+ration
+One panel with (M, N, P, Mg, Ng):
+(4, 8, 2, 1, 1), (dV , dH) = (0.5, 0.5)λ
+gNB beam selection
+based on maximum L1-RSRP
+gNB antenna radia-
+tion pattern
+TR 38.802 Table A.2.1-6, Table A.2.1-7
+[32]
+Maximum TX power
+40 dBm for gNB, 23 dBm for UE
+UE antenna configu-
+ration
+Panel structure: (M, N, P) = (1, 4, 2), 2
+UE panels (left, right) with (Mg, Ng) =
+(1, 2)
+UE panel selection
+Ideal
+Number of UE beams
+8 (4 beams per UE panel)
+UE beam selection
+Optimal RX beam selection based on
+maximum
+L1-RSRP
+calculated
+with
+sliding window size 3
+UE antenna radiation
+pattern
+TR 38.802 Table A.2.1-8, Table A.2.1-
+10 [32]
+Link adaptation
+Based on CSI-RS
+Control and RS over-
+head
+common overhead is 30% based on TR
+37.910 for DenseUrban-eMBB scenario
+[35]
+Traffic model
+Full buffer
+Control channel de-
+coding
+Ideal
+UE receiver type
+MMSE-IRC
+Beamforming scheme
+Analog Beamforming
+gNB selection
+Based on the RSRP
+RX noise figure
+7 dB for gNB, 10 dB for UE
+[7] J. Hoydis, F. A. Aoudia, A. Valcarce, and H. Viswanathan, “Toward a
+6G AI-Native Air Interface,” IEEE Communications Magazine, vol. 59,
+no. 5, pp. 76–81, 2021.
+[8] M. Merluzzi et al., “The Hexa-X Project Vision on Artificial Intelligence
+and Machine Learning-Driven Communication and Computation Co-
+Design for 6G,” IEEE Access, vol. 11, pp. 65 620–65 648, 2023.
+[9] M. K. Shehzad, L. Rose, M. M. Butt, I. Z. Kov´acs, M. Assaad, and
+M. Guizani, “Artificial Intelligence for 6G Networks: Technology Ad-
+vancement and Standardization,” IEEE Vehicular Technology Magazine,
+vol. 17, no. 3, pp. 16–25, 2022.
+[10] 3GPP, “Study on Artificial Intelligence (AI)/Machine Learning (ML) for
+NR air interface,” 3rd Generation Partnership Project (3GPP), Technical
+Report (TR) 38.843, 12 2023.
+[11] M. Enescu, K. Jayasinghe, K. Ranta-Aho, K. Schober, and A. Toskala,
+5G Physical Layer.
+John Wiley & Sons, Ltd, 2020, ch. 6, pp. 87–148.
+[12] Y. Wang, A. Klautau, M. Ribero, A. C. K. Soong, and R. W. Heath,
+“MmWave Vehicular Beam Selection With Situational Awareness Using
+Machine Learning,” IEEE Access, vol. 7, pp. 87 479–87 493, 2019.
+[13] P. Susarla, B. Gouda, Y. Deng, M. Juntti, O. Silv´en, and A. T¨olli,
+“Learning-Based Beam Alignment for Uplink mmWave UAVs,” IEEE
+Transactions on Wireless Communications, vol. 22, no. 3, pp. 1779–
+1793, 2023.
+[14] H.-L. Song and Y.-C. Ko, “Beam Alignment for High-Speed UAV via
+Angle Prediction and Adaptive Beam Coverage,” IEEE Transactions on
+Vehicular Technology, vol. 70, no. 10, pp. 10 185–10 192, 2021.
+[15] Y. N. R. Li, B. Gao, X. Zhang, and K. Huang, “Beam Management in
+Millimeter-Wave Communications for 5G and beyond,” IEEE Access,
+vol. 8, pp. 13 282–13 293, 2020.
+[16] X. Lin, “An Overview of the 3GPP Study on Artificial Intelligence for
+5G New Radio,” 2023.
+[17] Q. Xue, J. Guo, B. Zhou, Y. Xu, Z. Li, and S. Ma, “AI/ML for Beam
+Management in 5G-Advanced,” 2023.
+[18] J. Xu, I. Nakamura, R. Feng, L. Liu, and L. Chen, “Performance
+Evaluation of AI/ML Model to Enhance Beam Management in 5G-
+Advanced System,” in 2023 Fourteenth International Conference on
+Mobile Computing and Ubiquitous Network (ICMU), 2023, pp. 1–6.
+[19] J. Zuo, J. Zhang, Y. Cao, X. Chen, F. Wang, N. Hu, and X. Xu, “Artificial
+Intelligence-Based Spatial Domain Beam Prediction for 5G Beyond,” in
+2022 IEEE Globecom Workshops (GC Wkshps), 2022, pp. 1460–1465.
+[20] Q. Li et al., “Machine Learning Based Time Domain Millimeter-
+Wave Beam Prediction for 5G-Advanced and Beyond: Design, Analysis,
+and Over-The-Air Experiments,” IEEE Journal on Selected Areas in
+Communications, vol. 41, no. 6, pp. 1787–1809, 2023.
+[21] Y. Bai, J. Zhang, C. Sun, L. Zhao, H. Li, and X. Wang, “AI-Based
+Beam Management in 3GPP: Optimizing Data Collection Time Win-
+dow for Temporal Beam Prediction,” IEEE Open Journal of Vehicular
+Technology, vol. 5, pp. 48–55, 2024.
+[22] S. Wang, W. Chen, X. Chen, Y. Zhang, and B. Ai, “Deep Learning-Based
+Beam Pair Prediction With Finite Beam Quality Information,” in 2023
+IEEE 23rd International Conference on Communication Technology
+(ICCT), 2023, pp. 588–592.
+[23] L. Maggi, A. R. Koblitz, Q. Zhu, and M. Andrews, “Tracking the Best
+Beam for a Mobile User via Bayesian Optimization,” in 2023 IEEE 97th
+Vehicular Technology Conference (VTC2023-Spring), 2023, pp. 1–7.
+[24] C. Sun, L. Zhao, T. Cui, H. Li, Y. Bai, S. Wu, and Q. Tong, “AI Model
+Selection and Monitoring for Beam Management in 5G-Advanced,”
+IEEE Open Journal of the Communications Society, vol. 5, pp. 38–50,
+2024.
+[25] S. Khunteta and A. K. R. Chavva, “Recurrent Neural Network Based
+Beam Prediction for Millimeter-Wave 5G Systems,” in 2021 IEEE
+Wireless Communications and Networking Conference (WCNC), 2021,
+pp. 1–6.
+[26] D. Marasinghe, N. Jayaweera, N. Rajatheva, S. Hakola, T. Koskela,
+O. Tervo, J. Karjalainen, E. Tiirola, and J. Hulkkonen, “LiDAR aided
+Wireless Networks - Beam Prediction for 5G,” in 2022 IEEE 96th
+Vehicular Technology Conference (VTC2022-Fall), 2022, pp. 1–7.
+[27] A. Bonfante, L. G. Giordano, I. Macaluso, and N. Marchetti, “Perfor-
+mance of Predictive Indoor mmWave Networks With Dynamic Block-
+ers,” IEEE Transactions on Cognitive Communications and Networking,
+vol. 8, no. 2, pp. 812–827, 2022.
+[28] V. V. Ratnam and A. F. Molisch, “Periodic Analog Channel Estimation
+Aided Beamforming for Massive MIMO Systems,” IEEE Transactions
+on Wireless Communications, vol. 18, no. 3, pp. 1581–1594, 2019.
+[29] J. Suh, C. Kim, W. Sung, J. So, and S. W. Heo, “Construction of a
+Generalized DFT Codebook Using Channel-Adaptive Parameters,” IEEE
+Communications Letters, vol. 21, no. 1, pp. 196–199, 2017.
+[30] A. Kammoun, H. Khanfir, Z. Altman, M. Debbah, and M. Kamoun,
+“Preliminary Results on 3D Channel Modeling: From Theory to Stan-
+dardization,” IEEE Journal on Selected Areas in Communications,
+vol. 32, no. 6, pp. 1219–1229, 2014.
+[31] S. Noh, M. D. Zoltowski, and D. J. Love, “Multi-Resolution Codebook
+and Adaptive Beamforming Sequence Design for Millimeter Wave Beam
+Alignment,” IEEE Transactions on Wireless Communications, vol. 16,
+no. 9, pp. 5689–5701, 2017.
+[32] 3GPP, “Study on New Radio Access Technology Physical Layer As-
+pects,” 3rd Generation Partnership Project (3GPP), Technical Report
+(TR) 38.802, 09 2017.
+[33] F. Abinader, C. Rom, K. Pedersen, S. Hailu, and N. Kolehmainen,
+“System-Level Analysis of mmWave 5G Systems with Different Multi-
+Panel Antenna Device Models,” in 2021 IEEE 93rd Vehicular Technol-
+ogy Conference (VTC2021-Spring), 2021, pp. 1–6.
+[34] M. Q. Khan, A. Gaber, M. Parvini, P. Schulz, and G. Fettweis, “A Low-
+Complexity Machine Learning Design for mmWave Beam Prediction,”
+2024.
+[35] 3GPP, “5G; Study on self evaluation towards IMT-2020 submission,” 3rd
+Generation Partnership Project (3GPP), Technical Report (TR) 37.910,
+11 2020.

@@ -1,0 +1,3225 @@
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+1
+Federated Learning with Integrated Sensing,
+Communication, and Computation: Frameworks and
+Performance Analysis
+Yipeng Liang, Student Member, IEEE, Qimei Chen, Member, IEEE, and Hao Jiang, Member, IEEE
+Abstract—With the emergence of integrated sensing, commu-
+nication, and computation (ISCC) in the upcoming 6G era,
+federated learning with ISCC (FL-ISCC), integrating sample
+collection in the sensing process, local training in the com-
+putation process, and parameter exchange and aggregation in
+the communication process, has garnered increasing interest
+for enhancing training efficiency. Currently, FL-ISCC primarily
+includes two algorithms: FedAVG-ISCC and FedSGD-ISCC.
+However, the theoretical understanding of the performance
+and advantages of FedAVG-ISCC and FedSGD-ISCC remains
+limited. To address this gap, we investigate a general FL-ISCC
+framework for wireless networks, implementing both FedAVG-
+ISCC and FedSGD-ISCC. We experimentally demonstrate the
+substantial potential of the ISCC framework to enhance training
+efficiency in terms of latency and energy consumption in FL.
+Furthermore, we provide a theoretical analysis and comparison
+of the performance of FedAVG-ISCC and FedSGD-ISCC within
+this framework. The results reveal that: 1) Both sample collection
+and communication errors adversely affect the performance of
+both algorithms, underscoring the need for careful design in
+practical applications to enhance FL-ISCC performance. 2) Un-
+der independent and identically distributed (IID) data, FedAVG-
+ISCC outperforms FedSGD-ISCC, due to the advantage of
+multiple local updates. 3) Under non-independent and identically
+distributed (Non-IID) data, FedSGD-ISCC demonstrates greater
+robustness than FedAVG-ISCC. In particular, the local updates
+in FedAVG-ISCC amplify the impact of Non-IID data, resulting
+in significant performance degradation as the degree of Non-
+IID data increases. Conversely, FedSGD-ISCC, which does not
+incorporate multiple local updates, maintains performance levels
+comparable to those under IID conditions. 4) FedSGD-ISCC is
+more robust to communication errors compared to FedAVG-
+ISCC. Specifically, as communication errors increase, FedAVG-
+ISCC experiences significant performance deterioration, as its
+learning rate amplifies the impact of these errors, whereas
+FedSGD-ISCC remains largely unaffected. Extensive simulations
+verify the effectiveness of our considered FL-ISCC framework
+and validate the theoretical analysis presented in this work.
+Index Terms—IEEE, IEEEtran, journal, LATEX, paper, tem-
+plate.
+I. INTRODUCTION
+I
+T is anticipated that 6G will extend beyond mobile internet
+to support ubiquitous artificial intelligence (AI) services
+for Internet of Everything (IoE) applications, such as sustain-
+able cities, connected autonomous systems, brain-computer
+interfaces, digital twins, extended reality (XR), the metaverse,
+The authors are with the School of Electronic Information, Wuhan
+University, Wuhan 430072, China e-mail: (liangyipeng@whu.edu.cn, chen-
+qimei@whu.edu.cn, jh@whu.edu.com).
+This manuscript is a preliminary version of the work and may be subject
+to further revisions.
+and e-health [1], [2]. However, existing cloud AI encounters
+challenges such as high latency, privacy leakage, and limited
+wireless resources. Consequently, edge AI, a paradigm that
+shifts AI capabilities from central cloud infrastructure to the
+network edge, has garnered significant interest by consider-
+ing the integrated sensing, communication, and computation
+(ISCC) design [3]–[5]. By enabling continuous data acqui-
+sition, leveraging distributed computational resources, and
+employing efficient communication techniques at the edge,
+ISCC holds considerable potential for enhancing 6G network
+capabilities, optimizing resource utilization, and facilitating
+ubiquitous AI services [6].
+Federated learning (FL) is recognized as a key technology
+for edge AI due to its privacy-preserving capabilities [7].
+FL enables collaborative model training across decentralized
+devices without requiring data to be centralized, thus main-
+taining data privacy and security. This decentralized approach
+is particularly attractive for intelligent applications in 6G net-
+works, where data privacy and security are critical concerns.
+Currently, FL is primarily implemented using two algorithms:
+Federated Averaging (FedAVG) and Federated Stochastic Gra-
+dient Descent (FedSGD). FedAVG performs multiple local
+updates and transmits the updated local model parameters to
+a central server for global aggregation. In contrast, FedSGD
+computes the gradient of the local model and transmits these
+gradient parameters to the server, where they are aggregated
+before updating the global model. Existing research suggests
+that FedAVG is more communication-efficient than FedSGD,
+making it a key focus of ongoing research efforts. [7]–[11].
+While the ISCC design offers potential advantages for
+intelligent applications in 6G, integrating ISCC into existing
+FL approaches, leading to the development of Federated
+learning with ISCC (FL-ISCC), requires a reevaluation of their
+relative performance, which remains insufficiently explored.
+The question of whether FedAVG-ISCC and FedSGD-ISCC
+can achieve efficiency and cost-effectiveness within the ISCC
+framework is not well understood. This study addresses this
+gap by evaluating the performance of these two algorithms
+under the ISCC framework, focusing on training efficiency
+and performance analysis. The aim is to provide insights into
+FL-ISCC, thereby guiding the development of more efficient
+FL systems for edge AI in the 6G era.
+A. Related work
+FL has garnered significant attention for its ability to
+collaboratively train ML models across distributed devices
+arXiv:2409.11240v1  [cs.LG]  17 Sep 2024
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+2
+without share raw data. However, communication overhead
+remains a major bottleneck due to the frequent exchange
+of models or gradients between the server and devices, par-
+ticularly in large-scale scenarios [8]. To mitigate this issue,
+considerable efforts have been directed towards the co-design
+of communication and computation [9]–[11]. One intuitive
+method to reduce communication overhead is to increase the
+number of local update steps in each communication round.
+For example, the authors in [9] analyzed the impact of the
+number of local steps on the convergence rate, leading to the
+development of an algorithm that adaptively determines the
+number of local updates by jointly considering communication
+and computation resource constraints. Another approach is
+to reduce the communication volume during each round.
+For instance, model pruning and quantization have been
+employed to enhance communication efficiency in FL [11],
+[12]. Specifically, Specifically, considering the heterogeneous
+capabilities of each device, the authors in [11] adopted a
+Multi-Armed Bandit-based online algorithm to determine the
+pruning ratios for each device after analyzing the impact of
+these ratios on training performance. In [12], a quantization
+scheme based on universal quantization theory was designed,
+yielding substantial performance gains compared to previous
+quantization approaches.
+Nevertheless, the aforementioned works primarily employed
+a transmit-then-compute scheme for model or gradient trans-
+mission and aggregation over orthogonal resources, which re-
+sults in average latency. To enhance communication efficiency,
+over-the-air federated learning (OTA-FL) has emerged as a
+promising solution [13], [14]. OTA-FL utilizes a transmit-
+while-compute scheme, enabling multiple devices to simul-
+taneously transmit and aggregate their models or gradients
+using the same time-frequency resources through an integrated
+communication and computation design. In general, the im-
+plementation of OTA-FL can be categorized into over-the-
+air FedSGD (OTA-FedSGD) and over-the-air FedAVG (OTA-
+FedAVG). In OTA-FedSGD, gradients are computed after a
+single local step on the full data batch at each device and then
+aggregated over the air [17]. In OTA-FedAVG, local models
+are updated through multiple steps with mini-batches of data at
+each device. Instead of transmitting gradients, OTA-FedAVG
+uploads the updated models to the server for aggregation over
+the air [20]. Recent research has made significant efforts in
+facilitating OTA-FL in practice [15]. For example, it has been
+demonstrated that OTA-FL can achieve privacy ”for free” as
+long as the privacy constraint level is below a threshold that
+decreases with the signal-to-noise ratio [16].
+However, a critical challenge in OTA-FL is the aggregation
+error caused by channel noise perturbation, which can lead
+to transmission distortion and degrade FL performance. To
+mitigate gradient distortion in OTA-FedSGD, several power
+control approaches have been proposed [18], [19]. Specifically,
+the authors in [18] revealed that training converges to the
+optimal point if the aggregation errors are unbiased; other-
+wise, it converges with an error floor. Based on this insight,
+power control algorithms have been developed for both biased
+and unbiased cases. In [19], the power control problem was
+investigated, and the optimal policy was derived in closed-
+form by taking gradient statistics into account. To improve the
+convergence rate of OTA-FedAVG, the work in [22] designed
+a joint power allocation and local step control duw to the
+fact that the convergence behavior is influenced by both the
+number of local updates and model distortion. Additionally,
+the authors in [21] proposed a Bayesian aggregation scheme
+that accounts for local steps and channel conditions. However,
+few of these efforts consider the sensing process for data
+acquisition, resulting in a lack of investigation into FL-ISCC.
+B. Motivation and contribution
+Although the ISCC design has garnered increasing interest
+for enhancing network capabilities in the forthcoming 6G era
+[23]–[27], research on FL-ISCC remains in its early stages.
+Only a few studies have recently explored FL-ISCC [28],
+[29]. Specifically, the work in [29] theoretically analyzed the
+convergence of FedAVG-ISCC, where the effect of sample size
+collected in each communication round on convergence rate
+was explored. Furthermore, the work [28] proposed a joint
+resource allocation strategy for communication, computation,
+and sensing in a FedAVG-ISCC system constrained by training
+latency and energy. Nevertheless, the theoretical understanding
+of the performance and advantages of FedAVG-ISCC and
+FedSGD-ISCC remains an open research area.
+Motivated by these issues, we investigate a general FL-ISCC
+framework as outlined in [28] and [29]. As shown in 1, the
+framework comprises an edge server and multiple devices,
+each equipped with sensing, communication, and computation
+capabilities. In each communication round, after updating the
+global model from the edge server, each device first performs
+sensing to collect samples from its surrounding environment.
+Subsequently, the device trains a local ML model using the
+collected samples and the available computational resources.
+Finally, efficient parameter aggregation is conducted with the
+aid of over-the-air computation through a wireless channel.
+The main contributions of this work are summarized as follow:
+•
+Effectiveness of FL-ISCC: We first implement both
+FedAVG and FedSGD algorithms within the proposed
+ISCC framework and validate its effectiveness in reducing
+model training latency and energy consumption, thereby
+significantly enhancing the training efficiency of FL.
+• Convergence analysis for FL-ISCC: We then analyze
+the convergence performance of both FedAVG-ISCC and
+FedSGD-ISCC, considering the impact of sample collec-
+tion size and communication errors in each communica-
+tion round. Our analysis indicates that both the sample
+collection strategy and aggregation errors can deteriorate
+convergence performance.
+• Performance
+Comparison:
+Based
+on
+our
+conver-
+gence analysis, we further compare the performance of
+FedAVG-ISCC and FedSGD-ISCC. The results indicate
+that FedAVG-ISCC outperforms FedSGD-ISCC in IID
+settings due to the advantage of multiple local updates.
+However, in Non-IID settings, these local updates in
+FedAVG-ISCC amplify the effects of Non-IID data, lead-
+ing to significant performance degradation. In contrast,
+FedSGD-ISCC, which does not involve multiple local
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+3
+Device 1
+Device N
+…
+Global model broadcast
+1
+Local training and upload
+3
+Local training and upload
+3
+Sample sensing
+2
+Sample sensing
+2
+Edge server
+•
+FedAVG-ISCC
+•
+FedSGD-ISCC
+Global model update
+4
+Fig. 1. Illustration of the proposed SC2-FEEL.
+updates, avoids this issue and is therefore more robust in
+Non-IID settings compared to FedAVG-ISCC. Addition-
+ally, the learning rate in FedAVG-ISCC can exacerbate
+communication errors, resulting in degraded performance.
+FedSGD-ISCC, which does not face these challenges,
+proves to be more robust to communication errors than
+FedAVG-ISCC.
+• Performance evaluation: Finally, extensive simulations
+are conducted to evaluate the proposed FL-ISCC design.
+The results confirm the superiority of our framework in
+enhancing training efficiency and validate the theoretical
+analysis.
+II. SYSTEM MODEL
+In this section, we introduce the FL-ISCC system as shown
+in Fig. 1, where sensing, computation, and communication are
+jointly considered. We first introduce the proposed FL-ISCC
+framework. Subsequently, we present the learning models of
+FedAvg and FedSGD, respectively. Thereafter, we present the
+communication model and computation model, respectively.
+A. FL-ISCC framework
+In this work, we consider an FL-ISCC framework com-
+prising a single edge server and a set of N edge devices,
+denoted by N ≜{1, 2, ..., N}, collaborating to train a desired
+ML model. We assume that both the edge server and the
+devices are equipped with a single antenna for parameter
+transmission. Each device is also capable of collecting samples
+from its surrounding environment, enabling the ML model to
+be trained on datasets continuously accumulated at the devices
+throughout the training process.
+As illustrated in Fig. 1, the desired ML model, denoted by
+w ∈Rq, where q represents the model size, is trained over T
+communication rounds. During any communication round t ∈
+T ≜{1, 2, ..., T}, the model parameters are updated through
+four key steps, detailed as follows:
+(1) Global model broadcast: The edge server broadcasts
+the current global model parameters wt−1 to all devices.
+Each device then updates its local model parameters wn
+t
+based on the received global parameters, i.e., wn
+t
+=
+wt−1.
+(2) sample sensing: Each device n collects new samples
+Dn
+t with the size of Dn
+t = |Dn
+t | from its surrounding
+environment. As a result, device n maintains a cumu-
+lative dataset Sn
+t that includes both the newly collected
+dataset Dn
+t from the current round and the cumulative
+dataset Sn
+t−1 = Pt−1
+i=1 Dn
+i from the previous rounds, i.e.,
+Sn
+t = Sn
+t−1 + Dn
+t .
+(3) Local training: Based on the cumulative dataset Sn
+t ,
+each device n trains its local ML model. Let F (wn
+t ; Sn
+t )
+denote the loss function for device n over dataset Sn
+t ,
+which is expressed as
+F (wn
+t ; Sn
+t ) = 1
+Sn
+t
+X
+(xj,yj)∈Sn
+t
+f (wn
+t , (xj, yj)) ,
+(1)
+where (xj, yj) is the j-th sample of dataset Sn
+t with data
+xj and label yj, f (wn
+t ; Sn
+t ) is the j-th sample-wise loss
+function, Sn
+t = |Sn
+t | is the size of dataset Sn
+t , and Sn
+t =
+Sn
+t−1+Dn
+t . Based on this loss function, both FedAVG and
+FedSGD perform local training to update the parameters
+un
+t .
+(4) Global model update: After local training, all devices
+synchronously upload their updated local parameters un
+t
+to the edge server for aggregation. The edge server then
+aggregates these parameters as ut, given by
+ut = ρn
+t un
+t .
+(2)
+where ρn
+t = Sn
+t
+St with St = PSn
+t
+n=1 representing the total
+size of the accumulated dataset across all N devices in
+the t-th round. Then, the global model wt is updated
+based on un
+t , resulting in the global loss function as
+F (wt; St) =
+N
+X
+n=1
+ρn
+t F (wn
+t ; Sn
+t ) .
+(3)
+The global model update for FedAVG and FedSGD will
+be detailed in the subsequent subsection.
+This iterative process repeats over T communication rounds,
+optimizing the model parameter wt to satisfy the following
+condition:
+w∗≜arg min
+w F (wT ; ST ) .
+(4)
+B. Global model update for FedAVG-ISCC
+In FedAVG, each device n updates its local model wn
+t
+through multiple epochs using a stochastic gradient descent
+(SGD) method. Specifically, each device randomly selects
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+4
+mini-batches of samples ξn from its dataset Sn
+t for several lo-
+cal updates. The updated local model parameters wn
+t are then
+uploaded to the server for aggregation. Thus, the parameters
+un
+t to be uploaded are the updated local model wn
+t , which is
+expressed as
+un
+t = wn
+t = wt−1 −η
+τt
+X
+i=1
+∇F
+ wn
+t−1,i; ξn
+, i = 1, 2, . . . τ,
+(5)
+where η is the learning rate, τ is the number of local updates.
+As a result, the global model is updated based on (2) as
+wt = ut =
+N
+X
+n=1
+ρn
+t wn
+t ,
+(6)
+C. Global model update for FedSGD-ISCC
+Unlike FedAVG, which performs multiple updates on the
+local model, FedSGD calculates and uploads the gradients of
+the local model, denoted by ∇F (wn
+t ; Sn
+t ), using the full batch
+of dataset Sn
+t . Therefore, the parameters to be uploaded are
+given by un
+t = ∇F (wn
+t ; Sn
+t ).
+All devices then transmit their local gradient parameters to
+the edge server for aggregation. Consequently, (2) is reformu-
+lated as:
+ut =
+N
+X
+n=1
+ρn∇F
+ wn
+t−1; Sn
+t
+
+.
+(7)
+Based on (7), the global model wt at the edge server is
+updated as
+wt = wt−1 −ηut = wt−1 −η
+N
+X
+n=1
+ρn∇F
+ wn
+t−1; Sn
+t
+
+. (8)
+D. Communication Model
+In this work, we employ over-the-air computation for
+communication-efficient parameter transmission in FL. As-
+sume that ˆhn
+t is the complex channel coefficient from device
+n to the edge server during t-th communication round. The
+magnitude of this coefficient, hn
+t = |ˆhn
+t |, can be estimated by
+each device. Let the parameters transmitted from each device
+to the server be denoted by un
+t . The received signal (after
+phase compensation) at the edge server is given by
+ycomm
+t
+=
+N
+X
+n=1
+
+hn
+t
+p
+pn
+t un
+t + zt
+
+(9)
+where pn
+t represents the transmit power scaling factor of device
+n at tth communication round, and zt ∈Rq denotes the ad-
+ditive white Gaussian noise, following a Gaussian distribution
+with zero mean and σz, i.e., zt ∼CN (0, σzI). For FedAVG,
+the transmitted parameters are the local model parameters, thus
+un
+t = wn
+t . For FedSGD, the transmitted parameters are the
+local gradients, thus un
+t = ∇F (wn
+t ; Sn
+t ).
+Note that the over-the-air computation transmits the signals
+in an analog manner. Specifically, each element of the param-
+eters is modulated as a single analog symbol for transmission.
+Therefore, to achieve the parameter transmission, the total
+number of analog symbols to be transmitted is q for a
+parameter size of q. Let L represent the number of symbols
+in each resource block with duration Tslot. As a result, for
+t-th communication round, the transmission latency is thus
+expressed as
+tcomm
+t
+= ceil
+ q
+L
+
+Tslot
+where ceil(.) is the integer ceiling function, Tslot = 1 ms and
+L = 14. Therefore, the communication energy consumption of
+device n is given by ecomm
+n,k
+= pk
+ntcomm
+k
+.
+To recover the parameters of interest from the wireless
+channels, we apply a denoising factor λt to the received
+signals,
+ut =
+N
+X
+n=1
+ρn
+t ycomm
+t
+√λt
+=
+N
+X
+n=1
+ρn
+t
+hn
+t
+√pn
+t un
+t + zt
+√λt
+
+.
+(10)
+The edge server aims to obtain the ML model parameter vector
+unaffected by noise, i.e.,
+˜ut =
+N
+X
+n=1
+ρn
+t un
+t .
+(11)
+As a result, the communication error εt during t-th com-
+munication round is defined to quantify the model parameter
+vector distortion caused by channel noise, which is shown as
+εt = ut −˜ut
+=
+N
+X
+n=1
+ρn
+t
+hn
+t
+√pn
+t
+√λt
+−1
+
+un
+t +
+1
+√λt
+zt.
+(12)
+E. Computation Model
+In t-th communication round, device n performs local
+training with dataset Sn
+t . Let ξn denote the number of CPU
+cycles for device n to execute one sample. f n
+t denote the CPU-
+cycle frequency of the device n. ςn is the energy consumption
+coefficient depending on the chip of each device. Then, the
+computation latency of device n for one local training epoch
+is given by
+tn,comp
+t
+= ξn
+Pt
+i=1 Dn
+i
+f n
+t
+= ξnSn
+t
+f n
+t
+.
+Meanwhile, the computation energy consumption of device
+n for one local training epoch can be expressed as:
+en,comp
+t
+= ξnςn(f n
+t )2
+k
+X
+k=1
+Dn
+i = ξnςn(f n
+t )2Sn
+t .
+Based on the communication model and computation model,
+we can respectively derive the training latency and energy
+consumption as
+tt = max
+n∈N{tn,comp
+t
+} + tcomm
+t
+,
+and
+et =
+N
+X
+n=1
+ en,comp
+t
++ en,comm
+t
+
+.
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+5
+III. CONVERGENCE ANALYSIS AND PERFORMANCE
+EVALUATION
+In this section, we provide the convergence analysis of the
+proposed FL-ISCC, i.e., both FedAVG-ISCC and FedSGD-
+ISCC. Based on the convergence results, we compare the
+performance between FedAVG-ISCC and FedSGD-ISCC from
+a theoretical perspective.
+A. Assumptions and preliminaries
+To facilitate the convergence analysis, we first introduce
+the following assumptions for the loss functions, which are
+commonly adopted in existing works, such as [9], [18], [30]–
+[32].
+Assumption
+1
+(L-smoothness).
+The
+loss
+function,
+F(wt; St), ∀t, is either continuously differentiable or Lipschitz
+continuous with a non-negative Lipschitz constant L ≥0,
+which can be formulated as
+F(wt; St) ≤F(vt; St) + ⟨∇F(vt; St), (wt −vt)⟩
++ L
+2 ||wt −vt||2, ∀wt, vt ∈Rq, t,
+(13)
+where ∇F(vt; St) denotes the gradient of F(vt; St).
+Assumption 2 (Gradient bound). For any dataset St at t-th
+communication round, the expected squared norm of gradient
+∇F(wt; St) is bounded by a positive constant Gt, namely,
+E
+
+∥∇F(wt; St)∥2
+≤Gt.
+(14)
+Assumption 3 (Unbiased gradient and bounded vari-
+ance). For each device n, the stochastic gradient is unbiased,
+i.e., E
+ ∇F
+ wn
+t−1; ξn
+t
+
+= ∇F
+ wn
+t−1; Sn
+t
+
+. Moreover, the
+variance of stochastic gradients of each client is bounded by
+E
+ ∇F
+ wn
+t−1; ξn
+t
+
+−∇F
+ wn
+t−1; Sn
+t
+
+≤σ2,
+(15)
+where σ2
+n is a non-negative constant.
+Assumption 4 (Bounded dissimilarity). For any F(wt; St)
+and ∇F
+ wn
+t−1; Sn
+t
+
+, there exist constants α2 ≥1 and β2 ≥
+0 to quantify the degree of non independent and identically
+distributed (Non-IID) datasets such that
+N
+X
+n=1
+ρn ∇F
+ wn
+t−1; Sn
+t
+2 ≤α2 ∥F(wt; St)∥2 + β2.
+(16)
+If the datasets among devices are IID setting, then we have
+α2 = 1 and β2 = 0.
+In both FedAVG-ISCC and FedSGD-ISCC, the model pa-
+rameter wn
+t is updated based on the cumulative dataset Sn
+t−1
+and the newly sensed dataset Dn
+t in each round. Therefore,
+it is essential to discuss the impact of these datasets on the
+improvement of the global loss function. To this end, we first
+examine how these datasets affect the gradients used for model
+updating. This leads us to introduce Lemma 1.
+Lemma
+1.
+Given
+the
+datasets
+Sn
+t−1
+and
+Dn
+t
+in
+the
+t-th
+communication
+round,
+the
+aggregated
+gradient
+PN
+n=1 ρn∇F(wn
+t−1; Sn
+t ) satisfies the following equation.
+N
+X
+n=1
+ρn∇F(wn
+t−1; Sn
+t ) =
+St−1
+St
+N
+X
+n=1
+¯ρn∇F(wn
+t−1; Sn
+t−1) + Dt
+St
+N
+X
+n=1
+˜ρn∇F(wn
+t−1; Dn
+t ),
+(17)
+where Dt = PN
+n=1 Dn
+t , ¯ρn =
+Sn
+t−1
+St−1 and ˜ρn = Dn
+t
+Dt .
+proof. Please refer to Appendix A.
+B. Convergence analysis for FedAVG-ISCC
+In this subsection, we analyze the convergence rate of
+FedAVG-ISCC. We first introduce Lemma (2) to show the
+upper bound of the improvement of the global loss function
+based on Lemma 1.
+Lemma
+2.
+When
+the
+learning
+rate
+η
+satisfies
+0
+≤
+2L2η2τ (τ −1) ≤min{ 1
+5,
+S2
+t
+S2
+t +4S2
+t−1 } in the t-th communi-
+cation round, the improvement of the global loss function is
+bounded by (18).
+proof. Please refer to Appendix B.
+The average-squared gradient norm is widely adopted to
+depict the performance of FL [28]. Based on Lemma 1 and
+Lemma 2, we introduce the following Theorem to show the
+upper bound of the average squared gradient norm, which
+illustrates the convergence performance for FedAVG-ISCC.
+Theorem 1. Under the condition of 0 ≤2L2η2τ (τ −1) ≤
+min{ 1
+5,
+S2
+t
+S2
+t +4S2
+t−1 }, the average squared gradient norm after
+T communication rounds is bounded by
+1
+T
+T
+X
+t=1
+E ∥∇F(wt−1; St−1)∥2 ≤4 (F (w0; S0) −F ∗)
+(2 −α2) Tητ
+|
+{z
+}
+Effects of initialization
++
+4 PT
+t=1 E ∥εt∥2
+(2 −α2) Tη2τ 2
+|
+{z
+}
+Effects of communication errors
++ 4Lησ2
+(2 −α2)
+N
+X
+n=1
+(ρn)2
+|
+{z
+}
+Effects of gradient variance
++
+1
+(2 −α2) T
+" 
+1 +
+T
+X
+t=2
+S2
+t
+S2
+t−1
+!
+β2 + α2
+T
+X
+t=2
+D2
+t
+S2
+t−1
+Gt
+#
+|
+{z
+}
+Effects of sample sensing strategy and NonIID
++ L2η2σ2 (τ −1)
+(2 −α2) T
+"
+5 +
+T
+X
+t=2
+
+4 + S2
+t
+S2
+t−1
+#
+|
+{z
+}
+Effects of sample sensing strategy and local updates
+.
+(19)
+C. Convergence Analysis for FedSGD-ISCC
+Based on Lemma 1, we introduce Lemma 3 to show the
+upper bound of the improvement of the global loss function.
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+6
+F (wt; St) −F (wt−1; St−1) ≤
+
+
+
+
+
+
+
+
+
+
+
+
+
+−ητ
+4
+ 2 −α2
+∥∇F(w0; D1)∥2 + Lτ η2σ2 PN
+n=1 (ρn)2 +
+1
+ητ ∥εt∥2
++ 5L2η3σ2τ (τ−1)
+4
++ β2ητ
+4
+,
+if t = 1,
+−τ η
+4
+ 2 −α2
+∥∇F(wt−1; St−1)∥2 + Lτ η2σ2 PN
+n=1 (ρn)2 +
+1
+ητ ∥εt∥2
++
+
+1 +
+S2
+t
+4S2
+t−1
+
+L2η3σ2τ (τ −1) + ητ S2
+t
+4S2
+t−1 β2 + ητ α2
+4
+D2
+t
+S2
+t−1 Gt
+,
+otherwise.
+(18)
+Lemma 3. When the learning rate η satisfies 0 ≤η ≤
+min{ 1
+L,
+1
+2
+√
+2L
+St
+St−1 } in the t-th communication round, the
+improvement of the global loss function is bounded by
+F (wt; St) −F (wt−1; St−1) ≤
+
+
+
+
+
+
+
+−η
+4
+ 2 −α2
+∥∇F(w0; D1)∥2 + η ∥εt∥2 + ηβ2
+4 ,
+if t = 1,
+−η
+4
+ 2 −α2
+∥∇F(wt−1; St−1)∥2 + η ∥εt∥2
++ η
+4
+S2
+t
+S2
+t−1 β2 + ηα2
+4
+D2
+t
+S2
+t−1 Gt
+,
+otherwise.
+(20)
+proof. Please refer to Appendix C.
+Based on Lemma 1 and Lemma 3, we introduce the follow-
+ing Theorem to show the upper bound of the average-squared
+gradient norm for FedSGD-ISCC.
+Theorem
+2.
+Under
+the
+condition
+0
+≤
+η
+≤
+min{ 1
+L,
+1
+2
+√
+2L
+St
+St−1 }, ∀t,
+the
+average-squared
+gradient
+norm after T communication rounds is bounded by
+1
+T
+T
+X
+t=1
+E ∥∇F(wt−1; St−1)∥2 ≤
+4 (F (w0; S0) −F ∗)
+(2 −α2) Tη
+|
+{z
+}
+Effects of Initialization
++
+4
+(2 −α2) T
+" T
+X
+t=1
+E
+
+∥εt∥2#
+|
+{z
+}
+Effects of communication errors
++
+1
+(2 −α2) T
+" 
+1 +
+T
+X
+t=2
+S2
+t
+S2
+t−1
+!
+β2 + α2
+T
+X
+t=2
+D2
+t
+S2
+t−1
+Gt
+#
+|
+{z
+}
+Effects of sample sensing strategy and NonIID
+.
+(21)
+D. Performance analysis and discussion
+In this subsection, we analyze the performance of both
+FedAVG-ISCC and FedSGD-ISCC from a theoretical perspec-
+tive. Specifically, we examine their performance considering
+differnernt factors including IID setting, Non-IID setting,
+communication errors and sample collection strategy, followed
+by a discussion of their computational complexity.
+1) Performance analysis to IID setting: To analyze perfor-
+mance under IID data, we assume that both FedAVG-ISCC and
+FedSGD-ISCC employ the same sample collection strategy
+and experience identical communication errors during each
+communication round. For IID data, we have α2 = 1 and
+β2 = 0. When the local updates satisfy τ ≥1, it is evident
+from (19) that the bound of FedAVG-ISCC first decreases
+and then increases with the increase in τ. In contrast, the
+bound for FedSGD-ISCC in (21) remains constant since it does
+not involve local updates (τ). This indicates that FedAVG-
+ISCC can outperform FedSGD-ISCC due to the advantage of
+multiple local updates (τ). Thus, we conclude that FedAVG-
+ISCC is more efficient and effective under IID data, when τ
+is appropriately tuned.
+2) Performance analysis to Non-IID setting: For the anal-
+ysis under Non-IID setting, we similarly assume that both
+FedAVG-ISCC and FedSGD-ISCC employ the same sample
+collection strategy and experience identical communication
+errors during each communication round, with a constant τ.
+Under Non-IID data, we have α2 ≥1 and β2 ≥0. It is evident
+from (19) and (21) that Non-IID data significantly deteriorates
+the performance of both FedAVG-ISCC and FedSGD-ISCC
+as α2 (α2 ≤2) and β2 increase. However, the last term
+in (19) shows that the local updates (τ) in FedAVG-ISCC
+amplify the impact of Non-IID data, further exacerbating
+performance degradation. In contrast, FedSGD-ISCC, as seen
+in (21), avoids this issue by not involving multiple local
+updates. Consequently, while FedAVG-ISCC is more efficient
+under IID data, it is more vulnerable to Non-IID settings.
+Meanwhile, FedSGD-ISCC exhibits greater robustness under
+Non-IID data, as it does not suffer from the performance
+degradation caused by local updates.
+3) Performance analysis of communication errors: We ex-
+amine the performance of both FedAVG-ISCC and FedSGD-
+ISCC in the presence of communication errors, assuming
+identical sample collection strategies and data distribution.
+From the second term in (19), it is observed that commu-
+nication errors in FedAVG-ISCC are divided by Tη2, whereas
+in FedSGD-ISCC, communication errors are averaged over T
+rounds, as shown in (21). In practice, since the learning rate
+typically satisfies 0 ≤η ≤0.1, this significantly amplifies
+the communication errors in (19), severely deteriorating the
+performance of FedAVG-ISCC. Conversely, FedSGD-ISCC
+does not encounter such issues. Therefore, we conclude that
+FedSGD-ISCC is more robust to communication errors than
+FedAVG-ISCC.
+4) Performance analysis of sample collection strategy : It
+is clear from (19) and (21) that the sample collection strategy
+plays a critical role in the performance of both FedAVG-ISCC
+and FedSGD-ISCC. Collecting more samples in the early
+communication rounds leads to better performance. However,
+this also increases computational overhead in terms of training
+latency and energy consumption. Therefore, a well-designed
+sample collection strategy is essential for achieving cost-
+efficient federated learning.
+5) Computational Complexity: We next analyze the com-
+putational complexities of FedAVG-ISCC and FedSGD-ISCC,
+which are formally stated in the following corollaries.
+Corollary 1. Suppose the learning rate satisfies η =
+q
+N
+τT
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+7
+and let ρn =
+1
+N . Then, for sufficiently large T, the computa-
+tional complexity of FedAVG-ISCC is given by
+1
+T
+T
+X
+t=1
+E ∥∇F(wt−1; St−1)∥2 ≤O
+
++
+2M1
+(2 −α2) Nτ +
+M2
+(2 −α2)
+4 (F (w0; S0) −F ∗)
+(2 −α2)
+√
+NτT
++
+Lσ2
+(2 −α2)
+√
+NτT
++ L2Nσ2 (τ −1) M3
+(2 −α2) τT
+
+= O
+
+1
+√
+τNT
+
++ O
+M1
+Nτ
+
++ O (M2) + O
+σ2N (τ −1) M3
+τT
+
+(22)
+where O swallows all constants (including L). M1
+=
+PT
+t=1 E ∥εt∥2, M3 =
+1
+T
+PT
+t=1
+h
+5 + PT
+t=2
+
+4 +
+S2
+t
+S2
+t−1
+i
+, and
+M2 = 1
+T
+PT
+t=1
+h
+1 + PT
+t=2
+S2
+t
+S2
+t−1
+
+β2 + α2 PT
+t=2
+D2
+t
+S2
+t−1 Gt
+i
+.
+Corollary 2. Suppose the learning rate satisfies η =
+q
+N
+T .
+Then, for sufficiently large T, the computational complexity of
+FedSGD-ISCC is given by
+1
+T
+T
+X
+t=1
+E ∥∇F(wt−1; St−1)∥2 ≤
+O
+4 (F (w0; S0) −F ∗)
+(2 −α2)
+√
+NT
++
+4M1
+(2 −α2) +
+M2
+(2 −α2)
+
+= O
+
+1
+√
+NT
+
++ O (M1) + O (M2) .
+(23)
+It is observed from (22) and (23) that the computational
+complexities of FedAVG-ISCC and FedSGD-ISCC largely
+depends on the communication errors (M1) and sample
+sensing strategy (M2 and M3). If the communication er-
+rors are properly eliminated and the sample sensing strat-
+egy is bounded, the computational complexities of FedAVG-
+ISCC and FedSGD-ISCC are respectively represented as
+O
+
+1
+√
+τNT
+
++ O
+
+σ2N(τ−1)
+τT
+
+and O
+
+1
+√
+NT
+
+, which are con-
+sistent with previous results [30]–[32]. Therefore, a well-
+designed communication optimization algorithm and sample
+sensing strategy are necessary to improve their computational
+complexities.
+IV. SIMULATION RESULTS
+This section presents simulation results to demonstrate the
+efficiency of and validate the performance analysis of the ISCC
+design for FL.
+A. Experiment setup
+In this work, we set the number of devices to N = 10.
+The wireless channels between devices and the server follow
+independent and identically distributed (IID) Rayleigh fading,
+modeled as IID circularly symmetric complex Gaussian ran-
+dom variables with zero mean and unit variance. We assume
+the noise variance σ2
+z = 1 W, and the maximum transmit
+power budget of each device P n
+max = 10 W unless other-
+wise specified. We consider to train a convolutional neural
+network (CNN) model for an image classification task. The
+performance analysis derived in this work is evaluated and
+validated over the MNIST and Fashion MNIST datasets, each
+0
+20
+40
+60
+80
+100
+Communication rounds
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+Accuracy
+FedAVG, 
+T
+t = 1
+Dn
+t = 6000
+FedAVG-ISCC, 
+T
+t = 1
+Dn
+t = 6000
+FedAVG-ISCC, 
+T
+t = 1
+Dn
+t = 3000
+FedSGD, 
+T
+t = 1
+Dn
+t = 6000
+FedSGD-ISCC, 
+T
+t = 1
+Dn
+t = 6000
+FedSGD-ISCC, 
+T
+t = 1
+Dn
+t = 3000
+(a) MNIST dataset
+0
+20
+40
+60
+80
+100
+Communication rounds
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+Accuracy
+FedAVG, 
+T
+t = 1
+Dn
+t = 6000
+FedAVG-ISCC, 
+T
+t = 1
+Dn
+t = 6000
+FedAVG-ISCC, 
+T
+t = 1
+Dn
+t = 3000
+FedSGD, 
+T
+t = 1
+Dn
+t = 6000
+FedSGD-ISCC, 
+T
+t = 1
+Dn
+t = 6000
+FedSGD-ISCC, 
+T
+t = 1
+Dn
+t = 3000
+(b) FMNIST dataset
+Fig. 2. Performance comparison between FedSGD-ISCC and FedAVG-ISCC
+under IID settings.
+containing 60,000 samples for training and 10,000 samples
+for testing. The learning rate is set to 0.001. we assume that
+the classification task requires collecting a total of PT
+t=1Dn
+t
+= 6000 samples for each device during the training procedure.
+B. Validation of theoretical analysis
+In Fig. 2, we compare the accuracy of FedSGD-ISCC and
+FedAVG-ISCC across different datasets under IID settings,
+including MNIST and FMNIST. The results clearly show
+that FedAVG-ISCC significantly outperforms FedSGD-ISCC
+in IID settings, particularly in terms of faster convergence.
+This finding supports our theoretical analysis, which suggests
+that FedAVG-ISCC benefits from multiple local updates, lead-
+ing to improved convergence performance. Additionally, we
+observe that both FedAVG-ISCC and FedSGD-ISCC exhibit
+worse convergence compared to the classic FedAVG and
+FedSGD, respectively. This is consistent with our analysis,
+which indicates that communication errors and the sample
+sensing strategy negatively impact the performance of FL.
+In Fig. 3, we present the accuracy of FedAVG-ISCC and
+FedSGD-ISCC under average different average communica-
+tion errors. It is observed that the FedAVG-ISCC exhibits
+better performance than the FedSGD-ISCC when the average
+communication errors are low. However, the FedAVG-ISCC
+experiences severe degradation, and even worse than FedSGD-
+ISCC, while the FedSGD-ISCC basically remain the same
+performance when the average communication errors increase.
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+8
+0
+20
+40
+60
+80
+100
+Communication rounds
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+Accuracy
+FedAVG-ISCC, 1
+T
+T
+t = 1
+t = 0.24097
+FedAVG-ISCC, 1
+T
+T
+t = 1
+t = 0.42206
+FedAVG-ISCC, 1
+T
+T
+t = 1
+t = 1.43121
+FedSGD-ISCC, 1
+T
+T
+t = 1
+t = 0.24097
+FedSGD-ISCC, 1
+T
+T
+t = 1
+t = 0.42206
+FedSGD-ISCC, 1
+T
+T
+t = 1
+t = 1.43121
+(a) MNIST dataset
+0
+20
+40
+60
+80
+100
+Communication rounds
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+Accuracy
+FedAVG-ISCC, 1
+T
+T
+t = 1
+t = 0.24097
+FedAVG-ISCC, 1
+T
+T
+t = 1
+t = 0.42206
+FedAVG-ISCC, 1
+T
+T
+t = 1
+t = 1.43121
+FedSGD-ISCC, 1
+T
+T
+t = 1
+t = 0.24097
+FedSGD-ISCC, 1
+T
+T
+t = 1
+t = 0.42206
+FedSGD-ISCC, 1
+T
+T
+t = 1
+t = 1.43121
+(b) FMNIST dataset
+Fig. 3. Performance comparison between FedAVG-ISCC and FedSGD-ISCC
+under different communication errors.
+This verifies our analysis that the FedSGD-ISCC is more
+robust to the communication errors.
+In Fig. 4, we illustrate the accuracy of FedAVG-ISCC
+and FedSGD-ISCC under different Non-IID settings. The
+parameter γ indicates the degree of Non-IID setting, with
+lower values of γ corresponding to greater Non-IID setting.
+As shown in Fig. 4, FedAVG-ISCC outperforms FedSGD-
+ISCC, similar to the IID settings, when γ is large enough.
+However, as γ decreases, the convergence of FedSGD-ISCC is
+only slightly affected, while the convergence of FedAVG-ISCC
+deteriorates significantly, ultimately performing worse than
+FedSGD-ISCC. This is consistent with our analysis results,
+indicating that FedSGD-ISCC is is more robust to Non-IID
+data.
+To illustrate the effectiveness of our proposed FL-ISCC
+framework on enhancing training efficiency, we compare the
+accuracy versus both latency and energy consumption between
+FL-ISCC and OTA-FL using the MNIST dataset, as shown in
+5. The simulation results clearly indicate that both FedAVG-
+ISCC and FedSGD-ISCC outperform OTA-FedAVG and OTA-
+FedSGD, respectively, in terms of both latency and energy
+consumption. Therefore, the proposed FL-ISCC framework
+holds significant potential for enhancing training efficiency in
+the upcoming 6G era of intelligent applications.
+V. CONCLUSION
+In this work, we investigated an FL-ISCC framework
+that integrates sample collection, local training, and model
+0
+20
+40
+60
+80
+100
+Communication rounds
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+Accuracy
+FedAVG-ISCC, = 0.5
+FedAVG-ISCC, = 0.3
+FedAVG-ISCC, = 0.1
+FedSGD-ISCC, = 0.5
+FedSGD-ISCC, = 0.3
+FedSGD-ISCC, = 0.1
+(a) MNIST dataset
+0
+20
+40
+60
+80
+100
+Communication rounds
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+Accuracy
+FedAVG-ISCC, = 0.5
+FedAVG-ISCC, = 0.3
+FedAVG-ISCC, = 0.1
+FedSGD-ISCC, = 0.5
+FedSGD-ISCC, = 0.3
+FedSGD-ISCC, = 0.1
+(b) FMNIST dataset
+Fig. 4. Performance comparison between FedAVG-ISCC and FedSGD-ISCC
+under different Non-IID settings.
+0
+500
+1000
+1500
+2000
+2500
+3000
+3500
+4000
+Latency (s)
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+Accuracy
+FedAVG-ISCC
+OTA-FedAVG
+FedSGD-ISCC
+OTA-FedSGD
+(a) Latency
+0
+1000
+2000
+3000
+4000
+5000
+Energy (Joule)
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+Accuracy
+FedAVG-ISCC
+OTA-FedAVG
+FedSGD-ISCC
+OTA-FedSGD
+(b) Energy consumption
+Fig. 5. The effectiveness of our proposed FL-ISCC framework.
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+9
+exchange and aggregation. Within this framework, we im-
+plemented both FedAVG-ISCC and FedSGD-ISCC algo-
+rithms.Our empirical results highlighted the significant po-
+tential of the FL-ISCC framework in enhancing training
+efficiency, particularly in reducing latency and energy con-
+sumption in FL. We conducted a theoretical analysis and
+comparison between FedAVG-ISCC and FedSGD-ISCC, re-
+vealing that both sample collection and communication errors
+negatively impacted their performance. While FedAVG-ISCC
+significantly outperformed FedSGD-ISCC in terms of conver-
+gence rate under IID data conditions, FedSGD-ISCC exhib-
+ited greater robustness under Non-IID data, where FedAVG-
+ISCC experienced severe performance degradation as data
+heterogeneity increased. Additionally, FedSGD-ISCC proved
+more resilient to communication errors, whereas FedAVG-
+ISCC suffered notable performance degradation with increas-
+ing communication errors. Extensive simulations validated the
+effectiveness of our proposed framework and corroborated our
+theoretical findings.
+APPENDIX A
+PROOF OF LEMMA 1
+According to the definition of local loss function in (1), we
+have
+F(wn
+t−1; Sn
+t ) = 1
+Sn
+t
+
+
+X
+(xj,yj)∈Sn
+t−1
+f (wn
+t−1, (xj, yj))
++
+X
+(xj,yj)∈Dn
+t
+f (wn
+t−1, (xj, yj))
+
+
+= Sn
+t−1
+Sn
+t
+F(wn
+t−1; Sn
+t−1) + Dt
+n
+Sn
+t
+F(wn
+t−1; Dn
+t ).
+(24)
+As a result, the global loss function can be further rewritten
+as
+N
+X
+n=1
+ρnF
+ wn
+t−1; Sn
+t
+
+= 1
+St
+N
+X
+n=1
+Sn
+t F(wn
+t−1; Sn
+t )
+= 1
+St
+N
+X
+n=1
+ 
+Sn
+t−1F
+ wn
+t−1; Sn
+t−1
+
+St−1
+St−1+Dn
+t F
+ wn
+t−1; Dn
+t ;
+
+Dt
+Dt
+!
+= St−1
+St
+N
+X
+n=1
+¯ρn∇F(wn
+t−1; Sn
+t−1)+Dt
+St
+N
+X
+n=1
+˜ρn∇F(wn
+t−1; Dn
+t ),
+(25)
+Taking derivative with respect to wt−1 over both sides of
+(25), Lemma 1 can be obtained. This ends the proof.
+APPENDIX B
+PROOF OF LEMMA 2
+To facilitate the proof, we introduce the following auxiliary
+variables
+Averaged Mini-batch Gradient:
+¯gn
+t = 1
+τ
+τ
+X
+i=1
+∇F
+ wn
+t−1,i; ξ
+
+,
+(26)
+Averaged Full-batch Gradient:
+¯hn
+t = 1
+τ
+τ
+X
+i=1
+∇F
+ wn
+t−1,i; St
+
+.
+(27)
+In FedAVG-ISCC, all devices transmit local model to edge
+server via over-the-air computation technique to aggregate
+global model. Therefore, according to (6) and (12), the update
+of global model between two consecutive adjacent rounds is
+given by
+wn
+t −wn
+t−1 = εt −ητ
+N
+X
+n=1
+ρn¯gn
+t .
+(28)
+According to (13) in Assumption 1, the improvement on the
+global loss between two rounds follows that
+F (wt; St) −F (wt−1; St−1) ≤L
+2
+εt −ητ
+N
+X
+n=1
+ρn¯gn
+t
+
+2
+|
+{z
+}
+B1
++
+*
+∇F(wt−1; St−1), εt −ητ
+N
+X
+n=1
+ρn¯gn
+t
++
+|
+{z
+}
+A1
+(29)
+Now we aim to find the upper bound for A1 and B1,
+respectively. Specifically, for A1, we have
+A1=⟨∇F(wt−1; St−1), εt⟩−ητ
+*
+∇F(wt−1; St−1),
+N
+X
+n=1
+ρn¯hn
+t
++
++ητ
+*
+∇F(wt−1; St−1),
+N
+X
+n=1
+ρn  ¯hn
+t −¯gn
+t
+
++
+(a)
+= ⟨∇F(wt−1; St−1), εt⟩−ητ
+*
+∇F(wt−1; St−1),
+N
+X
+n=1
+ρn¯hn
+t
++
+(30)
+where (a) comes from the fact that E
+ ¯gn
+t −¯hn
+t
+
+= 0.
+Similarly, B1 is bounded by
+B1 = L
+2
+εt −ητ
+N
+X
+n=1
+ρn¯gn
+t −ητ
+N
+X
+n=1
+ρn¯hn
+t + ητ
+N
+X
+n=1
+ρn¯hn
+t
+
+2
+(b)
+≤Lη2τ 2
+
+N
+X
+n=1
+ρn  ¯gn
+t −¯hn
+t
+
+
+2
++ L
+εt −ητ
+N
+X
+n=1
+ρn¯hn
+t
+
+2
+(c)
+= Lη2τ 2
+N
+X
+n=1
+(ρn)2 ¯gn
+t −¯hn
+t
+2 + L
+εt −ητ
+N
+X
+n=1
+ρn¯hn
+t
+
+2
+(d)
+≤Lτ η2σ2
+N
+X
+n=1
+(ρn)2 + L ∥εt∥2 + Lη2τ 2
+
+N
+X
+n=1
+ρn¯hn
+t
+
+2
+−2Lητ
+* N
+X
+n=1
+ρn¯hn
+t , εt
++
+(31)
+where (b) comes from the fact that ∥a+b∥2 ≤2∥a∥2 +2∥b∥2.
+(c) is achieved due to the fact that clients are independent to
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+10
+each other, i.e., E
+D
+¯gi
+t −¯hi
+t, ¯gj
+t −¯hj
+t
+E
+= 0, ∀i ̸= j. (d) comes
+from Assumption 3.
+As a result, when 0 ≤Lητ ≤1
+2, (29) is reformulated as
+F (wt; St) −F (wt−1; St−1) ≤(1 −2Lητ )
+* N
+X
+n=1
+ρn¯hn
+t , εt
++
++
+*
+∇F(wt−1; St−1) −
+N
+X
+n=1
+ρn¯hn
+t , εt
++
++ Lτ η2σ2
+N
+X
+n=1
+(ρn)2
++Lη2τ 2
+
+N
+X
+n=1
+ρn¯hn
+t
+
+2
+−ητ
+*
+∇F(wt−1; St−1),
+N
+X
+n=1
+ρn¯hn
+t
++
++L∥εt∥2
+(e)
+≤−τ η
+2
+
+∥∇F(wt−1; St−1)∥2−
+∇F(wt−1; St−1)−
+N
+X
+n=1
+ρn¯hn
+t
+
+2
++
+
+N
+X
+n=1
+ρn¯hn
+t
+
+2
++ (1 −2Lητ ) ητ
+2
+
+N
+X
+n=1
+ρn¯hn
+t
+
+2
++ ∥εt∥2
+2ητ
++ ητ
+2
+∇F(wt−1; St−1) −
+N
+X
+n=1
+ρn¯hn
+t
+
+2
++ (1 −2Lητ )
+2ητ
+∥εt∥2
++ Lτ η2σ2
+N
+X
+n=1
+(ρn)2 + L ∥εt∥2 + Lη2τ 2
+
+N
+X
+n=1
+ρn¯hn
+t
+
+2
+= −τ η
+2 ∥∇F(wt−1; St−1)∥2 + Lτ η2σ2
+N
+X
+n=1
+(ρn)2 + ∥εt∥2
+ητ
++ τ η
+∇F(wt−1; St−1) −
+N
+X
+n=1
+ρn¯hn
+t
+
+2
+|
+{z
+}
+C1
+(32)
+where (e) derives from the fact that 2 ⟨a, b⟩= ∥a∥2 + ∥b∥2 −
+∥a −b∥2, and ⟨a, b⟩≤x∥a∥2
+2
++ ∥b∥2
+2x
+with x = τ η ≥0.
+To proof Lemma 2, we first derive the improvement at
+the first communication round, and then extend to the rest
+communication rounds.
+1) Improvement in the first communication round: The ML
+model is updated based on initialization w0 over the new
+sensed dataset D1 in the current round. Therefore, using the
+Lipschitz-smooth property and Jensen inequality, C1 can be
+expressed as:
+C1 =
+∇F(w0; D1) −1
+τ
+N
+X
+n=1
+ρn
+τ
+X
+i=1
+∇F
+ wn
+0,i; D1
+
+
+2
+≤1
+τ
+N
+X
+n=1
+ρn
+τ
+X
+i=1
+∇F(w0; D1) −∇F
+ wn
+0,i; D1
+2
+≤L2
+τ
+N
+X
+n=1
+ρn
+τ
+X
+i=1
+w0 −wn
+0,i
+2
+|
+{z
+}
+D1
+.
+(33)
+Furthermore, using the fact that ∥a + b∥2 ≤2∥a∥2 + 2∥b∥2,
+for ∀i in (33), we have
+D1 = η2
+
+i
+X
+j=1
+∇F
+ wn
+0,i; ξ
+
+
+2
+≤2η2
+
+i
+X
+j=1
+
+∇F
+ wn
+0,i; ξ
+
+−∇F
+ wn
+0,i; Dn
+1
+
+
+2
++ 2η2
+
+i
+X
+j=1
+∇F
+ wn
+0,i; Dn
+1
+
+
+2
+(f)
+≤2iη2
+i
+X
+j=1
+σ2 + 2η2i
+i
+X
+j=1
+∇F
+ wn
+0,j; Dn
+1
+2
+≤2iη2σ2 + 2η2i
+τ
+X
+j=1
+∇F
+ wn
+0,j; Dn
+1
+2
+(34)
+where (f) is derived from Cauchy–Schwarz inequality and
+Assumption 3. Using the equation Pτ
+i=1 i =
+τ(τ−1)
+2
+, we
+obtain
+τ
+X
+i=1
+wn
+0 −wn
+0,i
+2 ≤η2τ (τ −1)
+
+σ2 +
+τ
+X
+j=1
+∇F
+ wn
+0,j; Dn
+1
+2
+
+
+≤η2τ (τ −1)
+
+σ2 + 2
+τ
+X
+j=1
+∥∇F(wn
+0 ; Dn
+1 )∥2
+
+
++ 2η2τ (τ −1)
+τ
+X
+j=1
+∇F
+ wn
+0,j; Dn
+1
+
+−∇F(wn
+0 ; Dn
+1 )
+2
+(g)
+≤η2τ (τ −1)
+
+σ2 + 2
+τ
+X
+j=1
+∥∇F(wn
+0 ; Dn
+1 )∥2
+
+
++ 2L2η2τ (τ −1)
+τ
+X
+j=1
+wn
+0,j −wn
+0
+2
+(35)
+where (g) follows Lipschitz-smooth property. After rearrang-
+ing, we have
+τ
+X
+i=1
+wn
+0 −wn
+0,i
+2 ≤
+η2σ2τ (τ −1)
+1 −2L2η2τ (τ −1) +
+2η2τ 2 (τ −1)
+1 −2L2η2τ (τ −1) ∥∇F(wn
+0 ; Dn
+1 )∥2
+(36)
+Therefore, (33) is bounded by
+C1 ≤
+L2η2σ2 (τ −1)
+1 −2L2η2τ (τ −1) +
+2L2η2τ (τ −1)
+1 −2L2η2τ (τ −1) ∥∇F(wn
+0 ; Dn
+1 )∥2
+= L2η2σ2 (τ −1)
+1 −A
++
+A
+1 −A
+N
+X
+n=1
+ρn ∥∇F(wn
+0 ; Dn
+1 )∥2 ,
+(37)
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+11
+where A = 2L2η2τ (τ −1). Plug (37) back into (32), we have
+E (F (w1; S1) −F (w0; S0)) ≤
+−ητ
+2 ∥∇F(w0; D1)∥2 + Lτ η2σ2
+N
+X
+n=1
+(ρn)2 + 1
+ητ ∥ε1∥2
++ ητ
+ 
+L2η2σ2 (τ −1)
+1 −A
++
+A
+1 −A
+N
+X
+n=1
+ρn ∥∇F(wn
+0 ; Dn
+1 )∥2
+!
+(h)
+≤−ητ
+2
+
+1 −2α2A
+1 −A
+
+∥∇F(w0; D1)∥2+ Lτ η2σ2
+N
+X
+n=1
+(ρn)2
++ ητ L2η2σ2 (τ −1)
+1 −A
++ β2Aητ
+1 −A + 1
+ητ ∥εt∥2
+(i)
+≤−ητ
+4
+ 2 −α2
+∥∇F(w0; D1)∥2 + Lτ η2σ2
+N
+X
+n=1
+(ρn)2
++ ητ 5L2η2σ2 (τ −1)
+4
++ β2ητ
+4
++ 1
+ητ ∥εt∥2 .
+(38)
+where (h) is achieved due to Assumption 3 and Assumption
+4. (i) is derived from A = 2L2η2τ (τ −1) ≤1
+5.
+2) Improvement in the rest communication rounds: For the
+rest communication rounds, the ML model is updated based
+on both the accumulative dataset St−1 and the newly sensed
+dataset Dt. According to Lemma 1 , C1 can be expressed as
+C1 ≤1
+τ
+τ
+X
+i=1
+∇F(wt−1; St−1) −
+N
+X
+n=1
+ρn∇F
+ wn
+t−1,i; Sn
+t
+
+
+2
+(j)
+≤2
+τ
+τ
+X
+i=1
+ 
+S2
+t−1
+S2
+t
+N
+X
+n=1
+¯ρn ∇F(wt−1; St−1)−∇F(wn
+t−1,i; Sn
+t−1)
+2
+−
+N
+X
+n=1
+˜ρn
+
+Dt
+St
+∇F(wt−1; St−1) −Dt
+St
+∇F(wn
+t−1,i; Dn
+t )
+
+2!
+(k)
+≤2L2
+τ
+τ
+X
+i=1
+
+
+
+St−1
+St
+2
+N
+X
+n=1
+¯ρn wt−1 −wn
+t−1,i
+2
+|
+{z
+}
+D2
++
+Dt
+St
+2
+N
+X
+n=1
+˜ρn wt−1 −¯wn
+t−1,i
+2
+|
+{z
+}
+D3
+
+
+,
+(39)
+where (j) and (k) come from the fact that ∥a+b∥2 ≤2∥a∥2+
+2∥b∥2, and Lipschitz-smooth property, respectively. wn
+t−1,i and
+¯wn
+t−1,i are the updated model after i-th local step based on
+the datasets Sn
+t−1 and Dt, respectively. Similar to (34), for ∀i
+in (39), we have
+D2 = 2η2
+
+i
+X
+j=1
+∇F
+ wn
+t−1,j; Sn
+t−1
+
+
+2
++ 2η2
+
+i
+X
+j=1
+
+∇F
+ wn
+t−1,j; ξ
+
+−∇F
+ wn
+t−1,j; Sn
+t−1
+
+
+2
+≤2iη2σ2 + 2η2i
+τ
+X
+j=1
+∇F
+ wn
+t−1,j; Sn
+t−1
+2 .
+(40)
+Using the equation Pτ
+i=1 i = τ(τ−1)
+2
+, we have
+τ
+X
+i=1
+wt−1 −wn
+t−1,i
+2 ≤
+η2τ (τ −1)
+
+σ2 +
+τ
+X
+j=1
+∇F
+ wn
+t−1,j; Sn
+t−1
+2
+
+
+≤η2τ (τ −1)
+ 
+σ2 + 2
+τ
+X
+i=1
+∇F
+ wn
+t−1; Sn
+t−1
+2
+!
++ 2L2η2τ (τ −1)
+τ
+X
+j=1
+wn
+t−1,j −wn
+t−1
+2 .
+(41)
+After rearranging, we have
+τ
+X
+i=1
+wt−1 −wn
+t−1,i
+2 ≤
+η2σ2τ (τ −1)
+1 −2L2η2τ (τ −1)
++
+2η2τ 2 (τ −1)
+1 −2L2η2τ (τ −1)
+∇F(wn
+t−1; Sn
+t−1)
+2 .
+(42)
+Similarly, we can bound D3 by the same way, which can be
+presented by
+τ
+X
+i=1
+wt−1 −¯wn
+t−1,i
+2 ≤
+η2σ2τ (τ −1)
+1 −2L2η2τ (τ −1)
++
+2η2τ 2 (τ −1)
+1 −2L2η2τ (τ −1)
+∇F(wn
+t−1; Dn
+t )
+2 .
+(43)
+As a result, (39) is bounded by
+C1 ≤
+A
+1 −A
+"St−1
+St
+2
+N
+X
+n=1
+¯ρn ∇F(wn
+t−1; Sn
+t−1)
+2
++
+Dt
+St
+2
+N
+X
+n=1
+˜ρn ∇F(wn
+t−1; Dn
+t )
+2
+#
++
+
+1 −2St−1Dt
+S2
+t
+ L2η2σ2 (τ −1)
+1 −A
+.
+(44)
+Plug (44) back into (32), we have
+E (F (wt; St) −F (wt−1; St−1))
+(l)
+≤ητ Aα2
+1 −A
+D2
+t
+S2
+t
+Gt + 1
+ητ ∥εt∥2
+−τ η
+2
+
+1 −2Aα2
+1 −A
+S2
+t−1
+S2
+t
+
+∥∇F(wt−1; St−1)∥2+ Lτ η2σ2
+N
+X
+n=1
+(ρn)2
++
+
+1 −2St−1Dt
+S2
+t
+L2η3σ2τ (τ −1)
+1 −A
++ ητ A
+1 −Aβ2
+
+(m)
+≤−τ η
+4
+ 2 −α2
+∥∇F(wt−1; St−1)∥2+Lτ η2σ2
+N
+X
+n=1
+(ρn)2+∥εt∥2
+ητ
++
+
+1 +
+S2
+t
+4S2
+t−1
+
+L2η3σ2τ (τ −1) + ητ S2
+t
+4S2
+t−1
+β2 + ητ α2
+4
+D2
+t
+S2
+t−1
+Gt.
+(45)
+where (l) comes from Assumption 2 and Assumption 4. (m)
+follows the fact that A ≤
+S2
+t
+S2
+t +4S2
+t−1 . This completes the proof.
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+12
+APPENDIX C
+PROOF OF LEMMA 4
+In FedSGD-ISCC, all devices transmit the gradients to edge
+server for gradient aggregation via over-the-air computation
+technique. Then, the global model is updated based on the
+aggregated gradient. Therefore, according to (8) and (12),
+the update of global model between two consecutive adjacent
+rounds is given by
+wt −wt−1 = ε1 −
+N
+X
+n=1
+ρn∇F
+ wn
+t−1; Sn
+t
+
+(46)
+According to assumption 1, the improvement on the global
+loss can be expressed as:
+F (wt; St)−F (wt−1; St−1) ≤
+η
+*
+∇F(wt−1; St−1),εt−
+N
+X
+n=1
+ρn∇F
+ wn
+t−1; Sn
+t
+
++
+|
+{z
+}
+A2
++ Lη2
+2
+−
+N
+X
+n=1
+ρn∇F
+ wn
+t−1; Sn
+t
+
++εt
+
+2
+|
+{z
+}
+B2
+.
+(47)
+Now we aim to find the upper bound for A2 and B2,
+respectively. Specifically, for A2, we have
+A2 = −η
+2 ∥∇F(wt−1; St−1)∥2 −η
+2
+
+N
+X
+n=1
+ρn∇F
+ wn
+t−1; Sn
+t
+
+
+2
++ η
+2
+∇F(wt−1; St−1) −
+N
+X
+n=1
+ρn∇F
+ wn
+t−1; Sn
+t
+
+
+2
++ ⟨∇F(wt−1; St−1), εt⟩
+(48)
+For B2, we have
+B2 =Lη2
+2
+
+N
+X
+n=1
+ρn∇F
+ wn
+t−1; Sn
+t
+
+
+2
++ Lη2
+2
+∥εt∥2
+−Lη2
+* N
+X
+n=1
+ρn∇F
+ wn
+t−1; Sn
+t
+
+, εt
++
+(49)
+Similar to (32), when η ≤
+1
+L, the (47) can be further
+bounded by
+F (wt; St)−F (wt−1; St−1) ≤−η
+2 ∥∇F(wt−1; St−1)∥2
++ η
+2 (Lη −1)
+
+N
+X
+n=1
+ρn∇F
+ wn
+t−1; Sn
+t
+
+
+2
++ Lη2
+2
+∥εt∥2
++ η
+2
+∇F(wt−1; St−1) −
+N
+X
+n=1
+ρn∇F
+ wn
+t−1; Sn
+t
+
+
+2
++ η
+*
+∇F(wt−1; St−1) −
+N
+X
+n=1
+ρn∇F
+ wn
+t−1; Sn
+t
+
+, εt
++
++ η (1 −Lη)
+* N
+X
+n=1
+ρn∇F
+ wn
+t−1; Sn
+t
+
+, εt
++
+≤−η
+2 ∥∇F(wt−1; St−1)∥2 + η ∥εt∥2
++ η
+∇F(wt−1; St−1) −
+N
+X
+n=1
+ρn∇F
+ wn
+t−1; Sn
+t
+
+
+2
+|
+{z
+}
+C2
+.
+(50)
+Similar to the proof of lemma 2, we first derive the
+improvement of loss function at the first communication round,
+and then extend to the rest communication rounds.
+1) Improvement in the first communication round: The ML
+model is updated based on initialization w0 over the new
+sensed dataset D1 in the current round. Therefore, applying the
+Lipschitz-smooth property and Cauchy–Schwarz inequality,
+C2 is bounded by
+C2 ≤η
+N
+X
+n=1
+ρn ∇F(wt−1; D1) −∇F
+ wn
+t−1; Dn
+1
+2
+≤L2η
+N
+X
+n=1
+ρn wn
+t−1 −wn
+t
+2
+≤L2η3
+N
+X
+n=1
+ρn ∇F
+ wn
+t−1; Dn
+1
+2
+≤L2α2η3 ∇F
+ wt−1; D1
+2 + L2η3β2.
+(51)
+As a result, when η ≤
+1
+2L, (50) is reformulated as
+F (wt; St)−F (wt−1; St−1) ≤
+−η
+2
+ 1 −2L2η2α2
+∥∇F(w0; D1)∥2 + η ∥εt∥2 + +L2η3β2
+≤−η
+4
+ 2 −α2
+∥∇F(w0; D1)∥2 + η ∥εt∥2 + ηβ2
+4 .
+(52)
+2) Improvement in the rest communication rounds: For the
+rest communication rounds, the ML model is updated based
+on both the accumulative dataset St−1 and the newly sensed
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+13
+dataset Dt. According to Lemma 1 , C2 is expressed as
+C2 ≤η
+∇F(wt−1; St−1) −St−1
+St
+N
+X
+n=1
+¯ρn∇F(wn
+t−1; Sn
+t−1)
+−Dt
+St
+N
+X
+n=1
+˜ρn∇F(wn
+t−1; Dn
+t )
+
+2
+≤2L2η
+ 
+S2
+t−1
+S2
+t
+N
+X
+n=1
+¯ρn ∥wt−1−¯wn
+t ∥2 + D2
+t
+S2
+t
+N
+X
+n=1
+˜ρn ∥wt−1 −˜wn
+t ∥2
+!
+≤2α2L2η3
+S2
+t−1
+S2
+t
+∥∇F(wt−1; St−1)∥2 + D2
+t
+S2
+t
+∥∇F(wt−1; Dt)∥2
+
++ 2β2L2η3
+S2
+t−1
+S2
+t
++ D2
+t
+S2
+t
+
+.
+(53)
+where ¯wn
+t and ˜wn
+t are the updated models based on the
+datasets Sn
+t−1 and Dt, respectively.
+As a result, when η ≤
+1
+2
+√
+2L
+St
+St−1 , we have
+F (wt; St) −F (wt−1; St−1) ≤
+≤−η
+2
+
+1 −α2
+2
+
+∥∇F(wt−1; St−1)∥2 + η ∥εt∥2
++ η
+4
+
+1 −2St−1Dt
+S2
+t
+ S2
+t
+S2
+t−1
+β2 + ηα2
+4
+D2
+t
+S2
+t−1
+∥∇F(wt−1; Dt)∥2
+≤−η
+4
+ 2 −α2
+∥∇F(wt−1; St−1)∥2 + η ∥εt∥2
++ η
+4
+S2
+t
+S2
+t−1
+β2 + ηα2
+4
+D2
+t
+S2
+t−1
+Gt.
+(54)
+This ends the proof.
+REFERENCES
+[1] Peltonen,
+E.
+et.
+al.,
+“6G
+white
+paper
+on
+edge
+intelli-
+gence,”
+arXiv
+preprint
+arXiv:2004.14850,
+2020.
+Available:
+https://doi.org/10.48550/arXiv.2004.14850.
+[2] W. Saad, M. Bennis and M. Chen, “A vision of 6G wireless systems:
+Applications, trends, technologies, and open research problems,” IEEE
+Network, vol. 34, no. 3, pp. 134-142, May/Jun. 2020.
+[3] P. Zhang, H. Yang, Z. Feng, Y. Cui, J. Dai, X. Qin, J. Li, and Q. Zhang,
+“Toward intelligent and efficient 6G networks: JCSC enabled on-purpose
+machine communications,” IEEE Wireless Commun., vol. 30, no. 1, pp.
+150-157, Feb. 2023.
+[4] Z. Feng, Z. Wei, X. Chen, H. Yang, Q. Zhang and P. Zhang, “Joint
+communication, sensing, and computation enabled 6G intelligent machine
+system,” IEEE Network, vol. 35, no. 6, pp. 34-42, Nov./Dec. 2021.
+[5] G. Zhu, Z. Lyu, X. Jiao, P. Liu, M. Chen, J. Xu, S. Cui, P. Zhang,
+“Pushing AI to wireless network edge: An overview on integrated sensing,
+communication, and computation towards 6G,” Sci. China Inf. Sci, vol.
+66, no. 3, 2023.
+[6] K. B. Letaief, Y. Shi, J. Lu and J. Lu, “Edge artificial intelligence for
+6G: Vision, enabling technologies, and applications,” IEEE J. Sel. Areas
+Commun., vol. 40, no. 1, pp. 5-36, Jan. 2022.
+[7] B. McMahan, E. Moore, D. Ramage, S. Hampson, and B. A. y Arcas,
+“Communication-efficient learning of deep networks from decentralized
+data,” in Proc. Int. Conf. Artif. Intell. Stat. (AISTATS), Lauderdale, FL,
+USA, 2017, pp. 1273–1282.
+[8] T. Li, A. K. Sahu, A. Talwalkar and V. Smith, “Federated learning:
+challenges, methods, and future directions,” IEEE Signal Processing
+Mag., vol. 37, no. 3, pp. 50-60, May 2020.
+[9] S. Wang et al., “Adaptive federated learning in resource constrained edge
+computing systems,” IEEE J. Sel. Areas Commun., vol. 37, no. 6, pp.
+1205-1221, Jun. 2019.
+[10] M. Chen, Z. Yang, W. Saad, C. Yin, H. V. Poor and S. Cui, “A
+joint learning and communications framework for federated learning over
+wireless networks,” IEEE Trans. Wireless Commun., vol. 20, no. 1, pp.
+269-283, Jan. 2021.
+[11] Z. Jiang et al., “Computation and communication efficient federated
+learning with adaptive model pruning,” IEEE Trans. Mobile Comput.,
+vol. 23, no. 3, pp. 2003-2021, Mar. 2024.
+[12] N. Shlezinger, M. Chen, Y. C. Eldar, H. V. Poor and S. Cui, “Federated
+learning with quantization constraints,” IEEE Int. Conf. Acoust., Speech
+Signal Process. (ICASSP), Barcelona, Spain, 2020, pp. 8851-8855.
+[13] G. Zhu, Y. Wang, and K. Huang, “Broadband analog aggregation for
+low-latency federated edge learning,” IEEE Trans. Wireless Commun.,
+vol. 19, no. 1, pp. 491–506, Jan. 2020.
+[14] K. Yang, T. Jiang, Y. Shi, and Z. Ding, “Federated learning via over-
+the-air computation,” IEEE Trans. Wireless Commun., vol. 19, no. 3, pp.
+2022–2035, Mar. 2020.
+[15] X. Cao, Z. Lyu, G. Zhu, J. Xu, L. Xu and S. Cui, “An overview on
+over-the-air federated edge learning,” IEEE Wireless Commun., vol. 31,
+no. 3, pp. 202-210, June 2024.
+[16] D. Liu and O. Simeone, “Privacy for free: Wireless federated learning
+via uncoded transmission with adaptive power control,” IEEE J. Sel. Areas
+Commun., vol. 39, no. 1, pp. 170-185, Jan. 2021.
+[17] M. Mohammadi Amiri and D. D. G¨und¨uz, “Machine learning at the
+wireless edge: Distributed stochastic gradient descent over-the-air,” IEEE
+Trans. Signal Process., vol. 68, pp. 2155–2169, 2020.
+[18] X. Cao, G. Zhu, J. Xu, Z. Wang, and S. Cui, “Optimized power control
+design for over-the-air federated edge learning,” IEEE J. Sel. Areas
+Commun., vol. 40, no. 1, pp. 342–358, Jan. 2022.
+[19] N. Zhang and M. Tao, “Gradient statistics aware power control for over-
+the-air federated learning,” IEEE Trans. Wireless Commun., vol. 20, no.
+8, pp. 5115–5128, Aug. 2021.
+[20] L. Li et al., “Energy and spectrum efficient federated learning via high-
+precision over-the-air computation,” IEEE Trans. Wireless Commun., vol.
+23, no. 2, pp. 1228-1242, Feb. 2024.
+[21] T. Gafni, K. Cohen and Y. C. Eldar, “Federated learning from heteroge-
+neous data via controlled air aggregation with bayesian estimation,” IEEE
+Trans. Signal Process., vol. 72, pp. 1928-1943, 2024.
+[22] X. Cao, G. Zhu, J. Xu, and S. Cui, “Transmission power control for
+over-the-air federated averaging at network edge,” IEEE J. Sel. Areas
+Commun., vol. 40, no. 5, pp. 1571–1586, May 2022.
+[23] Q. Qi, X. Chen, A. Khalili, C. Zhong, Z. Zhang and D. W. K. Ng,
+“Integrating sensing, computing, and communication in 6G wireless
+networks: Design and optimization,” IEEE Trans. Commun., vol. 70, no.
+9, pp. 6212-6227, Sept. 2022.
+[24] L. Zhao, D. Wu, L. Zhou and Y. Qian, “Radio Resource Allocation for
+Integrated Sensing, Communication, and Computation Networks,” IEEE
+Trans. Wireless Commun., vol. 21, no. 10, pp. 8675-8687, Oct. 2022.
+[25] Y. He, G. Yu, Y. Cai and H. Luo, “Integrated sensing, computation, and
+communication: System framework and performance optimization,” IEEE
+Trans. Wireless Commun, vol. 23, no. 2, pp. 1114-1128, Feb. 2024.
+[26] D. Wen et al., “Task-oriented sensing, computation, and communication
+integration for multi-device edge AI,” IEEE Trans. Wireless Commun.,
+vol. 23, no. 3, pp. 2486-2502, Mar. 2024.
+[27] X. Li, G. Feng, Y. Liu, S. Qin and Z. Zhang, “Joint sensing, communi-
+cation, and computation in mobile crowdsensing enabled edge networks,”
+IEEE Trans. Wireless Commun., vol. 22, no. 4, pp. 2818-2832, Apr. 2023.
+[28] P. Liu et al., “Toward ambient intelligence: Federated edge learning
+with task-oriented sensing, computation, and communication integration,”
+IEEE J. Sel. Topics Signal Process., vol. 17, no. 1, pp. 158-172, Jan. 2023.
+[29] Y. Liang, Q. Chen, G. Zhu and H. Jiang, “Theoretical analysis and per-
+formance evaluation for federated edge learning with integrated sensing,
+communication and computation,” in Proc. IEEE Int. Conf. Commun.
+Workshops (ICC Workshops), Rome, Italy, 2023, pp. 592-598.
+[30] J. Wang and G. Joshi, “Cooperative SGD: A unified framework for
+the design and analysis of communication-efficient SGD algorithms,” J.
+Mach. Learn. Res., vol. 22, no. 213, pp. 9709-9758, Jan. 2021.
+[31] Hao Yu, Rong Jin, and Sen Yang, “On the linear speedup analysis
+of communication efficient momentum SGD for distributed non-convex
+optimization,” in
+Proc. Int. Conf. Mach. Learn. (ICML), vol 97, pp.
+7184-7193, 2019.
+[32] J. Wang, Q. Liu, H. Liang, G. Joshi, and H. V. Poor, “Tackling the ob-
+jective inconsistency problem in heterogeneous federated optimization,”
+in Proc. Int. Conf. Neural Inf. Process. Syst. (NeuIPS), No. 638, pp. 7611
+- 7623, Dec. 2020.
+[33] Y. Mao, J. Zhang and K. B. Letaief, “Dynamic computation offloading
+for mobile-edge computing with energy harvesting devices,” IEEE J. Sel.
+Areas Commun., vol. 34, no. 12, pp. 3590-3605, Dec. 2016.

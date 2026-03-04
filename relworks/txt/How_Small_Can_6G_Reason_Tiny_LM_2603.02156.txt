@@ -1,0 +1,1847 @@
+1
+How Small Can 6G Reason? Scaling Tiny
+Language Models for AI-Native Networks
+Mohamed Amine Ferrag∗‡, Abderrahmane Lakas∗, Merouane Debbah†
+∗Department of Computer and Network Engineering, United Arab Emirates University, UAE
+† Research Institute for Digital Future, Khalifa University, UAE
+‡ Corresponding author: mohamed.ferrag@uaeu.ac.ae
+Abstract—Emerging 6G visions, reflected in ongoing standard-
+ization efforts within 3GPP, IETF, ETSI, ITU-T, and the O-
+RAN Alliance, increasingly characterize networks as AI-native
+systems in which high-level semantic reasoning layers operate
+above standardized control and data-plane functions. Although
+frontier-scale large language models (LLMs) such as Qwen2.5-7B
+and Olmo-3-7B demonstrate strong reasoning capability, their
+computational footprint limits deployment in latency-sensitive,
+edge-native infrastructures. This paper presents a systematic
+empirical study of the scaling behavior and deployment efficiency
+of compact language models for network-level semantic reasoning
+in AI-native 6G systems. Using 6G-Bench—a standardization-
+aligned benchmark comprising 30 decision-making tasks across
+five capability domains—we evaluate models ranging from 135M
+(SmolLM2-135M) to 7B parameters (Qwen2.5-7B), including
+mid-scale architectures such as Llama-3.2-1B, Granite-1B, and
+Qwen2.5-3B. Deterministic accuracy (pass@1) increases from
+0.224 at 135M to 0.707 at 7B, but scaling gains are highly non-
+uniform. A pronounced stability transition occurs in the 1–1.5B
+range, where accuracy rises from 0.373 (Llama-3.2-1B) to 0.531
+(Qwen2.5-1.5B) and the instability gap ∆5 contracts from 0.356
+to 0.138. Beyond 3B parameters, improvements diminish (+0.064
+from 3B to 7B). Through single-query inference profiling and
+an Edge Score metric that normalizes accuracy by latency and
+memory footprint, we show that semantic reliability per unit
+edge resource does not scale monotonically with parameter count.
+Instead, mid-scale models (approximately 1.5–3B) achieve the
+most favorable balance between deterministic stability and com-
+putational efficiency, providing deployment-relevant guidance for
+AI-native 6G architectures. All scripts and results are publicly
+available at https://github.com/maferrag/6G-Bench.
+Index Terms—6G, Small Language Models, Tiny LLMs, Se-
+mantic Communication, Network-Level Reasoning, AI-Native
+Networks, Scaling Analysis
+I. INTRODUCTION
+The evolution toward AI-native 6G networks represents
+a structural transformation in how intelligence is embedded
+into communication systems. Unlike previous generations, in
+which machine learning served localized optimization roles,
+6G visions position artificial intelligence as a native architec-
+tural layer spanning radio access networks (RAN) [1], core
+networks, and distributed edge–cloud infrastructures. Within
+3GPP [2], architectural evolution toward service-based sys-
+tems, intent-driven management, network exposure functions
+(NEF), network slicing, and network digital twins reflects the
+emergence of semantic control layers operating above stan-
+dardized protocol stacks. The O-RAN Alliance [3] advances
+intelligent RAN through near-real-time and non-real-time RIC
+controllers enabling AI-driven closed-loop control, while ETSI
+MEC [4] formalizes edge-native orchestration. In parallel,
+IETF work [5] on intent-based networking, autonomous net-
+works, and zero-trust architectures, together with ITU-T IMT-
+2030 frameworks [6], envisions networks capable of sub-
+millisecond latency (< 1 ms), peak data rates approaching
+0.1–1 Tbps, reliability beyond 99.99999%, and pervasive AI
+integration. Achieving such targets requires real-time seman-
+tic reasoning under stringent compute, energy, and security
+constraints.
+At the physical and system levels, 6G introduces disruptive
+technologies that dramatically increase network dimensionality
+and controllability. Operation in sub-THz and THz bands (100
+GHz–1 THz), extremely large antenna arrays (ELAA) [7] with
+hundreds to thousands of elements, cell-free massive MIMO
+[8], and reconfigurable intelligent surfaces (RIS) comprising
+hundreds or thousands of programmable meta-elements en-
+able programmable propagation environments [9]. Integrated
+Sensing and Communication (ISAC), semantic communica-
+tion, distributed digital twins, native federated learning, and
+quantum-safe or quantum-assisted networking further couple
+communication, computation, and intelligence [10]. Emerg-
+ing quantum technologies—including quantum key distribu-
+tion (QKD), quantum random number generation, and early-
+stage quantum networking—introduce new trust and security
+paradigms, while quantum-enhanced optimization promises
+acceleration for combinatorial resource allocation [11]. Co-
+ordinating RIS phase shifts, THz beam alignment, slice ar-
+bitration across URLLC/eMBB/mMTC regimes, digital twin
+synchronization, and quantum-secure trust management re-
+quires multi-step reasoning across radio, compute, and policy
+layers. Large language models (LLMs) and AI agents are
+therefore being explored as semantic reasoning engines that
+can orchestrate these heterogeneous capabilities [12], [13].
+However, frontier-scale LLMs typically range from 70B to
+500B parameters, require hundreds of gigabytes of memory,
+and depend on multi-accelerator clusters—rendering them
+impractical for deployment at RAN nodes or MEC platforms
+with tight power and latency budgets.
+This architectural tension intersects with classical scal-
+ing law research in large language models. Kaplan et al.
+demonstrated that language modeling loss follows a power-
+law with respect to model size, with exponent αN ≈0.076,
+while compute-optimal scaling analyses such as Chinchilla
+[14] showed that optimal performance under fixed FLOPs
+arXiv:2603.02156v1  [cs.NI]  2 Mar 2026
+2
+budgets requires near-equal scaling of parameters and tokens
+(N ∝C0.5, D ∝C0.5). Subsequent work on emergent abili-
+ties identified qualitative capability transitions beyond approx-
+imately 1022–1023 FLOPs, often corresponding to 10B–100B
+parameter regimes. These studies rely on log-linear regression,
+power-law fitting, and breakpoint detection to characterize
+smooth scaling or phase-transition behavior [15], [16]. Yet
+they primarily optimize cross-entropy loss or open-domain
+benchmark accuracy. In contrast, AI-native 6G systems impose
+fundamentally different constraints: deterministic single-shot
+reliability, bounded reasoning instability, strict adherence to
+zero-trust and quantum-safe security policies, and control-loop
+operation potentially below 1 ms. Whether similar scaling
+exponents, regime transitions, or saturation effects emerge
+in structured, safety-critical network reasoning—particularly
+within the compact 0.1B–7B parameter range suitable for edge
+deployment—remains unexplored.
+This motivates a central question for AI-native 6G archi-
+tecture design: How does network-level semantic reasoning
+capability scale in small and tiny language models under
+6G constraints? Unlike conventional QA benchmarks, 6G
+decision-making requires structured reasoning across heteroge-
+neous abstractions, including intent feasibility under dynamic
+network state, slice selection and resource arbitration, RIS and
+massive MIMO configuration, THz beam management, SLA
+violation forecasting, trust-aware compute exposure, quantum-
+secure authentication, inter-operator federation, distributed
+AI coordination, and ISAC-driven control. These capabili-
+ties align with architectural trajectories articulated in 3GPP
+service-based systems, IETF intent networking drafts [5],
+ETSI MEC orchestration frameworks [4], O-RAN intelligent
+control loops [3], and ITU IMT-2030 visions [6]. Determining
+whether stable deterministic reasoning emerges at 0.5B, 1B,
+or 3B parameters—and quantifying the marginal gains beyond
+this regime—therefore becomes not only a scaling-law investi-
+gation, but a foundational architectural problem for deploying
+AI agents across hierarchical 6G, edge, and quantum-enhanced
+network tiers.
+In this work, we conduct a systematic scaling analysis of
+small and tiny language models (135M–7B parameters) using
+6G-Bench [17], a standardization-aligned evaluation frame-
+work comprising 30 decision-making tasks organized into five
+capability domains derived from 3GPP, IETF, ETSI, ITU-
+T, and O-RAN architectural directions. Rather than propos-
+ing a new benchmark, we leverage this controlled evalua-
+tion environment to characterize empirical scaling regimes
+governing deterministic semantic reasoning in AI-native 6G
+contexts. Our study explicitly targets the deployment-relevant
+regime below 10B parameters—far smaller than frontier
+LLMs (70B–500B)—and focuses on safety-critical, policy-
+constrained network reasoning under zero-shot, deterministic
+decoding. We quantify how pass@1 accuracy evolves from
+0.224 at 135M parameters to 0.707 at 7B, identify a pro-
+nounced stability transition in the 1–1.5B range, and analyze
+how reasoning instability (∆5) contracts from 0.365 to 0.031
+as scale increases. This enables principled characterization
+of when compact LLM-based AI agents become sufficiently
+reliable for hierarchical 6G control-plane deployment.
+A. Contributions
+This paper makes the following contributions:
+• First systematic SLM scaling study for AI-native 6G
+semantic reasoning. We evaluate 10 instruction-tuned
+models spanning 135M to 7B parameters across dense
+Transformer and hybrid architectures, using 6G-Bench’s
+30 standardized tasks aligned with intent management,
+slicing, trust, agentic control, and distributed intelligence
+in 6G systems.
+• Identification of empirical scaling regimes and a
+stability threshold. We demonstrate that scaling gains
+are highly non-uniform. Deterministic accuracy increases
+from 0.373 at 1B to 0.531 at 1.5B, marking a sharp
+transition in reasoning reliability. Beyond 3B parameters,
+marginal improvements diminish, with pass@1 improv-
+ing by only 0.064 between 3B and 7B.
+• Deterministic stability analysis via pass@1, pass@k,
+and instability gap (∆k). We formalize reasoning insta-
+bility as ∆k = Ak −A1 and show that the gap collapses
+from 0.356–0.383 in the sub-1B regime to 0.051 at 3B
+and 0.031 at 7B. This contraction indicates convergence
+between stochastic exploration and deterministic infer-
+ence, a prerequisite for safety-critical control tasks in
+zero-trust, SLA-bound 6G environments.
+• Heterogeneous domain-level scaling elasticity charac-
+terization. Using a log-parameter sensitivity coefficient
+SGj, we quantify domain-specific scaling responsive-
+ness. Intent & Policy Reasoning exhibits the highest
+elasticity (SG1 = 0.154), while Trust, Security & SLA
+Awareness shows the lowest (SG3 = 0.104). Distributed
+Intelligence & Emerging 6G Use Cases (SG5 = 0.131)
+demonstrate strong scale dependence, reflecting the com-
+plexity of federated orchestration, ISAC coordination, and
+digital twin synchronization.
+• Deployment-tier implications for AI agents in hi-
+erarchical 6G architectures. Grounded in empirical
+scaling regimes, inference profiling, and the proposed
+Edge Score, we map capability–efficiency trade-offs to
+realistic 6G deployment tiers: (i) ultra-compact models
+(≤350M) for localized RAN/MEC advisory reasoning
+where resource efficiency dominates; (ii) mid-scale mod-
+els (1.5–3B) that lie on the capability–efficiency frontier
+for stability-critical intent translation, agentic coordina-
+tion, RIS/THz configuration logic, and cross-slice arbi-
+tration; and (iii) optional 7B-class models for centralized
+orchestration, where marginal robustness gains justify
+higher latency and memory cost.
+The remainder of this paper is organized as follows. Section
+II reviews classical scaling laws for large language mod-
+els and discusses their limitations in the context of safety-
+critical, AI-native 6G network reasoning. Section III presents
+the methodology, including the 6G-Bench task taxonomy,
+the evaluated model spectrum (135M–7B parameters), the
+experimental protocol, and the formal definitions of determin-
+istic and stochastic stability metrics. Section IV provides the
+empirical scaling analysis, covering global performance trends,
+instability-gap contraction, domain-specific scaling elasticity,
+3
+TABLE I
+COMPARISON OF SCALING STUDIES AND THEIR SCOPE RELATIVE TO AI-NATIVE 6G SEMANTIC REASONING.
+Aspect
+Kaplan et al. [15]
+Hoffmann et al. [14]
+Wei et al. [16]
+This Work
+Primary Objective
+LM loss scaling
+Compute-optimal LM
+Emergent abilities
+6G semantic reasoning
+Evaluation Metric
+Cross-entropy
+Cross-entropy
+Downstream accuracy
+pass@1, pass@k, ∆k
+Scale Range
+103–109
+70M–280B
+10B–500B
+135M–7B
+AI-Native 6G Task Alignment
+✗
+✗
+✗
+✓
+Deterministic Stability Analysis
+✗
+✗
+✗
+✓
+Domain-Specific Scaling Elasticity
+✗
+✗
+✗
+✓
+Edge Deployment Focus
+✗
+✗
+✗
+✓
+and deployment-tier implications for hierarchical 6G architec-
+tures. Section V concludes the paper and outlines directions
+for future research on compact LLM-based AI agents for edge-
+native, quantum-secure 6G systems.
+II. RELATED WORK
+Recent research on large language models has established
+strong empirical regularities governing performance as a func-
+tion of model size, training data, and compute. Foundational
+studies have derived predictive power-law relationships for
+language modeling loss and compute-optimal allocation, while
+subsequent work has identified qualitative capability transi-
+tions at large scales. However, these analyses have primarily
+focused on open-domain NLP benchmarks and token-level ob-
+jectives, leaving structured, safety-critical semantic reasoning
+in AI-native 6G network control settings largely unexplored.
+Table I presents a comparison of prior language model scaling
+studies and highlights their differences relative to AI-native 6G
+semantic reasoning requirements.
+A. Scaling Laws for Large Language Models
+Kaplan et al. [15] presented a systematic empirical in-
+vestigation of scaling behavior in autoregressive Transformer
+language models, demonstrating that test cross-entropy loss
+follows remarkably stable power-law relationships with re-
+spect to model size, dataset size, and training compute.
+Using models ranging from approximately 103 to 109 non-
+embedding parameters and datasets spanning over two orders
+of magnitude, they showed that performance scales as L(N) =
+(Nc/N)αN with αN ≈0.076 and Nc ≈8.8×1013 parameters,
+when trained with sufficiently large data. Similarly, in the
+data-limited regime, loss follows L(D) = (Dc/D)αD with
+αD ≈0.095 and Dc ≈5.4 × 1013 tokens. When training is
+compute-constrained under optimal allocation, the loss scales
+as L(Cmin) = (Cmin
+c
+/Cmin)αmin
+C
+with αmin
+C
+≈0.050 and
+Cmin
+c
+≈3.1 × 108 PF-days. Importantly, they derived a uni-
+fied formulation, L(N, D), that captures overfitting behavior,
+showing that data requirements grow sublinearly with model
+size, with D ∝N 0.74 to maintain performance. The study
+further demonstrated that optimal compute allocation favors
+rapid growth in model size (N ∝C0.73
+min ), while training
+steps increase negligibly (Smin
+∝
+C0.03
+min ), implying that
+larger models are increasingly sample-efficient. Architectural
+hyperparameters such as depth and width were shown to have
+only weak effects compared to scale itself. While this work
+established a predictive scaling-law framework for language
+modeling loss over eight orders of magnitude in compute, it
+focused exclusively on perplexity-based next-token prediction
+over web-scale corpora. It did not investigate the reliability of
+deterministic decision-making, policy-consistent reasoning, or
+structured semantic control tasks aligned with AI-native 6G
+architectures. In particular, the implications of scaling laws
+for safety-critical network-level reasoning, intent alignment,
+SLA-aware decision-making, and multi-agent coordination in
+6G systems remain unaddressed, motivating the present study
+on scaling regimes for tiny and small language models in AI-
+native 6G networks.
+B. Compute-Optimal Scaling and Data-Parameter Trade-offs
+Hoffmann et al. [14] revisited the problem of compute-
+optimal scaling for large language models and challenged prior
+conclusions regarding the trade-off between parameter count
+and training data. Building on earlier scaling-law formula-
+tions, they empirically analyzed over 400 Transformer models
+ranging from 70M to 16B parameters and trained on 5B to
+500B tokens, explicitly modeling the loss L(N, D) under a
+fixed FLOPs constraint. In contrast to prior work suggesting
+that model size should grow faster than dataset size, they
+found that compute-optimal training requires scaling model
+parameters and training tokens in approximately equal propor-
+tions. Concretely, they estimated scaling exponents Nopt ∝Ca
+and Dopt ∝Cb with a ≈0.49–0.50 and b ≈0.50–0.51,
+depending on the fitting methodology, in sharp contrast to
+Kaplan et al.’s prediction of a = 0.73 and b = 0.27. Their
+analysis demonstrated that many contemporary large mod-
+els were substantially undertrained relative to their compute
+budgets. To validate this hypothesis, they trained the 70B-
+parameter Chinchilla model on 1.4 trillion tokens using the
+same compute budget as the 280B-parameter Gopher model
+trained on 300B tokens. Despite being four times smaller,
+Chinchilla uniformly outperformed Gopher across downstream
+evaluations, achieving 67.6% average accuracy on the MMLU
+benchmark—an improvement of more than 7%—while also
+reducing inference and fine-tuning costs. These findings es-
+tablished that optimal performance depends critically on a
+balanced scaling between model and dataset sizes under fixed
+compute. However, similar to prior scaling-law studies, the
+analysis was conducted exclusively on language modeling loss
+and downstream NLP benchmarks.
+C. Emergent Abilities and Phase Transitions in Scaling
+Wei et al. [16] presented a systematic analysis of what they
+term emergent abilities in large language models, describing
+4
+6G Task Taxonomy
+6G-Bench
+Intent & Policy Reasoning
+Network Slicing & Resource
+Management
+Trust, Security & SLA
+Awareness
+AI-Native Networking & Agentic
+Control
+Distributed Intelligence &
+Emerging Use Cases
+Number of Tasks: 30
+Total Episodes: 488
+Total MCQ Questions: 3722
+Model Spectrum 
+(Scaling Axis)
+Ultra-Compact (≤350M)
+ Lower Mid-Scale (~1B)
+Transition Region (1.5B–3B)
+Upper Bound (7B)
+1
+2
+Prompting & Inference
+Pipeline
+Episode Construction
+Structured Prompt Template
+Inference Configuration
+Answer Extraction
+3
+Metrics + Scaling Laws
+Deterministic
+Reliability
+Stochastic
+Robustness
+ Scaling
+Model
+Group-Level
+Sensitivity
+4
+SmolLM2-
+135M
+Granite-
+350M
+LFM2-350M
+Llama 3.2
+1B
+Granite-1B
+LFM2.5-
+1.2B
+Qwen2.5-
+1.5B
+Qwen2.5-3B
+Olmo 3 7B
+Qwen2.5-7B
+Multi-turn AI dialogue trace
+TASK_ID & definition
+MCQ (A–D)
+Zero-shot evaluation
+Stochastic decoding 
+(k samples)
+Metric Computation & Scaling
+Analysis
+Structured Prompting &
+Controlled Inference
+Zero-shot Evaluation Workload
+488 Episodes • 3,722 MCQs
+Direct JSON parsing
+Regex fallback
+Token fallback {A,B,C,D}
+Invalid → Incorrect
+Fig. 1. End-to-End Methodological Framework for Evaluating Parameter Scaling and Semantic Reasoning Stability in 6G-Bench.
+qualitative capability transitions that occur only beyond spe-
+cific scale thresholds. An ability is defined as emergent if it
+is absent in smaller models but appears abruptly in larger
+ones, thereby violating smooth extrapolation from conven-
+tional scaling curves. Empirically, they demonstrated phase-
+transition-like behavior across multiple task families when
+plotting performance against training compute (FLOPs) or
+parameter count. For example, in modular arithmetic bench-
+marks, models trained below approximately 2 × 1022 FLOPs
+(≈13B parameters) achieved near-random accuracy, whereas
+performance sharply increased beyond this threshold. Simi-
+larly, on the MMLU benchmark (57-task average), models
+below roughly 1022 FLOPs (≈10B parameters) performed at
+chance level, while scaling to 3–5 × 1023 FLOPs (70B–280B
+parameters) yielded substantial gains, with Chinchilla [14] and
+Gopher [18] achieving markedly higher accuracy. In the Truth-
+fulQA benchmark, performance improvements were observed
+only at the largest scales (≈5×1023 FLOPs, 280B parameters).
+Additional emergent effects were reported for chain-of-thought
+prompting, instruction fine-tuning, scratchpad reasoning, cali-
+bration strategies, and multilingual reasoning, with emergence
+often occurring around the 1023 FLOP regime (≈50B–100B
+parameters).
+D. Limitations of Prior Scaling Studies for AI-Native 6G
+Despite the substantial progress in understanding language
+model scaling, prior studies remain fundamentally centered
+on open-domain NLP objectives and token-level performance
+metrics. Kaplan et al. [15] and Hoffmann et al. [14] derive
+predictive power-law relationships for cross-entropy loss under
+varying parameter, data, and compute regimes, while Wei
+et al. [16] analyze qualitative capability transitions across
+downstream reasoning benchmarks. However, these works
+evaluate perplexity, few-shot accuracy, or prompting-based
+task performance rather than deterministic decision reliabil-
+ity under structured, safety-critical constraints. AI-native 6G
+networks introduce distinct requirements: semantic reasoning
+must operate within latency constraints, adhere to policy
+enforcement rules, operate under partial observability, sat-
+isfy SLA constraints, and coordinate across heterogeneous
+domains. Tasks such as intent feasibility assessment, trust-
+aware compute exposure, slice arbitration, and distributed
+intelligence orchestration are not equivalent to standard NLP
+benchmarks and demand consistent single-shot correctness and
+stability under deterministic decoding. Furthermore, existing
+scaling analyses primarily focus on large-scale regimes (tens
+to hundreds of billions of parameters), leaving the sub-billion-
+to low-billion-parameter range—most relevant for edge-native
+deployment—largely uncharacterized in terms of semantic
+control reliability. Consequently, there is currently no em-
+pirical framework that examines scaling regimes, stability
+thresholds, and domain-specific scaling elasticity for structured
+network-level reasoning in AI-native 6G systems, motivating
+the dedicated small-model scaling analysis conducted in this
+work.
+III. METHODOLOGY
+This section describes the experimental framework used to
+evaluate the scaling behavior of small and mid-scale language
+models for network-level semantic reasoning in AI-native 6G
+systems. We first present the task taxonomy and capability
+grouping underlying 6G-Bench, followed by the evaluated
+model spectrum spanning 135M to 7B parameters. We then
+detail the structured prompting protocol, the construction of
+the dataset, the inference configuration, and the reproducibility
+controls used for zero-shot evaluation across 488 episodes
+and 3,722 multiple-choice questions. Finally, we formalize
+deterministic and stochastic evaluation metrics, introduce the
+instability gap, and define log-linear and group-level scaling
+models used to characterize parameter-dependent reasoning
+regimes. Fig. 1 presents the complete experimental framework
+5
+for evaluating scaling-dependent semantic reasoning in AI-
+native 6G systems.
+A. Task Taxonomy and Capability Groups
+The 6G-Bench benchmark [17] defines 30 decision-making
+tasks (T1–T30) organized into five capability-aligned cate-
+gories derived from ongoing standardization efforts in 3GPP,
+IETF, ETSI, ITU-T, and the O-RAN Alliance. The five capa-
+bility groups are:
+• Intent & Policy Reasoning: semantic consistency under
+evolving network state and policy constraints.
+• Network Slicing & Resource Management: slice selec-
+tion, compute placement, SLA forecasting, and resource
+arbitration.
+• Trust, Security & SLA Awareness: trust-aware ex-
+posure, authorization reasoning, and automated security
+response.
+• AI-Native Networking & Agentic Control: inter-agent
+coordination, federation, lifecycle management, and task
+offloading.
+• Distributed Intelligence & Emerging Use Cases: fed-
+erated learning orchestration, Integrated Sensing and
+Communication (ISAC), digital twins, and public-safety
+coordination.
+1) Task Formatting, Answer Extraction, and Grading Proto-
+col: Each evaluation instance consists of a structured episode–
+question pair. Episodes are stored as JSON objects containing
+(i) an initial system state (environment, airspace, UAV config-
+uration, and policy constraints), and (ii) a multi-turn dialogue
+trace including intents, actions, network telemetry, and tool
+responses. For each episode, one or more multiple-choice
+questions (MCQs) are defined, each associated with a task
+identifier (T1–T30), four answer options (A–D), a ground-truth
+label, and metadata including the source turn and difficulty.
+To ensure controlled reasoning and reproducible grading,
+the model is prompted using a structured template comprising:
+• Target task identifier and task definition,
+• A summarized episode context,
+• The MCQ question text,
+• Four labeled answer options (A–D), and
+• A strict output instruction requiring valid JSON of the
+form {"answer": "A"}.
+The episode summary is programmatically generated to
+include:
+• Initial environmental, airspace, UAV, and policy context,
+• Mission success indicator,
+• A truncated dialogue trace (up to 12 turns), and
+• Aggregated network telemetry per turn (slice, latency,
+jitter, loss, throughput, edge load).
+The model must return a single JSON object. Output parsing
+follows a deterministic extraction pipeline: (i) attempt direct
+JSON parsing; (ii) if parsing fails, apply regular-expression-
+based extraction of the "answer" field; and (iii) as a fallback,
+extract a standalone token in {A, B, C, D}. A prediction is
+considered valid only if it resolves to one of the four options;
+all other outputs are marked as incorrect.
+B. Model Spectrum and Experimental Protocol
+To systematically characterize the scalability of seman-
+tic reasoning under AI-native 6G constraints, we evaluate
+a diverse set of compact and mid-scale language models
+ranging from 135M to 7B parameters. The selected models
+represent multiple architectural paradigms, training regimes,
+and deployment targets, allowing controlled analysis of both
+parameter scaling effects and architectural efficiency. Table II
+summarizes the evaluated model spectrum, detailing parameter
+scale, organizational origin, architectural design, alignment
+strategy, and deployment orientation.
+1) Model Selection Rationale: The model spectrum was
+constructed to satisfy four methodological objectives: (i) gran-
+ular coverage of the sub-1B regime, where edge-native deploy-
+ment is most realistic; (ii) dense sampling of the 1–1.5B tran-
+sition region, hypothesized to represent a stability boundary;
+(iii) inclusion of mid-scale (3B) and upper-bound (7B) models
+to identify diminishing returns; and (iv) architectural het-
+erogeneity, including conventional dense Transformer models
+and hybrid convolution-attention designs optimized for edge
+inference. All evaluated models are instruction-tuned variants,
+reflecting the intent-driven and policy-conditioned nature of
+6G semantic reasoning tasks.
+2) Ultra-Compact Regime (≤350M Parameters):
+a) SmolLM2-135M: SmolLM2-135M [19] represents the
+extreme edge-deployable regime. Despite its compact size,
+the model is trained on approximately two trillion tokens
+using a diversified corpus that includes educational data, code
+repositories, and curated high-quality text sources. Instruction
+alignment is achieved via supervised fine-tuning followed by
+Direct Preference Optimization, improving robustness under
+structured prompts. This model provides a lower bound on
+semantic reasoning capability under strict parameter and mem-
+ory constraints.
+b) Granite-4.0-350M:
+Granite-350M
+[20]
+is
+a
+lightweight,
+instruction-tuned
+model
+developed
+by
+IBM
+and derived from a base checkpoint via supervised instruction
+tuning,
+reinforcement
+learning,
+and
+model
+merging.
+It
+is
+explicitly
+designed
+for
+on-device
+deployment
+and
+domain adaptation with limited computational overhead. Its
+inclusion allows examination of alignment-enhanced dense
+Transformers at the sub-500M scale.
+c) LFM2-350M: LFM2-350M [21] introduces architec-
+tural diversity into the ultra-compact regime. Unlike purely
+Transformer-based designs, it employs a hybrid Liquid ar-
+chitecture incorporating multiplicative gating mechanisms and
+short convolutional blocks. This design prioritizes training
+efficiency and low-latency inference on CPU, GPU, and NPU
+hardware. Including LFM2 enables assessment of whether
+architectural innovation can partially offset limited parameter
+capacity in structured network reasoning tasks.
+3) Lower Mid-Scale Regime (≈1B Parameters):
+a) Llama 3.2 1B Instruct: Llama 3.2 1B Instruct [22]
+provides a widely adopted dense-Transformer baseline at the
+1B scale. Optimized for efficient multilingual instruction fol-
+lowing and low-resource deployment, it serves as a reference
+model for evaluating the reliability of deterministic reasoning
+near the hypothesized scaling transition.
+6
+TABLE II
+EVALUATED MODEL SPECTRUM ACROSS PARAMETER SCALE, ORGANIZATION, ARCHITECTURE, AND ALIGNMENT PIPELINE. ALL MODELS WERE
+DOWNLOADED FROM HUGGING FACE AND EVALUATED LOCALLY UNDER A UNIFIED INFERENCE PROTOCOL.
+Model
+Organization
+Params (B)
+Architecture
+Alignment
+Context
+Target Deployment
+Ref.
+SmolLM2-135M
+Hugging Face
+0.135
+Dense Transformer
+SFT + DPO
+8K
+Ultra-edge
+[19]
+Granite-4.0-350M
+IBM
+0.35
+Dense Transformer
+SFT + RL + Merge
+8K
+On-device
+[20]
+LFM2-350M
+Liquid AI
+0.35
+Hybrid (Conv + Attn)
+Post-train
+8K
+Edge CPU/NPU
+[21]
+Llama 3.2 1B
+Meta
+1.0
+Dense Transformer
+Instruct SFT
+8K
+Edge/Control
+[22]
+Granite-4.0-H-1B
+IBM
+1.0
+Dense Transformer
+SFT + RL
+8K
+Domain-adaptive
+[20]
+LFM2.5-1.2B
+Liquid AI
+1.2
+Hybrid (LIV + GQA)
+Ext. Pretrain + RL
+32K
+Edge long-context
+[21]
+Qwen2.5-1.5B
+Alibaba
+1.5
+Dense (RoPE, SwiGLU)
+Pretrain + Post
+32K
+Control-plane
+[23], [24]
+Qwen2.5-3B
+Alibaba
+3.0
+Dense (RoPE, SwiGLU)
+Pretrain + Post
+32K
+Operator domain
+[23], [24]
+Olmo 3 7B
+AI2
+7.0
+Dense Transformer
+Instruct SFT
+8K
+Central control
+[25]
+Qwen2.5-7B
+Alibaba
+7.0
+Dense (RoPE, SwiGLU)
+Pretrain + Post
+32K
+Central orchestration
+[23], [24]
+Abbreviations: SFT = Supervised Fine-Tuning; RL = Reinforcement Learning; DPO = Direct Preference Optimization; Merge = Model Merging; Conv =
+Convolution; Attn = Attention; LIV= linear input-varying operators; GQA = Grouped-Query Attention; RoPE = Rotary Positional Embedding; SwiGLU =
+Swish-Gated Linear Unit; Pretrain = Pre-training; Post = Post-training alignment.
+b) Granite-4.0-H-1B:
+Granite-4.0-H-1B [20] extends
+the Granite nano family into the billion-parameter regime
+while retaining its reinforcement-learning-enhanced alignment
+pipeline. Its inclusion enables controlled comparison between
+dense Transformer families at similar parameter scale, isolat-
+ing architectural and training effects from raw capacity growth.
+c) LFM2.5-1.2B-Instruct: LFM2.5-1.2B [21] represents
+an architectural evolution of the hybrid Liquid design. It
+combines convolutional LIV blocks with grouped-query at-
+tention layers and is trained on an extended 28-trillion-token
+corpus. The model supports long-context reasoning (up to 32K
+tokens) while maintaining a memory footprint compatible with
+edge devices. This model is particularly relevant for analyzing
+whether hybrid architectures can shift the deterministic stabil-
+ity transition downward relative to conventional Transformers.
+4) Mid-Scale and Upper-Bound Regime (1.5B–7B):
+a) Qwen2.5-1.5B-Instruct:
+Qwen2.5-1.5B
+[23],
+[24]
+marks the lower boundary of the empirically observed sta-
+bility transition. Architecturally, it employs rotary positional
+embeddings, SwiGLU activations, RMS normalization, and
+grouped-query attention. The model is optimized for structured
+output generation, long-context reasoning, and multilingual
+robustness. Its role in the study is central for identifying the
+onset of deterministic reasoning consistency.
+b) Qwen2.5-3B-Instruct: The 3B variant increases depth
+and attention capacity while preserving architectural design.
+It enables evaluation of whether scaling beyond the transition
+region yields qualitative reasoning improvements or primarily
+incremental refinement [23], [24].
+c) Olmo 3 7B Instruct: Olmo 3 7B Instruct [25] is a
+supervised, instruction-tuned dense Transformer trained under
+an open, transparent training pipeline. It serves as an upper-
+bound dense baseline within the compact-large regime, pro-
+viding insight into performance saturation at higher parameter
+scales.
+d) Qwen2.5-7B-Instruct: Qwen2.5-7B [23], [24] repre-
+sents the largest model in our evaluation and provides an em-
+pirical ceiling for deterministic semantic reasoning under the
+6G-Bench workload. Its inclusion allows precise quantification
+of diminishing marginal returns relative to the 3B regime.
+Across the spectrum, the evaluated models span two prin-
+cipal architectural classes: dense Transformer architectures
+(Llama, Granite, Qwen, Olmo) and hybrid Liquid architec-
+tures (LFM2 family) integrating convolutional processing with
+gated attention mechanisms. This diversity enables separating
+pure parameter-scaling effects from architectural-efficiency
+and alignment contributions.
+All models were evaluated locally without reliance on ex-
+ternal APIs. Each checkpoint was downloaded from Hugging
+Face and executed in a controlled inference environment to
+ensure reproducibility, uniform decoding configurations, and
+consistent hardware conditions. No additional fine-tuning was
+performed on 6G-Bench tasks; all results reflect zero-shot
+semantic reasoning under deployment-realistic constraints.
+The selected spectrum mirrors realistic 6G deployment tiers:
+ultra-compact models (≤350M) targeting embedded RAN and
+edge nodes; 1–1.5B models suitable for control-plane seman-
+tic reasoning under moderate resource budgets; 3B models
+representing high-stability operator-domain reasoning; and 7B
+models approximating centralized orchestration layers. This
+structured selection enables identification of scale-dependent
+stability regimes and provides deployment-grounded guidance
+for integrating compact semantic reasoning layers into AI-
+native 6G architectures.
+C. Prompt Template and Context Conditioning Protocol
+For models that support chat formatting, the native tokenizer
+function apply_chat_template is used to construct the
+input prompt. For other models, a structured system–user
+concatenation is employed.
+The system message defines the evaluator role, e.g.,
+System Prompt
+You are an expert 6G network AI agent evaluator. You
+will answer a multiple-choice question (A/B/C/D) about
+a UAV mission episode. Use the episode context and
+the target task definition to choose the best answer. You
+must respond with a single JSON object of the form
+{"answer": "A"}.
+The user message contains:
+• TASK_ID, TASK_NAME, and the formal task definition,
+7
+• The automatically generated episode summary,
+• The MCQ question text,
+• Options A–D, formatted as A: ..., B: ..., etc.,
+• A strict instruction to respond only with JSON of the
+form {"answer": "A/B/C/D"}.
+This uniform prompting protocol ensures that differences
+in performance arise from model capability and scale rather
+than prompt variation. Therefore, episode–question pairs are
+constructed by matching .episode.json files with their
+corresponding .mcq.json files in the dataset directory. Only
+episodes that have both files are included in the evaluation.
+D. Evaluation Metrics and Stability Measures
+Let T = {t1, . . . , tM} denote the evaluation task set, and
+let y⋆
+i be the ground-truth decision for task ti. For a model
+with parameter scale N, let ˆy(j)
+i (N) denote the j-th generated
+response under stochastic decoding.
+a) Deterministic Accuracy (pass@1): Under determinis-
+tic decoding (e.g., greedy decoding or temperature = 0), each
+task yields a single prediction ˆyi(N). We define deterministic
+single-shot accuracy as
+A1(N) = 1
+M
+M
+X
+i=1
+1[ˆyi(N) = y⋆
+i ] ,
+(1)
+where 1[·] denotes the indicator function. This metric re-
+flects safety-critical decision reliability under a single, policy-
+consistent inference trajectory. Since A1(N) is a binomial
+proportion over M MCQs, we report 95% confidence intervals
+using the normal approximation A1 ± 1.96
+p
+A1(1 −A1)/M.
+b) Stochastic
+Robustness
+(pass@k):
+Under
+stochas-
+tic decoding, each task produces k independent samples
+{ˆy(1)
+i
+(N), . . . , ˆy(k)
+i
+(N)}. We define pass@k as
+Ak(N) = 1
+M
+M
+X
+i=1
+1
+h
+∃j ∈{1, . . . , k} such that ˆy(j)
+i (N) = y⋆
+i
+i
+,
+(2)
+which quantifies the probability that at least one reasoning
+trajectory among k stochastic samples recovers the correct
+decision.
+c) Reasoning Instability.: To characterize stochastic in-
+consistency, we define the instability gap
+∆k(N) = Ak(N) −A1(N),
+(3)
+which measures the extent to which correct reasoning exists
+but is not reliably selected under deterministic decoding.
+Confidence intervals for ∆k are conservatively estimated by
+summing the variances of Ak and A1, yielding slightly wider
+but statistically safe uncertainty bounds.
+All evaluations employ a standardized task-conditioned
+prompting protocol with robust answer extraction to ensure
+comparability across models.
+1) Log-Linear Scaling Model: Let N denote the number of
+model parameters (in billions), and define A(N) := A1(N)
+as deterministic accuracy. To characterize scaling behavior, we
+approximate performance as a log-linear function of model
+size:
+A(N) = α log(1 + N) + β + ϵ(N),
+(4)
+where log(·) denotes the natural logarithm. The inclusion
+of 1 + N stabilizes the transformation in the ultra-compact
+regime (N ≪1), where log N becomes strongly negative.
+where α captures the marginal improvement in semantic
+reasoning per logarithmic increase in parameter count, β is
+a baseline offset, and ϵ(N) represents architecture-dependent
+deviations.
+The coefficients α and β are estimated via ordinary least
+squares (OLS) over all evaluated models. Residuals reported
+in Table IV are computed as A1 −(α log(1 + N) + β).
+To quantify discrete scaling gains, we define
+∆Ai→j = A(Nj) −A(Ni).
+(5)
+Statistical comparisons between scales (e.g., 1B →1.5B)
+are performed using two-proportion z-tests on A1, with sig-
+nificance assessed at α = 0.05.
+Empirically, we observe that
+∆A1B→1.5B ≫∆A3B→7B,
+(6)
+indicating non-uniform marginal returns and the presence
+of distinct scaling regimes rather than smooth proportional
+growth.
+2) Group-Level Scaling Sensitivity: To quantify scaling
+elasticity across semantic capability domains, we define a
+group-level sensitivity coefficient for each capability group
+Gj:
+SGj =
+¯AGj(Nmax) −¯AGj(Nmin)
+log(Nmax) −log(Nmin) ,
+(7)
+where ¯AGj(N) denotes the mean deterministic accuracy
+(pass@1) across all tasks in group Gj at parameter scale N.
+This coefficient estimates the average improvement in
+domain-specific semantic reasoning performance per logarith-
+mic increase in model scale. By normalizing gains in log-
+parameter space, SGj enables direct comparison of scaling
+responsiveness across heterogeneous capability classes.
+3) Edge-Oriented Efficiency Metric: While the preceding
+metrics characterize semantic reliability and scaling behavior,
+practical deployment in AI-native 6G systems also requires
+joint consideration of inference latency and memory footprint
+under edge constraints.
+Let L(N) denote the mean single-query inference latency
+(ms), and let M(N) denote the mean peak VRAM usage (GB)
+for a model of scale N. To quantify semantic reliability per
+unit edge resource, we define the Edge Score:
+ES(N) =
+A1(N)
+L(N) · M(N).
+(8)
+This metric jointly captures:
+8
+TABLE III
+EXPERIMENTAL CONFIGURATION AND 6G-BENCH MCQ DATASET
+STATISTICS.
+Component
+Configuration / Value
+Hardware Configuration
+GPUs
+8× NVIDIA A100 (80GB VRAM each)
+Framework
+PyTorch + Hugging Face Transformers
+Precision
+bfloat16 (CUDA), float32 (CPU fallback)
+Device Placement
+device_map="auto"
+Quantization
+None
+Fine-Tuning
+None (zero-shot evaluation)
+Model Parameter Range
+0.135B – 8.34B
+Number of Models
+11
+Decoding Configuration
+Deterministic Decoding
+Temperature = 0.0, do_sample = False
+Stochastic Decoding
+Temperature = 0.7, do_sample = True
+Evaluation Metrics
+pass@1 (deterministic), pass@3, pass@5 (stochastic)
+Pass@k Values
+k ∈{3, 5}
+Tasks with Pass@k
+7 (T2, T9, T12, T19, T20, T26, T30)
+Max New Tokens
+Up to 10,000 (bounded by context window)
+Seed Control
+SHA-256 deterministic seed derivation
+Inference Profiling Configuration
+Queries per Model
+R = 20 runs (single-query profiling)
+Prompt Length
+2049 input tokens
+Generated Tokens
+8 output tokens (deterministic decoding)
+FLOPs Estimation
+Forward-pass FLOPs/query (TF) per model
+6G-Bench MCQ Dataset Statistics
+Number of Tasks
+30 (T1–T30)
+Capability Groups
+5 (G1–G5)
+Total Episodes
+488
+Total MCQ Questions
+3,722
+Avg. MCQ per Episode
+7.63
+CI Estimation
+95% binomial CI over M = 3,722 MCQs
+Evaluation Setting
+Strict JSON-constrained MCQ
+• deterministic semantic accuracy (A1),
+• time-to-decision (L),
+• and memory footprint (M).
+Higher ES(N) indicates greater semantic reliability per unit
+latency and memory cost, making it directly interpretable as an
+edge deployment efficiency measure. Unlike purely accuracy-
+based metrics, the Edge Score explicitly penalizes models
+that achieve marginal capability gains at the cost of dispro-
+portionately higher inference latency or memory overhead. It
+therefore provides a deployment-aware efficiency frontier that
+complements the scaling-law analysis.
+IV. EMPIRICAL SCALING ANALYSIS
+Table III summarizes the complete experimental config-
+uration and dataset statistics used in this study. All eval-
+uations were conducted on a multi-GPU server equipped
+with eight NVIDIA A100 GPUs (8×80GB VRAM), enabling
+stable zero-shot inference for models up to 7B parameters
+without quantization or parameter offloading. Deterministic
+(pass@1) and stochastic (pass@k) decoding regimes were
+implemented under strictly controlled seed management to
+ensure reproducibility. The evaluation corpus comprises 488
+episodes and 3,722 multiple-choice questions spanning 30
+capability-aligned tasks in 6G-Bench, yielding an average of
+7.63 questions per episode. Seven tasks were additionally
+evaluated under pass@3 and pass@5 to quantify robustness
+to stochastic reasoning.
+A. Global Scaling Trends: Deterministic and Stochastic Per-
+formance
+Table IV presents deterministic single-shot accuracy (A1),
+stochastic robustness (A3, A5), the instability gap (∆5), and
+log-scale efficiency (η(N)) for compact language models
+spanning 135M to 7B parameters. We additionally report 95%
+confidence intervals for A1 and ∆5 computed over M = 3,722
+MCQs. Deterministic accuracy increases monotonically with
+scale, rising from 0.224 at 135M to 0.707 at 7B. However,
+the marginal gains are distinctly non-uniform: the transition
+from sub-1B to mid-scale models yields substantially larger
+improvements than the progression from 3B to 7B. In particu-
+lar, the increase from 1B (A1 = 0.373, 95% CI [0.357, 0.389])
+to 1.5B (A1 = 0.531, 95% CI [0.515, 0.547]) exhibits non-
+overlapping confidence intervals, and a two-proportion z-test
+yields z ≈13.9 (p ≪0.001), confirming that the observed
+jump is statistically significant. This concentration of gains in
+the 1–1.5B region indicates diminishing returns in the high-
+capacity regime and suggests the presence of empirical scaling
+regimes rather than smooth proportional growth. In effect,
+mid-scale models mark a qualitative shift in deterministic
+reasoning capability, while further scaling primarily delivers
+incremental refinement. The contraction of the instability gap
+∆5 = A5 −A1 further clarifies this transition. In the low-
+capacity regime, large gaps (e.g., 0.365 at 135M) indicate
+that correct reasoning trajectories often exist but are not
+consistently selected under deterministic decoding. As model
+scale increases, ∆5 collapses sharply—falling below 0.1 at
+3B and reaching 0.031 at 7B—signaling convergence between
+stochastic exploration and deterministic inference. This stabil-
+ity transition reflects structural alignment between the model’s
+highest-probability trajectory and the correct reasoning path, a
+property essential for safety-critical network control. Beyond
+this regime boundary, additional scaling enhances robustness
+margins but does not fundamentally alter reasoning consis-
+tency, highlighting a critical trade-off between model capacity
+and deployment efficiency in AI-native 6G systems.
+Using the fitted log-linear model A(N) = α log(1+N)+β,
+we analyze residuals to identify architecture-dependent de-
+viations from pure parameter scaling. Models with positive
+residuals lie above the predicted scaling curve, indicating
+stronger-than-expected deterministic performance relative to
+their parameter count. Notably, Granite-1B exhibits the largest
+positive residual, followed by Qwen-3B and Qwen-1.5B,
+suggesting that alignment strategy and architectural design
+contribute measurable gains beyond raw parameter growth.
+In contrast, Llama-3.2-1B and Olmo-7B fall below the fit-
+ted trend, indicating slightly weaker performance relative to
+scale-based expectations. These deviations confirm that while
+parameter count explains the dominant performance trend,
+alignment pipelines and training corpus composition introduce
+systematic second-order effects.
+B. Capability-Level Results
+Complete per-task results (T1–T30), including model re-
+sponses, task-level pass@1 accuracies, and full evaluation logs
+for all models, are publicly available in our accompanying
+9
+TABLE IV
+SCALING ANALYSIS OF SMALL LANGUAGE MODELS ON 6G-BENCH.
+Model
+N (B)
+log(1 + N)
+A1
+95% CI (A1)
+A3
+A5
+∆5
+95% CI (∆5)
+η(N)
+Residual
+SmolLM2-135M
+0.135
+0.127
+0.224
+[0.210, 0.238]
+0.440
+0.589
+0.365
+[0.344, 0.386]
+1.764
+-0.026
+Granite-350M
+0.35
+0.300
+0.372
+[0.356, 0.388]
+0.606
+0.755
+0.383
+[0.362, 0.404]
+1.240
++0.015
+LFM2-350M
+0.35
+0.300
+0.358
+[0.343, 0.374]
+0.574
+0.714
+0.356
+[0.334, 0.378]
+1.193
++0.001
+Llama-3.2-1B
+1.0
+0.693
+0.373
+[0.357, 0.389]
+0.603
+0.729
+0.356
+[0.334, 0.378]
+0.538
+-0.105
+Granite-1B
+1.0
+0.693
+0.559
+[0.543, 0.575]
+0.704
+0.776
+0.217
+[0.196, 0.238]
+0.806
++0.081
+LFM2.5-1.2B
+1.2
+0.788
+0.530
+[0.514, 0.546]
+0.606
+0.676
+0.146
+[0.125, 0.167]
+0.673
++0.009
+Qwen-1.5B
+1.5
+0.916
+0.531
+[0.515, 0.547]
+0.627
+0.669
+0.138
+[0.117, 0.159]
+0.580
++0.001
+Qwen-3B
+3.0
+1.386
+0.643
+[0.628, 0.658]
+0.678
+0.694
+0.051
+[0.035, 0.067]
+0.464
++0.006
+Olmo-7B
+7.0
+2.079
+0.652
+[0.637, 0.667]
+0.703
+0.724
+0.072
+[0.055, 0.089]
+0.314
+-0.065
+Qwen-7B
+7.0
+2.079
+0.707
+[0.692, 0.722]
+0.730
+0.738
+0.031
+[0.018, 0.044]
+0.340
+-0.010
+Notation: N denotes the number of model parameters measured in billions (B). A1 represents deterministic single-shot accuracy (pass@1). 95% confidence
+intervals for A1 are computed using a binomial approximation over M = 3,722 MCQs. A3 and A5 represent stochastic success probabilities over three and
+five samples (pass@3 and pass@5), respectively. ∆5 = A5 −A1 denotes the reasoning instability gap. Confidence intervals for ∆5 are conservatively
+estimated via variance summation of A1 and A5. η(N) = A1/ log(1 + N) denotes log-scale reasoning efficiency. Residual denotes A1 −(α log N + β)
+with fitted coefficients α = 0.115, β = 0.478.
+TABLE V
+GROUP-LEVEL SCALING SENSITIVITY SGj BETWEEN THE SMALLEST (SMOLLM2-135M, Nmin = 0.135B) AND LARGEST (QWEN2.5-7B, Nmax = 7B)
+MODELS. ¯
+AGj (N) DENOTES MEAN PASS@1 OVER ALL TASKS IN GROUP Gj.
+Group Gj
+¯
+AGj (Nmin)
+¯
+AGj (Nmax)
+SGj
+G1 – Intent & Policy Reasoning
+0.174
+0.782
+0.154
+G2 – Network Slicing & Resource Management
+0.250
+0.695
+0.113
+G3 – Trust, Security & SLA Awareness
+0.268
+0.679
+0.104
+G4 – AI-Native Networking & Agentic Control
+0.209
+0.683
+0.120
+G5 – Distributed Intelligence & Emerging 6G Use Cases
+0.181
+0.699
+0.131
+SmolLM2-135M
+Granite-350M
+Llama-3.2-1B
+LFM2-350M
+Granite-1B
+LFM2.5-1.2B
+Qwen2.5-1.5B
+Olmo-3-7B
+Qwen2.5-3B
+Qwen2.5-7B
+0
+0.2
+0.4
+0.6
+0.8
+0.174
+0.415 0.438 0.451
+0.623 0.63
+0.664
+0.705
+0.749
+0.782
+G1 Accuracy (pass@1)
+Fig. 2. Group G1 (Intent & Policy Reasoning): pass@1 accuracy across model
+scales.
+GitHub repository. Due to space constraints, we report aggre-
+gated and group-level analyses in our paper.
+1) G1 – Intent & Policy Reasoning: Figure 2 presents the
+pass@1 accuracy for Group G1 (Intent & Policy Reason-
+ing), capturing models’ ability to perform multi-step intent
+interpretation, constraint alignment, and policy-consistent de-
+cision synthesis. A clear capacity-driven hierarchy emerges:
+Qwen2.5-7B achieves the highest accuracy (0.782), followed
+by Qwen2.5-3B (0.749) and Olmo-3-7B (0.705), indicating
+SmolLM2-135M
+Granite-350M
+LFM2-350M
+Llama-3.2-1B
+Qwen2.5-1.5B
+LFM2.5-1.2B
+Granite-1B
+Qwen2.5-3B
+Olmo-3-7B
+Qwen2.5-7B
+0
+0.2
+0.4
+0.6
+0.25
+0.372 0.396 0.409
+0.532 0.537 0.56
+0.609
+0.672 0.695
+G2 Accuracy (pass@1)
+Fig. 3.
+Group G2 (Network Slicing & Resource Management): pass@1
+accuracy across model scales.
+that both parameter scale and architectural efficiency con-
+tribute to performance in intent-centric reasoning. Notably, the
+3B Qwen variant approaches 7B-level performance, suggest-
+ing strong parameter utilization efficiency. In contrast, sub-
+billion-parameter models exhibit pronounced degradation, with
+Llama-3.2-1B (0.438) and SmolLM2-135M (0.174) demon-
+strating substantial reasoning collapse under policy consis-
+tency constraints. The nearly fourfold improvement from
+135M to 7B underscores the strong dependence of intent
+10
+SmolLM2-135M
+LFM2-350M
+Llama-3.2-1B
+Granite-350M
+Qwen2.5-1.5B
+LFM2.5-1.2B
+Granite-1B
+Qwen2.5-3B
+Olmo-3-7B
+Qwen2.5-7B
+0
+0.2
+0.4
+0.6
+0.268
+0.316
+0.372 0.373
+0.428
+0.515 0.539
+0.581 0.588
+0.679
+G3 Accuracy (pass@1)
+Fig. 4.
+Group G3 (Trust, Security & SLA Awareness): pass@1 accuracy
+across model scales.
+SmolLM2-135M
+LFM2-350M
+Llama-3.2-1B
+Granite-350M
+LFM2.5-1.2B
+Granite-1B
+Qwen2.5-1.5B
+Olmo-3-7B
+Qwen2.5-3B
+Qwen2.5-7B
+0
+0.2
+0.4
+0.6
+0.209
+0.29
+0.321
+0.358
+0.474
+0.532 0.548
+0.649 0.65
+0.683
+G4 Accuracy (pass@1)
+Fig. 5.
+Group G4 (AI-Native Networking & Agentic Control): pass@1
+accuracy across model scales.
+alignment and uncertainty-aware reasoning on representational
+capacity, indicating that policy-consistent semantic abstraction
+is intrinsically scale-sensitive.
+2) G2 – Network Slicing & Resource Management: Fig-
+ure 3 presents the results for Group G2 (Network Slicing
+& Resource Management), reflecting structured resource al-
+location, constraint satisfaction, and cross-layer optimization
+reasoning. While performance scales monotonically with pa-
+rameter count, the gradient is less steep than in G1. Qwen2.5-
+7B leads (0.695), closely followed by Olmo-3-7B (0.672),
+suggesting that structured allocation reasoning benefits from
+scale but exhibits earlier saturation dynamics. The gap between
+7B and 3B models is comparatively narrow, implying that
+slicing-related reasoning relies partially on structured con-
+straint modeling rather than exclusively on deep latent abstrac-
+SmolLM2-135M
+Llama-3.2-1B
+Granite-350M
+LFM2-350M
+LFM2.5-1.2B
+Qwen2.5-1.5B
+Granite-1B
+Olmo-3-7B
+Qwen2.5-3B
+Qwen2.5-7B
+0
+0.2
+0.4
+0.6
+0.181
+0.301
+0.331 0.342
+0.485 0.501
+0.541
+0.634 0.651
+0.699
+G5 Accuracy (pass@1)
+Fig. 6.
+Group G5 (Distributed Intelligence & Emerging 6G Use Cases):
+pass@1 accuracy across model scales.
+tion. Sub-1B models retain moderate capability (0.40–0.56
+range), indicating that these tasks remain partially tractable
+under constrained parameterization. Overall, G2 demonstrates
+steady yet comparatively moderate scaling behavior character-
+istic of semi-structured optimization domains.
+3) G3 – Trust, Security & SLA Awareness:
+Figure 4
+presents the pass@1 performance for Group G3 (Trust, Se-
+curity & SLA Awareness), which emphasizes compliance
+verification, risk assessment, and service-level reasoning under
+adversarial or contractual constraints. The highest accuracy is
+obtained by Qwen2.5-7B (0.679), yet the relative improvement
+over mid-scale models such as Qwen2.5-3B (0.581) is less pro-
+nounced than in G1. LiquidAI LFM2.5-1.2B (0.515) performs
+competitively with several larger counterparts, suggesting that
+structured policy conditioning and the composition of training
+data may partially compensate for parameter scale in trust-
+oriented tasks. Although degradation toward ultra-small mod-
+els remains evident (SmolLM2-135M at 0.268), the decline
+is comparatively smoother than in G1. This pattern indicates
+lower scaling elasticity and suggests that trust and SLA
+reasoning may saturate earlier with scale, potentially reflecting
+a stronger dependence on structured rule internalization than
+on increasingly deep generative abstraction.
+4) G4 – AI-Native Networking & Agentic Control: Figure 5
+presents the results for Group G4 (AI-Native Networking
+& Agentic Control), capturing sequential decision-making,
+autonomous orchestration, and control-loop reasoning. The
+top-performing models—Qwen2.5-7B (0.683), Qwen2.5-3B
+(0.650), and Olmo-3-7B (0.649)—form a tightly clustered
+high-performance regime, indicating that agentic control ben-
+efits from both scale and architectural design. The moder-
+ate performance gap between 7B and 3B models suggests
+diminishing marginal returns at higher capacity, possibly
+reflecting partial saturation in control-sequence abstraction.
+However, a pronounced drop occurs below the 1B threshold
+(e.g., Llama-3.2-1B at 0.321), highlighting the importance of
+11
+sufficient internal state representation for coherent multi-step
+orchestration. Performance dispersion across smaller models
+further suggests sensitivity to instruction-tuning and alignment
+mechanisms in agentic reasoning contexts.
+5) G5 – Distributed Intelligence & Emerging 6G Use
+Cases: Figure 6 presents the pass@1 accuracy for Group G5
+(Distributed Intelligence & Emerging 6G Use Cases), encom-
+passing federated coordination, Integrated Sensing and Com-
+munication (ISAC), and digital twin synchronization. Scaling
+effects are again pronounced: Qwen2.5-7B achieves 0.699,
+whereas the smallest model attains only 0.181. The 3B variant
+(0.651) demonstrates strong parameter efficiency; however, the
+absolute improvement across scales remains substantial, indi-
+cating that distributed reasoning and cross-entity coordination
+impose significant representational demands. Compared to G2
+and G3, where structured constraints partially mitigate scale
+limitations, G5 tasks appear to require deeper semantic integra-
+tion across heterogeneous abstractions. This observation aligns
+with the inherent complexity of emerging 6G scenarios that
+involve multi-domain coordination and distributed cognition.
+6) Scaling Sensitivity Across Capability Domains: Table V
+presents the scaling sensitivity coefficients SGj computed be-
+tween the smallest model (SmolLM2-135M, Nmin = 0.135B)
+and the largest model (Qwen2.5-7B, Nmax = 7B). The results
+reveal clear heterogeneity in how semantic capability classes
+benefit from parameter scaling. Intent & Policy Reasoning
+(G1) exhibits the highest sensitivity (SG1 = 0.154), indicating
+that multi-step intent alignment and consistency under uncer-
+tainty improve most strongly with increasing model capacity.
+Distributed Intelligence & Emerging 6G Use Cases (G5)
+also shows pronounced scaling dependence (SG5 = 0.131),
+reflecting the complexity of reasoning required for federated
+learning orchestration, Integrated Sensing and Communication
+(ISAC), and digital twin coordination. In contrast, Trust,
+Security & Service-Level Agreement (SLA) Awareness (G3)
+demonstrates the lowest sensitivity (SG3 = 0.104), suggesting
+that these tasks rely less on raw parameter scaling and more
+on structured policy reasoning and alignment mechanisms.
+Network Slicing & Resource Management (G2) and AI-Native
+Networking & Agentic Control (G4) occupy intermediate
+positions, exhibiting steady but moderate scaling gains. These
+results quantitatively confirm the heterogeneous scaling elas-
+ticity observed across semantic domains.
+C. Inference Cost and Efficiency Profiling
+Table VI reports single-query inference profiling across
+all evaluated LLMs under deterministic decoding. Latency
+and throughput scale nonlinearly with parameter count: ultra-
+compact models (135M–350M) achieve sub-150 ms latency
+and the lowest memory footprints, while 7B–8B models
+incur 300–550 ms latency and substantially higher compute
+cost. Peak VRAM does not strictly follow parameter size,
+with certain architectures exhibiting disproportionately large
+memory footprints, indicating implementation-dependent over-
+heads. Throughput generally declines beyond the 1–3B regime,
+reflecting diminishing efficiency gains at larger scales. Theo-
+retical forward-pass FLOPs per query increase approximately
+Granite-1B
+Granite-350M
+Olmo-3-7B
+Llama-3.2-1B
+Qwen2.5-7B
+Qwen2.5-3B
+Qwen2.5-1.5B
+LFM2.5-1.2B
+SmolLM2-135M
+LFM2-350M
+0
+50
+100
+150
+200
+0.1
+0.1
+12.6
+15
+20.3 26.9
+56.4
+130.7 134.3
+191.7
+Edge Score (×104)
+Fig. 7.
+Edge Score ranking of evaluated LLMs on 6G-Bench. Edge Score
+is defined as ES = A1/(L · M), where A1 is deterministic accuracy, L is
+latency (ms), and M is peak VRAM (GB). Scores are scaled by 104; higher
+values indicate better semantic reliability per unit edge resource.
+linearly with model size, ranging from 1.69 TF (135M) to over
+100 TF (8B). These results highlight a clear trade-off between
+semantic capability gains and inference cost, suggesting that
+mid-scale models (1.5–3B) provide a favorable balance be-
+tween stability and deployability in resource-constrained 6G
+edge environments.
+D. Design Implications for Edge Deployment
+The heterogeneous scaling behavior across groups, com-
+bined with the global trends in Table IV, the inference cost
+profiling in Table VI, and the deployment-aware efficiency
+ranking in Figure 7, has immediate consequences for the
+design of AI-native 6G architectures. Together, these results
+expose a joint capability–efficiency frontier: while larger mod-
+els improve deterministic stability and cross-domain reason-
+ing, they impose sharply increasing latency, memory, and
+compute burdens that directly constrain the feasibility of edge
+deployment. The Edge Score explicitly quantifies this trade-
+off, revealing that semantic reliability per unit edge resource
+does not scale monotonically with parameter count.
+First, the sharp improvement in deterministic accuracy A1
+and contraction of the instability gap ∆5 between 1B and
+1.5B parameters suggest that this region constitutes a critical
+stability threshold for many semantic control tasks. For intent
+reasoning (G1), agentic control (G4), and distributed intelli-
+gence (G5), models below this threshold frequently exhibit
+fragmented or inconsistent behavior across turns, whereas mid-
+scale models (1.5–3B) provide substantially more reliable con-
+trol trajectories. However, as shown by the Edge Score rank-
+ing, not all models within this region are equally deployment-
+efficient; architectural efficiency and memory footprint mate-
+rially affect edge suitability.
+Second, the moderate scaling sensitivity and earlier satu-
+ration observed in network slicing and resource management
+12
+TABLE VI
+SINGLE-QUERY INFERENCE PROFILE (MEAN ± STD) FOR LLMS EVALUATED ON 6G-BENCH.
+Model
+Params (B)
+Peak VRAM (GB)
+Latency (ms)
+Throughput (tok/s)
+FLOPs/query (TF)
+HuggingFaceTB/SmolLM2-135M-Instruct
+0.135
+0.331 ± 0.000
+50.4 ± 100.8
+68.7 ± 15.8
+1.692 ± 0.000
+LiquidAI/LFM2-350M
+0.354
+0.137 ± 0.001
+136.3 ± 154.1
+75.1 ± 15.3
+4.375 ± 0.000
+ibm-granite/granite-4.0-h-350m
+0.340
+16.194 ± 0.000
+1814.7 ± 128.7
+3.9 ± 0.2
+4.074 ± 0.000
+meta-llama/Llama-3.2-1B-Instruct
+1.236
+2.481 ± 0.000
+100.1 ± 111.2
+89.0 ± 18.1
+13.688 ± 0.000
+LiquidAI/LFM2.5-1.2B-Instruct
+1.170
+0.266 ± 0.002
+152.5 ± 153.0
+64.7 ± 12.9
+14.444 ± 0.000
+ibm-granite/granite-4.0-h-1b
+1.462
+20.371 ± 0.000
+3161.3 ± 63.3
+2.2 ± 0.0
+17.495 ± 0.000
+Qwen/Qwen2.5-1.5B-Instruct
+1.544
+0.449 ± 0.001
+209.7 ± 179.1
+40.1 ± 8.9
+17.654 ± 0.000
+Qwen/Qwen2.5-3B-Instruct
+3.086
+0.874 ± 0.000
+273.9 ± 181.1
+29.2 ± 6.0
+35.291 ± 0.000
+allenai/Olmo-3-7B-Instruct
+7.298
+1.336 ± 0.000
+386.3 ± 180.1
+19.5 ± 3.2
+87.357 ± 0.000
+Qwen/Qwen2.5-7B-Instruct
+7.616
+1.028 ± 0.000
+338.7 ± 202.3
+23.0 ± 4.0
+87.092 ± 0.000
+LiquidAI/LFM2-8B-A1B
+8.340
+1.275 ± 0.000
+552.2 ± 295.8
+15.9 ± 2.9
+102.931 ± 0.000
+Notes: Results are mean ± standard deviation over R = 20 runs. Prompt length: 2049 input tokens; generated tokens: 8. Measurements collected with
+deterministic decoding (temperature=0), bf16, no quantization. All results correspond to single-GPU execution.
+(G2) and trust and security (G3) indicate that these domains
+can be served by smaller models without catastrophic degra-
+dation. Tasks such as slice selection (T4), compute placement
+(T7), trust-aware offloading (T9), and identity onboarding
+(T18) remain partially tractable in the sub-1B regime. Im-
+portantly, Figure 7 demonstrates that well-optimized ultra-
+compact models can dominate the edge-efficiency frontier,
+achieving superior reliability-to-resource ratios despite lower
+absolute accuracy. This suggests that compact models can be
+positioned close to the radio and edge, handling localized
+resource and trust decisions, while more complex intent and
+coordination reasoning is delegated to mid-scale models higher
+in the control hierarchy.
+Third, the decreasing log-scale reasoning efficiency η(N)
+and the Edge Score frontier jointly highlight a key trade-off:
+although larger models achieve higher absolute accuracy, they
+do so at lower deployment-normalized efficiency. In practice,
+this argues for a tiered design rather than uniform scaling. A
+plausible pattern is:
+• ultra-compact models (≤350M) embedded at RAN and
+MEC nodes to provide fast, approximate reasoning for
+G2/G3-type decisions and low-risk advisory functions;
+• mid-scale models (1.5–3B) anchored at regional or core
+control-plane locations to handle stability-critical G1, G4,
+and G5 decisions under deterministic decoding; and
+• optional 7B-class models in centralized orchestration
+roles, where marginal gains in robustness and cross-
+domain synthesis justify higher resource consumption.
+This capability- and tier-aware partitioning aligns naturally
+with current standardization trends toward hierarchical control
+and distributed intelligence. The Edge Score analysis rein-
+forces that the optimal deployment strategy is not to maximize
+parameter scale, but to identify the minimal capacity that
+achieves stable deterministic reasoning under edge resource
+constraints. Accordingly, the design question for AI-native
+networks should not be “how large a model can be deployed,”
+but “which semantic capabilities must be hosted at which tier,
+and what is the minimal stable capacity required for each.”
+E. Limitations and Reliability Concerns
+While the focus of this study is on deterministic reliability
+and scaling regimes, the results also surface important reli-
+ability considerations. The instability gap ∆5 shows that in
+the ultra-compact regime, correct reasoning trajectories are
+often present among stochastic samples but are not consis-
+tently selected by deterministic decoding. For safety-critical
+functions such as intent feasibility checks (T1), conservative
+continuation (T12), SLA violation prediction (T10), or security
+incident response (T30), this gap is problematic: stochastic
+recoverability does not translate into operational safety.
+Even at 3B and 7B, ∆5 remains non-zero, indicating
+residual divergence between exploration and exploitation. In
+practice, this motivates combining mid- to large-scale models
+with complementary mechanisms such as policy verifiers, rule-
+based filters, and constrained decoding. Domains with lower
+scaling elasticity but high safety impact — particularly G3
+— are well suited to such hybrid designs, in which compact
+semantic reasoning is wrapped in explicit policy logic.
+Finally, although our model set spans multiple organizations
+and architectures, it is not exhaustive. Differences in training
+data, alignment pipelines, and optimization objectives intro-
+duce architecture-dependent deviations from pure log-linear
+scaling. Likewise, 6G-Bench captures a broad but still bounded
+set of tasks aligned with current standardization discussions.
+As AI-native networks evolve toward more complex, multi-
+modal, and adversarial environments, further work will be
+needed to reassess stability thresholds and domain sensitivities.
+Nonetheless, the regimes and patterns identified here pro-
+vide a concrete starting point for designing capability-aware,
+resource-constrained semantic control layers in AI-native 6G
+systems.
+V. CONCLUSION
+This paper presented the first systematic scaling study of
+small and tiny language models (135M–7B parameters) for
+network-level semantic reasoning in AI-native 6G systems
+using the 6G-Bench standardization-aligned framework. Our
+results demonstrate that deterministic reasoning reliability
+scales non-uniformly with model size, revealing a pronounced
+stability transition in the 1–1.5B parameter range and dimin-
+ishing marginal returns beyond 3B parameters. The contraction
+of the instability gap from 0.365 in the ultra-compact regime to
+0.031 at 7B indicates convergence between stochastic explo-
+ration and deterministic inference, a prerequisite for safety-
+13
+critical control under zero-trust and SLA-constrained envi-
+ronments. Moreover, heterogeneous scaling elasticity across
+capability domains shows that intent reasoning and distributed
+intelligence tasks are strongly scale-sensitive, whereas trust
+and structured resource management exhibit earlier satura-
+tion. These findings establish that mid-scale models (1.5–3B)
+achieve a critical balance between computational footprint
+and deterministic stability, providing quantitative guidance
+for deploying LLM-based AI agents across hierarchical 6G
+tiers—from edge-native RAN and MEC nodes to centralized
+orchestration layers. Ultimately, our study reframes model
+scaling not as a race toward ever-larger architectures, but as a
+principled search for the minimal stable capacity required to
+support reliable semantic control in AI-native, RIS-enabled,
+THz-capable, and quantum-secure 6G networks.
+REFERENCES
+[1] E. A. Anowr, M. Nashaat, M. I. Ismail, M. A. Mohamed, M. M. Fouda,
+and H. M. Abdel-Atty, “F-iran: Performance analysis of 6g fog intelli-
+gent radio access network,” IEEE Open Journal of the Communications
+Society, 2025.
+[2] 3GPP, “Study on 6g use cases and service requirements,” 3rd Generation
+Partnership Project (3GPP), Tech. Rep. TR 22.870, 2025.
+[3] O-RAN
+Alliance
+e.V.,
+“Generative
+ai
+use
+cases
+and
+requirements
+on
+6g
+network,”
+O-RAN
+Alliance,
+Research
+Report,
+Jan
+2025,
+next
+Generation
+Research
+Group
+(nGRG). [Online]. Available: https://www.o-ran.org/research-reports/
+generative-ai-use-cases-and-requirements-on-6g-network
+[4] ETSI, Multi-access Edge Computing (MEC); Framework and Reference
+Architecture, European Telecommunications Standards Institute (ETSI)
+Std. GS MEC 003 V3.1.1, Mar. 2022.
+[5] C. Yang, H. Huang, A. Akhavain, F. Liu, X. An, W. Xing, J. Li,
+A. Wang, and W. Yang, “Requirements and enabling technologies of
+agent protocols for 6g networks,” Internet Engineering Task Force
+(IETF), Internet-Draft draft-hw-ai-agent-6g-00, Jul. 2025. [Online].
+Available: https://www.ietf.org/archive/id/draft-hw-ai-agent-6g-00.html
+[6] E. Hossain and A. Vera-Rivera, “6g cellular networks: Mapping the land-
+scape for the imt-2030 framework,” IEEE Transactions on Technology
+and Society, 2025.
+[7] S. Ye, M. Xiao, M.-W. Kwan, Z. Ma, Y. Huang, G. Karagiannidis,
+and P. Fan, “Extremely large aperture array (elaa) communications:
+Foundations, research advances and challenges,” IEEE Open Journal
+of the Communications Society, vol. 5, pp. 7075–7120, 2024.
+[8] Y. Lu, J. Zhang, E. Shi, P. Zhang, D. W. K. Ng, D. Niyato, and B. Ai,
+“Energy-efficient ris-aided cell-free massive mimo systems: Application,
+opportunities, and challenges,” IEEE Wireless Communications, 2025.
+[9] B. Banerjee et al., “6g phy: Insights from 6g-anna research initiative,”
+IEEE Open Journal of the Communications Society, 2026.
+[10] S. Sharif, F. Khandaker, M. Naeem, and W. Ejaz, “Resource optimization
+for semantic communication in 6g networks: A survey,” IEEE Open
+Journal of the Communications Society, 2026.
+[11] T. N. Turnip, B. Andersen, and C. Vargas-Rosales, “Towards 6g authen-
+tication and key agreement protocol: A survey on hybrid post quantum
+cryptography,” IEEE Communications Surveys & Tutorials, 2025.
+[12] K. Gogineni, A. Suvizi, and G. Venkataramani, “Llms on a budget:
+System-level approaches to power-efficient and scalable fine-tuning,”
+IEEE Open Journal of the Computer Society, 2025.
+[13] M. A. Ferrag, A. Lakas, and M. Debbah, “α3-bench: A unified bench-
+mark of safety, robustness, and efficiency for llm-based uav agents over
+6g networks,” arXiv preprint arXiv:2601.03281, 2026.
+[14] J. Hoffmann, S. Borgeaud, A. Mensch, E. Buchatskaya, T. Cai,
+E. Rutherford, D. Casas, L. A. Hendricks, J. Welbl, A. Clark et al.,
+“Training compute-optimal large language models,” arXiv preprint
+arXiv:2203.15556, vol. 10, 2022.
+[15] J. Kaplan, S. McCandlish, T. Henighan, T. B. Brown, B. Chess, R. Child,
+S. Gray, A. Radford, J. Wu, and D. Amodei, “Scaling laws for neural
+language models,” arXiv preprint arXiv:2001.08361, 2020.
+[16] J. Wei, Y. Tay, R. Bommasani, C. Raffel, B. Zoph, S. Borgeaud,
+D. Yogatama, M. Bosma, D. Zhou, D. Metzler et al., “Emergent abilities
+of large language models,” arXiv preprint arXiv:2206.07682, 2022.
+[17] M. A. Ferrag, A. Lakas, and M. Debbah, “6g-bench: An open benchmark
+for semantic communication and network-level reasoning with founda-
+tion models in ai-native 6g networks,” arXiv preprint arXiv:2602.08675,
+2026.
+[18] J. W. Rae, S. Borgeaud, T. Cai, K. Millican, J. Hoffmann, F. Song,
+J. Aslanides, S. Henderson, R. Ring, S. Young et al., “Scaling language
+models: Methods, analysis & insights from training gopher,” arXiv
+preprint arXiv:2112.11446, 2021.
+[19] L. B. Allal, A. Lozhkov, E. Bakouch, G. M. Bl´azquez, G. Penedo,
+L. Tunstall, A. Marafioti, H. Kydl´ıˇcek, A. P. Lajar´ın, V. Srivastav
+et al., “Smollm2: When smol goes big–data-centric training of a small
+language model,” arXiv preprint arXiv:2502.02737, 2025.
+[20] IBM Research, “Granite 4.0 nano language models,” https://github.com/
+ibm-granite/granite-4.0-nano-language-models, 2025, accessed: 2026-
+02-19.
+[21] L. AI, “Lfm2 technical report,” arXiv preprint arXiv:2511.23404, 2025.
+[22] A. Grattafiori, A. Dubey, A. Jauhri, A. Pandey, A. Kadian, A. Al-Dahle,
+A. Letman, A. Mathur, A. Schelten, A. Vaughan et al., “The llama 3
+herd of models,” arXiv preprint arXiv:2407.21783, 2024.
+[23] Q. Team, “Qwen2.5: A party of foundation models,” September 2024.
+[Online]. Available: https://qwenlm.github.io/blog/qwen2.5/
+[24] A.
+Yang
+et
+al.,
+“Qwen2
+technical
+report,”
+arXiv
+preprint
+arXiv:2407.10671, 2024.
+[25] T. Olmo et al., “Olmo 3,” arXiv preprint arXiv:2512.13961, 2025.

@@ -1,0 +1,2290 @@
+1
+Towards AI-Native RAN: An Operator’s Perspective of
+6G Day 1 Standardization
+Nan Li, Qi Sun, Lehan Wang, Xiaofei Xu, Jinri Huang, Chunhui Liu, Jing Gao,
+Yuhong Huang, and Chih-Lin I, Life Fellow, IEEE
+Abstract—Artificial Intelligence/Machine Learning (AI/ML)
+has become the most certain and prominent feature of 6G mobile
+networks. Unlike 5G, where AI/ML was not natively integrated
+but rather an add-on feature over existing architecture, 6G
+shall incorporate AI from the onset to address its complexity
+and support ubiquitous AI applications. Based on our extensive
+mobile network operation and standardization experience from
+2G to 5G, this paper explores the design and standardization
+principles of AI-Native radio access networks (RAN) for 6G, with
+a particular focus on its critical Day 1 architecture, functionalities
+and capabilities. We investigate the framework of AI-Native RAN
+and present its three essential capabilities to shed some light on
+the standardization direction; namely, AI-driven RAN process-
+ing/optimization/automation, reliable AI lifecycle management
+(LCM), and AI-as-a-Service (AIaaS) provisioning. The standard-
+ization of AI-Native RAN, in particular the Day 1 features,
+including an AI-Native 6G RAN architecture, were proposed.
+For validation, a large-scale field trial with over 5000 5G-A base
+stations have been built and delivered significant improvements
+in average air interface latency, root cause identification, and
+network energy consumption with the proposed architecture and
+the supporting AI functions. This paper aims to provide a Day
+1 framework for 6G AI-Native RAN standardization design,
+balancing technical innovation with practical deployment.
+Index Terms—AI-Native RAN, standardization, 6G.
+I. INTRODUCTION
+Artificial Intelligence (AI) technology has made unprece-
+dented progress in recent years, giving rise to novel service
+applications that may fundamentally change the way our
+societies produce and consume. AI technology is also being
+retrofitted into the mobile networks. In the past few years,
+the telecom industry has gradually recognized its potential
+in enhancing network performance, optimizing user experi-
+ence, reducing power consumption, and automating network
+management. Following the endeavors in the core network
+and the management domain [1–3], additional support for
+AI in virtually all protocol layers is being introduced to the
+RAN, which largely determines the performance of the mobile
+networks [4–6]. However, the AI functionality introduced in
+5G has largely followed an add-on paradigm, which has
+constrained the potential of AI by legacy architecture, pre-
+existing protocols, and limited system flexibility.
+The deep convergence of RAN and AI is a cornerstone
+for the evolution towards 6G [7]. First, AI is promising in
+Nan Li (corresponding author) is with Beijing University of Posts and
+Telecommunications, China, and also with China Mobile Research Institute,
+China; Nan Li, Qi Sun, Lehan Wang, Xiaofei Xu, Jinri Huang, Chunhui Liu,
+Jing Gao and Chih-Lin I are with China Mobile Research Institute, China;
+Yuhong Huang is with China Mobile Research Institute, China, and also with
+ZGC Institute of Ubiquitous-X innovation and Applications, China.
+addressing some of the most sophisticated challenges in 6G
+RAN. For example, it may enable low-complexity signal pro-
+cessing for massive Multiple-Input Multiple-Output (MIMO),
+a technology that has been used to combat the adverse and
+time-varying radio channels, whose computational complexity
+rises steeply as hundreds of antenna elements will be employed
+in a 6G radio unit. Another example is the radio resources
+allocation and scheduling tasks in complex network topologies
+with massive User Equipments (UEs). Those tasks typically
+involve large-scale and non-linear problems for which real-
+time algorithms have to compromise performance, or even
+problems that are difficult to model mathematically. Moreover,
+the distributed RAN sites equipped with AI capabilities are
+envisioned to serve as the key enablers for the pervasive
+AI applications, which would demand both low latency and
+high compute. To that end, the 6G RAN must be designed
+with AI in a native approach. This includes both AI for
+RAN—leveraging AI to enhance RAN performance, adapt-
+ability, and efficiency—and RAN for AI, which provides
+beyond communication support to enable pervasive, high-
+performance AI applications across the network. By unlocking
+new levels of service capability, energy efficiency, operational
+intelligence, and cost-effectiveness, AI-Native RAN will serve
+as a cornerstone of 6G—and ultimately determine its ability
+to succeed at scale and deliver on its transformative promise.
+Though the concept of AI-Native RAN for 6G has gained
+traction in the telecom industry, a general consensus on its
+definition and its pathway is yet to be achieved. Various
+interpretations can be seen from the stakeholders with diverse
+perspectives. To list a few, Ref. [8] highlights a converged
+communication and computing architecture that enables dy-
+namic AI service deployment and task-oriented connectivity.
+Ref. [9] interprets AI-Native concept as the pervasive AI
+capabilities design, deployment, operation, and maintenance.
+Ref. [10] is focused on the air interface and proposes AI/ML
+integration for dynamic adaptation to hardware constraints,
+radio environments, and application requirements. Ref. [11]
+discusses several possible interpretations from a standard-
+ization angle, such as the AI/ML availability and flexibility
+for AI/ML based implementations. Ref. [12] decomposes the
+concept into three aspects, namely “AI for RAN”, “AI and
+RAN” and “AI on RAN”. Refs. [13, 14] claim AI/ML as
+the foundation for RAN evolution, enabling hierarchical and
+distributed intelligence across the network. Without a clear
+and shared understanding of the scope and goals of AI-Native
+RAN, standards development organizations (SDOs) may suffer
+from ambiguities, misalignment, or even conflicting efforts in
+their 6G standardization.
+arXiv:2507.08403v1  [cs.NI]  11 Jul 2025
+2
+In the process of 6G RAN standardization, the Day 1
+standards have special significance against the later releases.
+Failure to address the AI-Native concept in initial standards
+could perpetuate the ‘AI-as-afterthought’ limitations we faced
+in 5G, and eventually undermine the commercial viability of
+AI-Native RAN in 6G. It should also be noted that the practical
+needs and concerns of mobile network operators (MNOs)
+should be carefully considered and reflected in standardization
+efforts.The MNOs have been confronted with many diffi-
+culties, including inefficient utilization of 5G infrastructure,
+limited sources of revenue, slow innovations, etc. It is desired
+that novel architectural and functional designs in 6G AI-Native
+RAN can help to tackle those challenges and ensure a healthy
+and sustainable telecom ecosystem.
+This paper aims to investigate the connotations and impacts
+of AI-Native RAN from the perspective of a MNO. The main
+contributions of this paper is as follows. First, We investigates
+the essential capabilities of AI-Native RAN. Furthermore,
+Day 1 standardization principles, design considerations and
+the essential features are presented with an AI-Native RAN
+architecture proposed, drawing from 4G/5G standardization
+experience and commercial deployment insights. The potential
+collaboration between 3GPP and other standard development
+organizations (SDOs) are also investigated. These guidelines
+aim to ensure that AI-Native RAN capabilities can be fully
+realized from the first release of 6G and support their sus-
+tainable evolution within an open ecosystem. Finally, we
+share a national wide, large-scale effort involving over 5000
+base stations in 5G-Advanced (5G-A) networks as an early
+exploration toward AI-Native design. The field trials validates
+the key architectural features and three typical use cases,
+offering valuable practical insights for the path toward a fully
+realized AI-Native RAN in 6G.
+This paper is structured as follows. A brief review of the
+5G/5G-A progress in the AI/ML related work is conducted
+in Section II, along with remaining issues for 6G, and in
+particular for 6G RAN. The concept, essential capabilities
+and day 1 standardization considerations of AI-Native RAN
+are analyzed in details in Section III. The overall standardiza-
+tion considerations, key designs on architecture and building
+blocks, and the collaboration among SDOs are presented in
+Section IV. In Section V, the large-scale field trials by China
+Mobile are discussed. The conclusion of this paper is given in
+Section V.
+II. REVIEW OF AI/ML INTEGRATION IN 5G/5G-A
+The pivot role of AI/ML for RAN evolution has become
+prominent in the 5G timeframe, with notable progress achieved
+in several SDOs.
+In 3GPP, the standardization efforts on AI/ML highlight
+a comprehensive approach, despite constrained the existing
+5G architecture. While the service and system aspects (SA)
+work groups (WGs) engage in the relevant activities on various
+aspects (i.e., service requirements, core network, management,
+security, and application enablement, see [1–3, 15–18]), the
+RAN WGs focus on the RAN-specific AI/ML use cases,
+functionalities, and the associated LCM over the air interface
+and the Xn interface. The AI/ML enabled use cases include
+channel state information (CSI) feedback, beam management,
+positioning, mobility, network energy saving and load balanc-
+ing, with the promise to enhance the air interface efficiency,
+enable proactive mobility management, and optimize resource
+utilization [4–6]. It is worth noting that 3GPP RAN has
+been developing its AI/ML framework that depicts the general
+aspects of an AI/ML workflow, and a 3GPP-wide alignment
+on the AI/ML framework as well as terminology has been
+underway [19]. It is expected that a unified AI/ML framework
+will be in place soon for the end-to-end system and across
+SDOs.
+O-RAN pioneered the architectural innovations towards an
+AI-driven RAN since its birth in 2018, highlighting an open
+and modular methodology. Some new components dedicated
+to RAN intelligence are introduced, namely the near-real-
+time RAN intelligent controller (Near-RT RIC) and the non-
+real-time RAN intelligent controller (Non-RT RIC) [20–22].
+Thanks to the open interfaces, O-RAN features fine-grained
+data collection in RAN, and extensive support for AI/ML
+workflows across Near-RT RIC and Non-RT RIC. In addition,
+both RICs feature modularity with their cloud-native software
+(termed xApp and rApp) that can be developed and deployed
+on demand, enabling light-weighted and customizable AI/ML
+solutions for RAN. With its RIC-enabled centralized opti-
+mization, O-RAN complements the 3GPP RAN with more
+AI/ML use cases [23] including traffic steering, quality of ser-
+vice (QoS)/quality of experience (QoE) optimization, massive
+MIMO optimization, etc.
+Apart from 3GPP and O-RAN, several projects in ITU and
+ETSI are also relevant to the convergence of AI and RAN.
+ITU leads the global initiative on the overall AI/ML related
+frameworks for the telecom networks, providing guidance and
+methodology for various SDOs. Under the ITU umbrella, the
+ML5G Focus Group (FG-ML5G) was formed to specify the
+architectural framework for the application of AI/ML in future
+networks [24], and followed by the Autonomous Networks
+Focus Group (FG-AN) that aimed to minimize human inter-
+ventions in network management and control from with the
+help of AI/ML models [25]. In ETSI, Experiential Networked
+Intelligence (ENI) [26] and Zero-Touch Service and Network
+Management (ZSM) [27] projects were conducted, where
+AI/ML is denoted as the key enabler for cross-domain and
+automated network management.
+Thanks to the extensive standardization work in the past few
+years, people now have a better understanding of what are,
+and what are not, in the scope of standardization with respect
+to AI/ML. An AI/ML model is essentially an algorithm,
+but it is different from the non-AI/ML-based algorithms in
+that it can be generated (i.e., trained) from the data from
+RAN and UE more dynamically. With that in mind, most
+of the efforts in the standards so far are devoted to the
+management/control of AI/ML workflow, including but not
+limited to, model identification and meta, awareness of rel-
+evant RAN/UE capability, data collection aspects (protocols,
+data types and formats, etc.), mechanisms for AI/ML model
+delivery/transfer, deployment/update, activation/deactivation,
+and fallback to non-AI/ML-based algorithms. Besides, the
+3
+additional requirements from dedicated AI/ML infrastructure
+may have an impact the RAN architecture, in order to optimize
+resource utilization and energy consumption for the MNOs. On
+the other hand, similar to the non-AI/ML-based algorithms,
+the weights of an AI/ML model and how it is trained are out
+of standardization scope. It remains for further investigation
+whether certain generic model structures (e.g., convolutional
+neural network, CNN) and associated complexity metrics can
+be standardized, to facilitate use cases where two-sided/shared
+models are generated and employed, though many vendors
+have concern on the disclosure of proprietary information.
+Among the remarkable achievements, a number of deficien-
+cies in the 5G/5G-A integration of AI/ML can be observed
+from the following perspectives:
+• Organization of work: the standardization of AI/ML
+capabilities in the different WGs of 3GPP as well as
+other SDOs was launched with a bottom-up pattern,
+resulting in huge overhead to avoid inconsistencies in the
+end-to-end system. The coordination among the SDOs
+are also usually slow and inefficient, which may cause
+overlapping scope of work.
+• Architecture: the integration of AI/ML for 5G systems
+has been constrained by the existing architectural designs,
+which is basically an “add-on” approach that limits
+any new functions/functionalities in making the best of
+AI/ML techniques.
+• Use cases: The exploration of AI/ML-enabled use cases
+was started in the management and the core network
+domains and extended to RAN with selected use cases
+recently. More use cases remain to be investigated in the
+6G era to fully unleash the potential of AI/ML in the
+link-level and area-level RAN performance.
+• AI/ML data collection: In front of the massive and dis-
+tinct data collection requirements from various use cases
+and tasks (e.g., AI/ML model training and inference),
+the efficiency of data collection mechanisms counts in
+the overall system performance. This issue is especially
+severe in RAN, where both the existing control plane
+and user plane solutions have some limitations. Besides,
+controllability and observability in the process have been
+the concern of MNOs. Other aspects associated with
+AI/ML data, including cross-domain data collection, data
+cleaning/pre-processing and storage, also call for unified
+designs in the standards.
+• AI/ML model: First, the 5G AI/ML capabilities are
+mostly based on off-line trained models, whose perfor-
+mance may deteriorate in a realistic environment when
+the distributions of training data and real-time input data
+are mismatched. To address that issue, online model
+training and fine-tuning aided by pre-validation is most
+promising. Second, the existing performance monitoring
+designs are limited to a per-use-case basis, and a more
+systematic approach remains to be established. Third, the
+application of AI/ML models in RAN is still in an early
+stage, with limited support, if any, for the cutting-edge
+model structures and paradigms like federated learning
+and large models.
+• AI computing resource: The impact of AI computing re-
+source in the distributed scenarios should be emphasized
+in the standardization rather than left to implementations.
+The major MNOs are in deep concern with the utilization
+efficiency of AI computing resources in the distributed
+RAN nodes, as such hardware is typically expensive and
+energy-hungry.
+• RAN services: While RAN is traditionally regarded as
+a dump pipe for communication services only, the emer-
+gence of AI applications and devices (e.g., AI wearables)
+that require ultra-low latency computing has opened new
+opportunities for 6G RAN. The 6G RAN can not only
+enhance user experience with awareness of the AI/ML
+service traffic, but also be leveraged to produce new
+types of services beyond communication, e.g, edge AI
+computing, which could create new sources of revenue
+for the MNOs.
+III. AI-NATIVE RAN: CONCEPT AND ESSENTIAL
+CAPABILITIES
+The experience gained from AI/ML integration in 5G and
+5G-A highlights both the potential and the limitations of
+current approaches. While notable progress has been made, the
+fragmented and case-specific nature of existing work reveals
+the absence of a unified, long-term architectural vision for the
+deep fusion of AI and RAN. This calls for a fundamental
+paradigm shift in 6G design, where AI is not merely an add-
+on, but a native capability embedded throughout the RAN.
+A well-articulated concept of AI-Native RAN is essential to
+align standardization efforts, steer architectural evolution, and
+provide clear, unified guidance for future product development.
+This mirrors the pivotal role played by the Cloud Native
+Computing Foundation (CNCF) in shaping the standardized
+concept of cloud-native computing, which subsequently laid
+the foundation for cloud evolution.
+From an operator’s perspective, we attempt to articulate
+a concept of AI-Native RAN, inspired by the cloud-native
+paradigm. In this view, AI-Native RAN is a radio access net-
+work fundamentally driven by AI, with AI deeply embedded
+in its functions, architectures, protocols, and operations. Such
+integration empowers intelligent RAN optimization and au-
+tomation, enabling real-time, efficient, and diversified service
+delivery across communication, computing, and AI tasks for
+ubiquitous applications.
+As illustrated in Fig. 1, realizing the vision of AI-Native
+RAN requires three essential capabilities. The first is AI-driven
+RAN processing, optimization, and automation, which enables
+intelligent control across the air interface, RAN management
+and resource optimization; this will be discussed in Section
+III.A. The second is efficient, controllable, and reliable AI
+lifecycle management (LCM), covering data collection, model
+management, and collaborative computing, which will be de-
+tailed in Sections III.B, III.C, and III.D, respectively. The third
+is AI-as-a-Service (AIaaS) provisioning, which transforms the
+RAN into a unified platform for both communication and AI
+applications, and will be introduced in Section III.E.
+4
+AI-native RAN
+02
+03
+01
+Data services for AI
+ 
+ 
+ 
+ 
+RAN AI computing
+services
+AIaaS provisioning
+(Section III. E)
+Efficient Data Collection
+(Section III. B)
+Controllable Model 
+management (Section III. C)
+Collaborative Distributed 
+Computing (Section III. D)
+Efficient, controllable and highly 
+reliable AI LCM
+AI for RAN resources 
+control and optimization
+AI-Driven RAN Processing, Optimization 
+and Automation (Section III. A)
+Connection Assurance for AI 
+services
+AI for Air Interface
+AI for RAN management 
+and orchestration
+Fig. 1: Three essential capabilities of AI-Native RAN.
+A. AI-Driven RAN Processing, Optimization, and Automation
+With the increasing complexity of modern wireless net-
+works, traditional rule-based or model-driven RAN optimiza-
+tion methods are facing growing challenges. In contrast, AI
+technologies demonstrate unique advantages in handling com-
+plexity, scale, and uncertainty. In the context of RAN process-
+ing, optimization, and automation, AI offers three key capabil-
+ities: the ability to learn in scenarios where explicit modeling
+is infeasible, the capability to make real-time decisions in
+large-scale, high-dimensional environments, and the power to
+perform accurate prediction and proactive adaptation based on
+complex spatiotemporal patterns for proactive optimization.
+Overall, these capabilities position AI as a powerful enabler
+across physical layer (L1), data link layer (L2) and network
+layer (L3). Table I shows typical use cases of AI for air
+interface (L1), and AI for resources control and optimization
+(L2/L3) in a systematic view.
+The models applied to these use cases must first undergo
+training, testing, and validation to ensure the performance of
+the aforementioned AI-driven RAN processing, optimization,
+and automation in practical systems. Fig. 2 shows the four
+typical approaches on how AI model can be trained, delivered
+and deployed in RAN.
+Standardization Considerations: 5G standardization has
+pioneered valuable AI applications in single RAN modules,
+laying the groundwork for broader AI integration. In 6G, it
+is expected to advance beyond single-module toward more
+complex and high-value use cases, such as joint optimization
+across multiple modules and cross-layer AI coordination, aim-
+ing to fully harness AI for ultra-reliable and high-performance
+user experiences. Promising use cases may include AI-based
+transceivers, power amplifier (PA) nonlinearity compensation
+and reference signal (RS) overhead reduction, etc. To support
+the prioritization of use cases, a comprehensive and system-
+Cloud owned by
+UE providers
+Model training
+UE 
+Core Cloud
+Model training
+UE 
+BS 
+RAN Cloud
+Model training
+UE 
+OAM Cloud
+Model training
+UE 
+BS 
+Model delivery 
+for UE
+Model delivery 
+for BS
+(a)
+(b)
+(c)
+(d)
+Fig. 2: Four potential AI model training, delivery and deploy
+modes in AI-Native RAN. (a) UE cloud training; (b) core
+network training; (c) BS training; (d) operation administration
+and maintenance (OAM) cloud training.
+5
+TABLE I: Typical use cases for AI-driven RAN processing, optimization and automation
+scenarios
+use case
+key challenges of
+non AI-based solutions
+AI inference
+location
+potential AI methods
+& parameter scale
+research
+status
+AI for RAN
+resources control
+and optimization
+load
+balancing
+BS-side
+DNN(<1M)
+LSTM(<10M)
+DRL(<10M)
+5G-A 3GPP Release 18,
+O-RAN
+mobility
+management
+passive optimization
+degrades the
+performance;
+high-dimensional,
+complex
+and often non-convex
+optimization problems;
+hard to find the
+optimal solution
+in a real time manner
+UE-side,
+BS-side
+random forest
+gradient boosting
+LSTM(<1M)
+5G-A 3GPP Release 18/19,
+O-RAN
+network
+energy saving
+BS-side
+DNN(<1M)
+LSTM(<10M)
+DRL(<10M)
+5G-A 3GPP Release 18,
+field trial in 5G-A
+commercial network,
+O-RAN
+network slicing
+LSTM(<10M)
+GRU(<10M)
+Transformer(10M-1B)
+double dueling DQN(<1M)
+5G-A 3GPP Release 19,
+O-RAN
+capacity
+and coverage
+optimization
+DRL(<10M)
+GNN(<10M)
+LSTM(<10M)
+Transformer(10M-1B)
+multi-user
+scheduling and
+resources allocation
+DNN(<1M)
+DRL(<10M)
+6G candidate use case,
+O-RAN
+QoS/QoE optimization
+and service level
+agreement
+(SLA) assurance
+k-means(<1M)
+DNN(<1M)
+CNN(<1M)
+DRL(<10M)
+field trial in 5G-A
+commercial network,
+6G candidate use case,
+O-RAN
+AI for
+air interface
+positioning
+limited accuracy
+UE-side,
+BS-side,
+LMF-side
+DNN(<30M)
+CNN(<30M)
+5G-A 3GPP Release 18/19
+beam management
+limited accuracy in
+medium and
+high-speed scenario;
+unacceptable overhead
+for reasonable accuracy
+BS-side,
+UE-side
+CNN(<10M)
+LSTM(<10M)
+Transformers(<10M)
+CSI compression
+theoretically intractable
+to model/formulate
+two-sided
+model
+CNN(<10M)
+LSTM(<10M)
+Transformers(<10M)
+CSI prediction
+outdated and
+limited accuracy
+BS-Side,
+UE-side
+MLP-Mixer(<10M)
+2D-FCN(<1M)
+CNN(<1M)
+AI based
+receiver /
+transceiver
+theoretically intractable
+to model/formulate
+ESN(<10M)
+Transformers(<10M)
+6G candidate use case
+PA non-linearity
+compensation
+theoretically intractable
+to model/formulate
+ESN(<10M)
+Interference
+prediction
+and handling
+outdated and
+limited accuracy
+LSTM(<10M)
+Transformers(<10M)
+RS overhead
+reduction
+(incl. superimposed
+pilot)
+high reference
+signal overhead
+BS-Side
+CNN(<10M)
+LSTM(<10M)
+Transformers(<10M)
+atic performance evaluation framework is essential. It should
+go beyond basic accuracy or throughput metrics. Instead, it
+must incorporate multi-dimensional criteria, including energy
+efficiency, model generalization capability, and overall system
+cost, which encompasses AI-specific overheads such as com-
+putation, data collection, and storage. While specific models
+and algorithms will typically remain outside the scope of
+standardization, key enablers—such as data collection mech-
+anisms, model management procedures, and distributed AI
+computing frameworks—need to be standardized for scalable
+and interoperable AI-native RAN deployments.
+B. Efficient Data collection
+The current 5G RAN protocol design is oriented to the
+communication purposes but less to the needs of AI/ML data
+collection. A comprehensive review of existing data collection
+approaches was conducted in 3GPP RAN [5]. On the air inter-
+face, the control plane suffers from scalability in the maximum
+payload size. While the user plane has fewer restrictions in
+the traffic data volume, the data flows are terminated by the
+user plane function (UPF) in the core network and may be
+subject to charging, making it less favorable for AI/ML tasks
+in RAN. Besides, when a large volume of data is collected
+over the air, there exists a risk in draining the radio link and
+impeding the basic connectivity services in RAN. In addition,
+multiple aspects, including data privacy and security, also pose
+challenges for data collection. In Release 19, the different
+paths for data collection from UE (data collection server in
+OTT, in the core or in the OAM) are under discussion in
+3GPP RAN under the existing 5G framework [11]. However,
+6
+Fig. 3: AI radio bearer.
+when it evolves to 6G, new designs shall be considered for
+native data collection support in RAN.
+1) Dedicated AI radio bearer: A novel type of radio
+bearers [28] may be defined to support AI/ML related data
+delivery on the air interface as shown in Fig. 3. Such a new
+radio bearer is solely managed by RAN, which allows RAN
+to establish and configure it dynamically upon the demand
+of AI/ML use cases in 6G RAN. As per the payload, the
+radio bearer is capable of multiple AI/ML related data types,
+including but not limited to, the AI/ML training data, the
+AI/ML models, and other enhancement data that may assist
+the AI/ML workflows (e.g., the performance metrics of AI/ML
+models). It is expected that the new radio bearers will ensure
+both flexibility and efficiency in the AI/ML workflows in 6G
+RAN. In addition to the new radio bearer, a new data tunnel
+may be specified on the network interfaces that interconnect
+the 6G RAN nodes, to enable the exchange of AI/ML related
+data. For example, a 6G RAN node can collect data from
+adjacent nodes or their served UEs for centralized model
+training, and thereafter, the node can deliver the trained models
+to adjacent nodes or the UEs on demand.
+2) Cross-domain data collection: The 6G AI-Native RAN
+is expected to enable cross-domain AI/ML for end-to-end ser-
+vice assurance, which will entail cross-domain data collection.
+One use case is the service-aware RAN optimization for AI
+services. The 6G RAN can optimize its behavior by acquir-
+ing the real-time traffic characteristics from the application
+servers. The QoE metrics for AI/ML service may also be
+useful in assisting RAN to improve the user’s experience in
+a more specialized approach, for instance, the time to first
+token (TTFT) in large language model (LLM) inference. Upon
+the service-layer information, the AI-Native RAN is able to
+employ service-specific optimizations such as PDU set map-
+ping and DRB configuration. Meanwhile, the real-time RAN
+performance metrics and predictions may also be collected by
+the core network to adjust its QoS configurations and UPF
+behavior more dynamically. With the diverse data sources and
+collectors, it would be more efficient for 6G RAN to provide a
+holistic framework for cross-domain data collection, which is
+beyond the 5G network capability exposure. Fig. 4 illustrates
+the cross-domain data collection envisioned in 6G.
+3) Task-driven customizable RAN data collection mech-
+anism: Beyond minimization of drive test (MDT), perfor-
+mance measurements (PMs) and measurement reports (MRs),
+a new data collection mechanism is essential to fulfill the
+diverse requirements on data collection in 6G RAN. The new
+mechanism highlights real-time, fine-granularity and flexibil-
+Fig. 4: Cross-domain data collection.
+ity. Compared with the OAM-oriented mechanisms that work
+with about 15 minutes report interval, the new mechanism
+controlled by the 6G RAN nodes can support a latency of
+10 ms or lower, for the real-time AI/ML inference tasks. It
+is also capable of RAN data collection on a specific UE,
+so as to enable more fine-grained AI/ML optimization tasks.
+Moreover, the new mechanism is specialized to the reduction
+of unnecessary data collection, e.g., to train an AI/ML model
+for high-speed UEs, it would be a waste of radio resources to
+collect UE information from all the users in a cell. For that
+purpose, the new mechanism could support a customizable set
+of filters to ensure only the needed RAN data are collected.
+Apart from the data type, a filter may specify the associated
+service type (e.g., throughput with a specific 5QI), area of
+interest, time range (e.g., day-time) or UE status (e.g., not
+to collect data from low-battery UEs). Such a filter may also
+specify a criterion consisting of math symbols (e.g., greater
+than “>”) and threshold values, e.g., “when UE velocity > 250
+km/h”. The logical expression is evaluated at the data source,
+with which only the subset of the RAN data that satisfies the
+criterion is delivered to the data collector. Fig. 5 illustrates
+the typical examples of a task-driven customizable RAN data
+collection mechanism.
+Fig. 5: Task-driven customizable RAN data collection mech-
+anism.
+Standardization Consideration: The impact of data col-
+lection on 6G RAN standardization is twofold. One aspect
+is the generic protocols on relevant interfaces including the
+air interface (i.e., Uu), the RAN interfaces (e.g., Xn/F1/E1
+interfaces in 5G), and the interfaces with OAM and core
+network. The design of such protocols shall not only ensure
+efficiency for diverse data collection tasks, but also MNO’s
+observability and controllability. The other aspect is the de-
+tailed specifications of AI/ML related data types and formats
+(including the input/output data for model inference, training
+7
+Fig. 6: Enhanced AI/ML model management for 6G RAN.
+data, etc.), and the associated configurations for the data
+collection tasks. Such specifications will be consistently built
+on top of the aforementioned generic protocols and driven
+by specific scenarios and use cases. Beyond data collection,
+aspects including data pre-processing, storage and retrieval
+need more attention in the standards, which may require a
+more comprehensive data management framework [29].
+C. Controllable and Highly Reliable AI Model Management
+As AI becomes integral to 6G RAN control and opti-
+mization, robust and controllable AI model management is
+critical due to the probabilistic nature of AI, which complicates
+predictability in dynamic environments. While 3GPP has laid
+the groundwork for AI/ML management in 5G, covering
+data collection, training, inference, and monitoring, current
+frameworks fall short for commercial deployment, lacking
+operational drift detection, pre-deployment validation, and
+model continuous learning to adapt to changing conditions. In
+addition, emerging techniques like federated learning and large
+foundation models offer improved accuracy and adaptability.
+To enable AI-Native 6G RAN, advancements for model man-
+agement are expected. Fig. 6 illustrates an enhanced functional
+model management framework in 6G, building upon the 5G
+AI/ML framework.
+Enhanced Model Performance Monitoring: Once de-
+ployed in the RAN, AI models must be continuously mon-
+itored and tuned to ensure their stability and reliability.
+While 3GPP has initiated preliminary studies on AI model
+performance monitoring in 5G/5G-A, focusing on inference
+accuracy, system KPIs, and data distribution [5], AI-Native
+RAN requires a three-dimensional framework encompassing
+AI model performance, network performance, and resource
+utilization. Silent degradation from data drift, unanticipated
+scenarios, or traffic variations necessitates end-to-end moni-
+toring that integrates model accuracy metrics with network
+KPIs (e.g., latency, throughput) to assess real-world impact.
+Resource indicators (inference delay, memory consumption,
+energy efficiency) are also critical for operational feasibility
+and cost evaluation, forming a foundation for standardized
+monitoring frameworks. Representative indicators are illus-
+trated in Table II, which provides a foundation for standard-
+ized and scalable monitoring frameworks. These metrics are
+expected to be collected from diverse AI inference nodes and
+interfaces across RAN.
+Model Continuous Operation: Model continuous opera-
+tion is essential for ensuring robust and adaptive AI behav-
+ior in AI-native RAN, particularly under dynamic network
+conditions and user mobility. As UEs move across cells,
+consistent inference must be maintained through synchro-
+nization of model context (e.g., model ID, version) across
+gNBs, supported by standardized Xn or OAM-gNB interfaces.
+To adapt to changing environments, the network may adopt
+performance-triggered retraining, where model degradation
+detected by the gNB or UE initiates data collection, retraining,
+validation, and inference emulation before redeployment, or
+periodic retraining, which proactively updates models at regu-
+lar intervals using refreshed datasets. Both approaches require
+meticulous model version control and dataset traceability to
+ensure consistency between training and inference. To further
+enhance robustness, RAN Digital Twins (DTs) can provide
+synergetic data and support model validation by simulating
+real-world scenarios, enabling pre-deployment testing, syn-
+thetic data generation, and closed-loop optimization. This inte-
+grated framework supports safer, more reliable AI deployment
+and sustainable model evolution in future 6G networks.
+Advanced AI/ML Technology Support: Federated learn-
+8
+TABLE II: Examples of the ML performance monitoring metrics.
+Dimension
+Example Metrics
+Model Performance
+Accuracy, precision, recall, MAE, MSE, RMSE, etc.
+Generalization ability, e.g., Adversarial attack success rate
+Calculation efficiency, e.g., Inference latency
+Output error distribution/residual distribution
+Network Performance
+Network energy saving: Energy consumption/efficiency, packet loss rate, user data rate etc.
+Mobility management: Handover failure, radio link failure, delay, packet loss rate etc.
+CSI compression: BLER, average user throughput (UPT), 5%-UPT etc.
+Resource Performance
+Computational load, e.g. CPU/GPU utilization
+Storage overhead, e.g., Data storage/cache occupancy
+UE and RAN energy usage status
+ing (FL) enhances AI model generalization in 6G RAN
+by enabling privacy-preserving collaborative training across
+distributed gNBs. Each node trains a local model on its
+own data, while updates are aggregated—either through peer
+coordination or centralized RAN nodes—to form a global
+model that reflects diverse network conditions, such as varying
+traffic loads and mobility patterns. Effective deployment of FL
+in RAN requires architectural support for adaptive participant
+selection to prioritize nodes with high-value data, mecha-
+nisms to handle device and data heterogeneity for stable and
+timely convergence, and efficient update aggregation. These
+considerations are essential to realize scalable and robust FL
+workflows in AI-native RAN environments. Large foundation
+models offer a unified approach to modeling complex radio
+dynamics in 6G RAN, enabling tasks like channel prediction
+and beam selection with strong generalization across diversi-
+fied environments. To enable it, efficient distributed adaptation,
+model compression for low-latency inference, and task-aware
+monitoring need to be considered so as to ensure performance
+in resource-limited settings.
+Standardization Consideration: To ensure the stability and
+reliability of AI models in 6G RAN, it is essential to define the
+collection of multi-dimensional performance monitoring met-
+rics through interfaces such as Uu, Xn, and those associated
+with network management. Based on the monitored perfor-
+mance, standardized procedures and interfaces are required to
+enable the exchange of model management instructions, such
+as triggering model retraining, updating model versions, or
+reverting to non-AI baselines, among UEs, RAN nodes, and
+OAM systems. Building on this foundation, end-to-end model
+lifecycle management must be supported through interoperable
+and standardized workflows, covering retraining, validation,
+and deployment. In addition, mechanisms for model and
+dataset ID traceability, version control, and lifecycle metadata
+management should be specified to ensure consistent and
+reliable AI behavior across multi-vendor deployments. To
+future-proof the architecture, an extensible framework is also
+needed to accommodate emerging AI/ML technologies, such
+as federated learning (FL), and to support their seamless
+integration into the 6G RAN ecosystem.
+D. Distributed Collaborative AI computing
+The integration of AI into 6G RAN promises to revolu-
+tionize network optimization and service delivery. However,
+widespread deployment is limited by constrained computa-
+tional resources, energy budgets, and fragmented, localized
+data at individual nodes. These factors hinder the training
+and execution of robust AI models, underscoring the need
+for a distributed, collaborative computing paradigm across the
+RAN. To overcome these challenges, centralized AI computing
+RAN nodes and coordination functions can be introduced to
+enable AI resource pooling and orchestrate workloads across
+multiple gNBs and UEs. Effective collaborative AI mech-
+anisms must be developed to optimize resource utilization
+and unify intelligence across heterogeneous network elements,
+including gNBs, UEs, and centralized AI nodes. Three funda-
+mental collaborative modes are then envisioned: collaborative
+training, inference, and fine-tuning, as shown in Fig. 7.
+Collaborative Training: gNBs or a dedicated centralized
+AI computing RAN node can collaboratively train global or
+personalized AI models using distributed datasets, typically via
+federated or split learning paradigms. This approach mitigates
+data sparsity and heterogeneity at individual nodes while
+preserving user data privacy and reducing communication
+overhead. For instance, in a federated learning scenario for
+user mobility prediction, each gNB collects localized mobility
+data (e.g., handover logs, signal strength traces) and trains a
+local model on-site. The centralized AI computing RAN node
+aggregates these updates to refine a global mobility model,
+which is then redistributed to gNBs for subsequent training
+rounds. This iterative training loop ensures improved model
+generalization across the network.
+Collaborative Inference: Inference workloads can be flex-
+ibly partitioned between gNBs and centralized AI computing
+nodes to optimize performance under resource constraints.
+While capable gNBs and UEs can handle lightweight inference
+tasks locally, resource-limited gNBs can directly request infer-
+ence from the centralized node. Leveraging aggregated data or
+intermediate inferences from multiple sites, the centralized AI
+computing node applies more advanced algorithms to generate
+globally optimized strategies, such as interference mitigation
+and dynamic resource allocation, which are then distributed to
+gNBs for coordinated execution. This collaborative paradigm
+enhances adaptability, efficiency, and overall network intelli-
+gence in real time.
+Collaborative Pre-Train and Fine-Tuning: Pre-trained
+global models are fine-tuned at edge nodes using localized
+data, allowing adaptation to specific conditions while con-
+tributing updates to the shared global model. For instance, a
+central node distributes a general traffic classification model,
+which gNBs then fine-tune based on local traffic patterns to
+enhance scheduling and QoS enforcement. UEs also adapt
+9
+Centralized AI Computing RAN node
+ 
+② Global 
+model 
+delivery
+④ Client 
+model 
+upload
+③ Model training
+⑤ Model 
+aggregation
+① Client 
+selection
+…
+Collaborative training
+Collaborative inference
+Collaborative fine-tuning
+① Model 
+inference 
+request
+③ Model 
+inference 
+result 
+response
+① Model 
+inference request
+③ Model inference 
+result response
+Centralized AI Computing RAN node
+ 
+⑤Foundation 
+model adjustment
+① Foundation 
+model pre-training
+④ Fine-tuning 
+parameters 
+report
+③ Scene-based model fine-tuning
+② Foundation 
+model delivery
+Centralized AI Computing RAN node
+ 
+② Model inference
+② Model 
+inference
+Fig. 7: Three types of collaborative AI computing in AI-Native RAN.
+QoE models with personalized feedback, enabling real-time
+optimizations like video bitrate adjustment. Fine-tuned updates
+are selectively sent back to improve the global model.
+To support this distributed paradigm, mechanisms such as
+efficient resource pooling and dynamic scheduling are essen-
+tial. gNBs and UEs can register compute capabilities with cen-
+tralized RAN nodes, which form logical compute pools based
+on geography, hardware type, or service needs. These pools
+abstract heterogeneity and support the scalable deployment
+of AI workloads. Intelligent scheduling dynamically allocates
+resources like CPUs/GPUs based on task priority, QoS, and
+energy efficiency, ensuring optimal utilization across the RAN.
+Standardization Consideration: Enabling collaborative AI
+computing in the RAN requires architectural definitions of
+distributed intelligence functions across gNBs and centralized
+AI computing nodes. This includes standardized procedures
+and interfaces to support collaborative training, inference,
+and model adaptation. A dedicated AI computing resource
+management and orchestration framework is also essential,
+covering functions like resource discovery, usage monitoring,
+and topology management. To ensure efficient coordination,
+interfaces between the management system and the RAN
+computing infrastructure must enable real-time computing
+resource reporting, AI workload scaling and migration, and
+seamless integration with existing RAN management systems
+across heterogeneous network nodes.
+E. AIaaS provisioning
+AIaaS is widely recognized as one of the key defining
+features of future 6G systems. Under this paradigm, network
+operators are expected to evolve from mere connectivity
+providers to edge AI computing providers, and ultimately to
+edge AI service enablers. Specifically, AI-Native RAN plays a
+pivotal role in facilitating this evolution, enabling three modes
+of service delivery that are specifically tailored to meet the
+needs of AI applications, depicted in Fig. 8.
+• Connection assurance for AI services refers to the RAN’s
+ability to deliver reliable, adaptive transmission tailored
+to the unique demands of AI workloads, requiring evo-
+lution beyond traditional network capabilities. Three key
+directions are essential: (1) enhancing the QoS framework
+to handle complex, opaque data flows like multimodal
+inputs and model updates; (2) supporting novel traffic
+patterns, such as lateral flows in embodied intelligence
+and uplink-heavy, bursty traffic in personal assistants; and
+(3) ensuring deterministic latency—e.g., under 200ms for
+assistants and below 100ms for embodied AI—potentially
+[30] through selective preemption of background traffic.
+• Data services enable AI applications to adapt in real time
+for user experience by exposing internal network metrics
+(e.g., traffic load, link quality) and sensing data (e.g.,
+mobility patterns, location). For example, personal assis-
+tant apps can adjust video compression rates for uplink
+transmission to reduce latency, while robotic systems may
+tune sensing and update frequencies to avoid packet loss.
+To support this, the RAN must also offer capabilities such
+as data prediction, augmentation, and cleansing to ensure
+timely and accurate data exposure.
+• RAN AI computing services support external edge AI
+applications by exposing heterogeneous computing re-
+sources, such as GPUs and NPUs, within the RAN,
+while also meeting the internal demands of RAN in-
+telligence. This dual use demands efficient scheduling,
+parallel processing, and tight coordination between com-
+munication and computing to ensure performance and
+user experience. For example, Ref. [31] proposes a radio
+channel adaptive communication-computing joint opti-
+mization (RCACCJO) algorithm that dynamically selects
+model partition and early-exit points while allocating
+compute and uplink resources based on real-time channel
+states. Simulations show a 0.4% accuracy gain over non-
+coordinated baselines like uniform bandwidth allocation.
+Standardization Consideration: To fully unlock the com-
+mercial potential of RAN’s connection capabilities, data assets,
+and infrastructure, it is essential to standardize QoS assurance
+mechanisms for AI, RAN data exposure, and the framework
+for provisioning low-latency AI computing services. Enabling
+RAN AIaaS requires an open API framework that facilitates
+seamless access to RAN resources. Through standardized
+APIs, operators can lower deployment costs, enhance oper-
+ational efficiency, and deliver modular AI functions as on-
+demand services. Moreover, open APIs promote a collabora-
+tive ecosystem by enabling integration of third-party AI capa-
+bilities, thereby accelerating the evolution toward intelligent
+and flexible networks.
+10
+Computing 
+Capabilities Exposure
+ 
+ 
+ 
+ 
+Models, Data and
+Information 
+exposure
+AI App (OTT)
+AI App (UE)
+300 ms 
+E2E latency
+AI App (OTT)
+AI App (UE)
+RAN
+compressed 
+transmission 
+AI App (OTT)
+AI App (UE)
+RAN
+ 
+requirement
+Computing
+Requirements
+SLA
+s
+300 ms 
+E2E latency
+Task Offloading
+(a) Connection assurance for AI applications
+(b) Data services
+ 
+ 
+ 
+ 
+ 
+(c) RAN AI computing services
+QoS
+Assurance
+RAN
+User Plane
+Control Plane
+Information 
+Exposure
+RAN QoS Profile
+Information 
+exposure
+network
+data
+sensing 
+data
+AI LCM & Resource Allocation 
+Fig. 8: Three AI application-oriented service modes enabled by AI-Native RAN. (a) connection assurance for AI applications;
+(b) data services; (c) RAN AI computing services.
+IV. AI-NATIVE RAN STANDARDIZATION FOR 6G
+In this section, the holistic vision for AI-Native RAN
+standardization in 6G will be presented with the emphasis on
+the Day 1 work, including the overall considerations, the key
+designs, and the collaboration between 3GPP and other SDOs.
+A. Overall considerations for 6G AI-Native RAN
+1) The scope of 6G’s Day 1 standards will determine
+the efficacy of AI-Native RAN: The first release in each
+generation of 3GPP standards determines, to a tremendous
+extent, the practical capabilities of the commercial network
+of that generation. While the evolution of 3GPP standards
+typically takes 1.5 to 2 years per release, the operators
+upgrade their networks far less frequently due to the high
+total cost of ownership (TCO). In the 4G/5G era, the first
+release (i.e., Release 8 and Release 15, respectively) was the
+choice for large-scale deployment by the major operators, and
+accordingly gained the most R&D support from the whole
+industrial chain. As a comparison, despite the numerous new
+features added in the subsequent releases in 4G/5G, only a few
+of them have been supported by the RAN and UE vendors,
+and even fewer purchased by operators. The same situation is
+likely to occur in 6G as well, leading to low utilization of the
+functionalities that arrive late.
+One such example is the high-speed railway (HST) en-
+hancement. China has an HST network which spans 48,000
+kilometers as of 2024 and operates at a speed of up to 350
+km/h. The radio signal in such environments suffers from a
+severe Doppler frequency shift. The passenger’s experience
+with the UE deteriorated significantly, due to the insufficient
+detection and compensation capabilities for Doppler frequency
+shift in the 4G and early 5G UEs as well as base stations. The
+related enhancements were introduced only in Release 16 and
+thereafter, making them less available in the live network.
+2) Forward compatibility is essential for the standard-
+ization of AI-Native RAN: While backward compatibility
+is a must for virtually all the telecom standards, forward
+compatibility is of special significance for the standardization
+of AI-Native RAN. Such forward compatibility will have an
+impact on both hardware and software.
+From the hardware perspective, voices from many major
+operators have indicated serious concerns about 6G on the
+increasingly complex hardware, along with cautiousness on
+the potential 6G deployment. To mitigate the concerns, the
+standardization of AI-Native RAN must strive for hardware
+reusability. When a later release of standards is available, the
+hardware installed for the first release should be fully utilized
+to host the upgraded software functions. Meanwhile, the
+6G AI-Native RAN architecture and interfaces shall support
+centralized resource management and distributed collaborative
+processing for AI/ML tasks. This paradigm will not only re-
+duce the average investment per RAN site by resource pooling,
+but also maximize the utilization of earlier investments by
+aggregating the distributed AI computing resources to support
+AI/ML functionalities introduced in later releases.
+From the software perspective, the forward compatibility
+for the AI/ML models may require additional considerations
+beyond the traditional forward compatibility in 5G protocol
+designs. Due to the lack of theoretical explainability, a com-
+plex AI/ML model (e.g., DNN) may not be capable of superior
+performance in all conditions, and hence the RAN nodes
+may need to replace it with an updated version that can be
+of a different model structure or retrained with new AI/ML
+data. To that end, the 6G RAN standards shall be sufficiently
+flexible to enable forward compatibility for the AI/ML models.
+Besides, it is envisioned that AI/ML models may evolve from
+replacing a single processing to replacing multiple processing
+blocks, and eventually replacing a major part of a transceiver
+[10]. To enable such a dynamic application of AI/ML models,
+clear interface definitions are essential between the processing
+blocks as well as the protocol layers.
+3) To unlock the full commercial potential of AI invest-
+ments, standards should enable RAN AI service exposure:
+Different from traditional RAN functions and equipment, AI
+computing tends to be more expensive and energy-consuming,
+and therefore, its business opportunities shall be fully ex-
+ploited. On one hand, AI for RAN is highly promising in au-
+11
+tomating and optimizing the networks. The improved network
+efficiency will naturally be the first source of commercial value
+from AI. For that reason, the standardization process should be
+strict in the identification of killer use cases for the operators,
+accompanied by realistic and meaningful validations to justify
+the gains. On the other hand, new business opportunities may
+exist from a resource utilization perspective. Note that AI
+model training is compute-intensive, but is not likely to be
+performed for RAN all the time. It is therefore desirable to
+enhance the utilization of the temporally and geographically
+distributed idle AI computing capacity. One approach could
+be similar to the cloud computing paradigm, where the RAN
+offers its idle AI computing capacity to AI service applica-
+tions, which would create a new source of commercial value
+for operators beyond connectivity. For that reason, the 6G
+standards should also enable the operators to expose their
+RAN-side AI capabilities to AI service applications in an open
+ecosystem.
+4) 3GPP shall specify the core standards for 6G AI-
+Native RAN, but the success also hinges on collaboration
+across SDOs: The complexity of 6G RAN standards will
+go beyond the traditional RAN domain. The confluence with
+AI/ML and cloud technologies will have impacts not only
+on functional architecture and interfaces, but also on the
+implementations that are beyond 3GPP’s scope. To guarantee
+the on-time and high-quality delivery of the standards, we
+need the collaboration of all stakeholders. For example, ETSI
+has defined network functions virtualization (NFV) and multi-
+access edge computing (MEC), and the O-RAN Alliance has
+been dedicated to RAN cloud as well as the RAN Cloud
+management and orchestration.
+It remains imperative for 3GPP RAN to take the over-
+arching leadership, in terms of specifying the overall func-
+tional architecture for 6G RAN and ensuring the essential
+interoperability (especially with the core network and UE).
+Meanwhile, the technical realization of 6G RAN nodes should
+fully consider reusing and introducing the open standards from
+specialized domains as well as the de-facto standards for
+hardware/software implementations. Towards the AI-Native
+6G RAN, the SDOs need to synchronize their timeline and
+align their division of work properly to ensure a single and
+consistent set of standards.
+B. Key designs of AI-Native RAN for 6G Day 1
+The actual standardization of 6G AI-Native RAN will
+involve the use cases, the architecture, and the elementary
+building blocks. The whole process for AI-Native RAN stan-
+dardization will follow the use case driven approach, starting
+with a careful identification of key use cases among those in
+Section III.A. The proposed functional architecture and the
+essential building blocks for 6G Day 1 are as follows.
+1) Functional architecture: The proposed AI-Native RAN
+architecture is illustrated in Fig. 9. The key component of
+the proposed architecture is a novel AI/ML-oriented RAN
+node, termed as “AI Node”. The AI Node and the 6G BS
+(“6gNB”), with a one-to-many cardinality and interconnected
+by a new RAN interface, constitute the 6G RAN together.
+The non-real-time management aspects are supported by the
+RAN OAM in the central cloud, which has not only its own
+AI/ML capabilities (e.g., management data analytics (MDA)
+for 6G) but also enables the MNOs with overall supervision
+and coordination for the AI/ML functions distributed in the
+RAN Nodes.
+The AI Node is equipped with sufficient AI/ML computing
+resources (e.g., those on an edge platform) and typically
+deployed as a locally centralized node. It hosts the following
+functionalities:
+• Data collection: it can collect data from RAN, UE and
+other domains for various AI/ML tasks including AI/ML
+model training, inference and performance monitoring. It
+may also store RAN data for future AI/ML training on
+demand.
+• Model management: it can perform local manage-
+ment and control for the AI/ML models used for the
+L3 use cases, e.g., model deployment, model activa-
+tion/deactivation, and switching among multiple appli-
+cable models. Moreover, it has the potential as the FL
+server that coordinates the distributed 6gNBs in the, if
+the 6gNBs are mounted with adequate AI/ML training
+capabilities.
+• Model repository: it can store and catalog the AI/ML
+models for RAN and UE, which may be deployed at L1,
+L2 or L3. It may also serve as a model repository for AI
+service applications.
+• AI/ML training: it supports AI/ML model training for
+RAN and UE, regardless of L1, L2 or L3 use cases. The
+pooled AI/ML computing resource also enables the AI
+Node with support for training large models for the 6G
+RAN. Moreover, the efficacy of model training is boosted
+by the digital twin capabilities in the AI Node.
+• AI/ML inference: it can perform AI/ML model inference
+for the L3 use cases in RAN. The large models for RAN
+can be employed for the complex use cases as well.
+In addition, it may perform the AI/ML inference tasks
+offloaded from the 6gNBs in the collaborative inference
+scenarios.
+• RAN capability exposure: it is capable of exposing spare
+computing capacities (AI and non-AI), specific RAN data
+(e.g., RAN analytics), and AI/ML programmability to
+authorized consumers. The computing service can be
+consumed by OTT service applications that are deployed
+locally (not shown in Fig. 9). The RAN data service may
+be consumed by the core network via a new service-
+based interface (SBI), or by OAM via the management
+interfaces. The AI/ML programmability can be exposed
+via open APIs to RAN applications that are hosted on
+the AI Node, which can customize the AI/ML models
+and associated workflow for specific use cases.
+The 6gNB is the distributed RAN node for UE’s radio
+access. In addition to the basic communication functionalities
+(e.g., dynamic scheduling), it also hosts AI/ML LCM and
+AI/ML inference for L1/L2 use cases, as well as the associated
+data collection functionalities. Such an AI/ML functional split
+with AI/ML node ensures the real-time operations in L1/L2.
+12
+AI Node
+6gNB
+Mgmt. I/F
+RAN OAM
+6gNB
+Model mgmt.
+Communication
+Model mgmt.
+Model training
+Model inference
+to 6G AMF / UPF
+UE
+Communication
+Uu I/F
+Data collection
+Model storage
+6G Xn I/F
+New RAN I/F
+Model inference
+Data collection
+Model inference 
+UE
+Communication
+Data collection
+Model inference
+Data collection
+RAN capability 
+exposure
+New SBI
+RAN App
+RAN App
+RAN App APIs
+AI/ML 
+management
+6G NG I/F
+to 6G 
+AMF/UPF
+Consumed by 
+6G Core NFs, 
+etc.
+Model mgmt.
+Communication
+Model inference
+Data collection
+Uu I/F
+OAM AI/ML functionalities
+Fig. 9: The proposed 6G AI-Native RAN architecture.
+This design also minimizes the AI/ML computing requirement
+on the 6gNBs, as the most compute-intensive AI/ML model
+training tasks are centralized to the AI Node.
+Some 6G UEs will also be capable of AI/ML functionalities
+for RAN. Nevertheless, due to its battery and form factor, such
+6G UEs are likely to support AI/ML inference and associated
+data collection only, apart from the basic communication
+functionalities.
+The overall RAN architecture lays the foundation for an
+AI-Native RAN in 6G with the following key features:
+• Efficient utilization of AI computing resource: By
+offloading the sporadic AI/ML training tasks from the
+6gNBs and UEs to the centralized AI Node, statistical
+multiplexing can be achieved. Moreover, the AI Node can
+offer AI/ML inference service for the 5G/6G BS without
+AI computing capabilities, which is especially attractive
+for low-cost roll-out in the developing countries. Besides,
+the AI computing resource may be shared with local
+AI service applications, and hence further enhancing the
+resource utilization.
+• Hierarchical AI/ML collaboration: The proposed de-
+sign assigns the AI/ML functionalities in a systematic
+approach, based on the nature of diverse AI/ML tasks
+in RAN and their timeliness requirements. The cross-
+domain AI/ML collaborations with OAM or core network
+are enabled as well. The design also facilitates advanced
+learning framework like federated learning, for example,
+among BS and multiple UEs, or among the OAM and
+multiple AI Nodes.
+• Programmable AI/ML workflow: The light-weighted
+RAN applications enable high programmability for the
+AI-Native RAN, allowing operators to customize and
+optimize AI/ML functionalities based on specific use
+cases and deployment scenarios. This paradigm ensures
+the 6G RAN to adapt to diversified requirements (e.g.,
+the verticals) in an agile manner compared with the
+traditional device-oriented R&D process.
+2) Building blocks for AI-Native RAN on 6G Day 1:
+Based on the general considerations and the proposed RAN
+architecture, several items should be standardized with detailed
+technical realizations (aka “stage 3” in 3GPP and many other
+SDOs) for 6G Day 1, described as follows and summarized
+in Table III:
+• Data collection: Native design for data collection is the
+initial step toward AI-Native RAN in 6G. The new data
+collection mechanisms should be introduced first for the
+air interface, and then on the cross-domain interfaces on
+6G Day 1, as discussed in Section III-B. Such mech-
+anisms involve mainly the protocols and procedures to
+configure data collection tasks, and how the data packets
+are delivered among the entities, with considerations for
+UE state, mobility, and coordination on basic connectivity
+services. The fine-grained data collection mechanisms
+that can be customized to diversified data collection tasks,
+13
+should be continuously improved in the life cycle of 6G
+RAN.
+• Model management: It is well recognized that model
+management in 6G RAN should evolve toward an in-
+network and continuous AI/ML workflow, and accord-
+ingly, the model management procedures that considers
+the model’s training and pre-validation phase before
+deployment and update in its life cycle, are dispens-
+able in the Day 1 standards. Such procedures may
+involve capability discovery, task configuration, activa-
+tion/deactivation, and status reporting, etc. Meanwhile, a
+more systematic set of performance monitoring designs is
+essential on 6G Day 1, including the specifications of the
+performance metric types that are applicable for the mul-
+tiple collaborating models across different nodes/layers
+as well as the individual models. To facilitate RAN’s
+evolution with cutting-edge AI technologies, the Day 1
+standards should offer the scalability and flexibility for
+advanced techniques, such as FL and large foundation
+models.
+• Collaborative AI computing: The basic protocol support
+for the collaboration among the AI Node and the 6gNB
+should be in place on Day 1, to make the best of the
+proposed RAN architecture in terms of AI computing
+resource utilization. Such basic support would relate to
+the interactions between the AI Node and the 6gNB for
+collaborative model training and inference. The manage-
+ment and orchestration of the AI computing resources are
+also essential for enabling infrastructure reusability and
+ensuring forward compatibility. This requires the aware-
+ness, virtualization, monitoring, and optimized scheduling
+of the RAN AI infrastructure. In a later phase, more
+collaborative patterns, e.g., collaborative pre-training and
+fine-tuning, can be introduced as more AI computing
+capabilities are mounted in the 6gNBs.
+• AI service assurance: It is crucial for the 6G AI-
+Native RAN to deliver unparalleled connectivity for
+the emerging mobile AI services, and therefore, novel
+mechanisms for QoS assurance shall be available on
+6G Day 1. To meet the new service requirements, the
+new mechanisms may involve real-time acquisition of AI
+service traffic characteristics and dynamic adaptation in
+RAN, in addition to the QoS framework enhancements
+that consider new service KPIs beyond the traditional
+ones, such as throughput, delay and packet loss. When the
+6G RAN evolves with new computing services beyond
+connectivity, the joint optimization of radio and comput-
+ing resources should be considered to ensure the user
+experience.
+• RAN data service: First, a unified service exposure
+framework is essential on Day 1 for RAN to expose its
+data services to the external consumers. The framework
+should enable service discovery, access control and mon-
+itoring, charging, etc. The detailed design for the service
+framework could be easier to start from the existing
+Common API Framework (CAPIF) in 3GPP [32], but
+also needs to address the characteristics in RAN like
+distributed deployment and UE anonymity. On top of
+RAN Management and Orchestration
+AI Node
+6gNB
+Mgmt. I/F
+RAN OAM
+6g Xn
+New RAN I/F
+New SBI
+Functions and 
+interfaces defined 
+by 3GPP RAN
+Functions and 
+interfaces defined
+by other SDOs
+RAN App
+RAN App
+RAN App APIs
+Radio Cloud Platform
+Orchestration I/F
+6gNB
+Uu I/F
+Uu I/F
+6G NG I/F
+6G NG I/F
+Orchestration
+Fig. 10: Potential split of work between 3GPP and O-RAN,
+ETSI, etc.
+the service exposure framework, a number of RAN data
+services could come at 6G Day 1, and followed by
+enhanced capabilities like data augmentation at a later
+phase.
+• RAN AI computing service: The same service exposure
+framework for RAN data services should be reused to
+expose its AI computing services. With the unified service
+exposure framework, it is expected that the AI computing
+services can be available on 6G Day 1 for both OTT
+service providers and RAN applications. When such
+services are consumed by OTT service providers, support
+for local offloading of the service traffic is essential in the
+standards. When the services are consumed by the RAN
+applications, standardized APIs should be exposed to
+enable the RAN applications to influence RAN behavior.
+As 6G RAN evolves, more advanced AI computing
+services may be considered, e.g., using RAN data (e.g.,
+sensing data) to optimize/specialize AI models for OTT
+services.
+C. Collaborations among 3GPP, ITU and other SDOs
+A clean split of work among 3GPP, ITU and other SDOs is
+crucial for the multi-SDO collaborations to fully achieve the
+AI-Native RAN vision.
+As the link between global governments and the telecom
+industry, ITU has a visionary role in setting the objectives of
+the next-generation network. Moreover, it should take the lead-
+ership in delineating the globally-unified, umbrella framework
+and terminologies for AI Native networks. A relevant activity
+is the new Focus Group on AI-Native for Telecommunication
+Networks (FG-AINN) established in 2024, which aims to
+specify the terminologies, identify new AI/ML use cases
+and standardization impacts, and reshape the next-generation
+network architecture with native AI/ML designs [33].
+14
+TABLE III: Building blocks for AI Native RAN on 6G Day 1, and further enhancements for evolution
+Essential capabilities
+Standardization impact
+Building blocks for 6G Day 1
+Further enhancements
+for evolution
+AI-driven RAN
+Processing, Optimization,
+and Automation
+AI for RAN use cases
+- 5G-A AI-enabled use cases;
+- 6G new uses (e.g., AI-based RS overhead reduction),
+considering complexity and performance gains
+Cross-domain use cases
+Data collection
+- Dedicated AI radio bearer on air interface;
+- Cross-domain data collection
+Task-driven customizable
+RAN data collection
+Model management
+In network and continuous AI/ML workflow
+that enables forward compatibility
+- model training/retraining, inference;
+- model validation, model deployment and update;
+- model performance monitoring;
+- capability discovery, task configuration,
+model activation/deactivation, and status reporting
+Advanced AI/ML
+technology support
+Efficient, controllable and
+highly reliable AI LCM
+Collaborative AI
+computing
+- Collaborative training and Collaborative inference;
+(for efficient AI computing resource utilization
+and improved performance);
+- AI computing resource management and orchestration
+(to enable RAN infrastructure sharing, reusability,
+and forward compatibility)
+Collaborative pre-training
+and fine-tuning
+AI service assurance
+- Connection QoS assurance
+Assurance for integrated
+communication and
+computing services
+RAN data service
+- RAN service exposure framework;
+- RAN data exposure services
+RAN data augmentation
+AIaaS provisioning
+RAN AI computing
+service
+- RAN service exposure framework (same as above);
+- RAN AI computing services
+Advanced AI computing
+services
+3GPP, as the most important SDO for the telecom industry,
+should be responsible for the end-to-end 6G architecture,
+protocols, and interfaces, ensuring interoperability, scalability,
+and backward compatibility in commercial networks. It col-
+laborates with industry stakeholders, regulators, and academia
+to address emerging 6G requirements including the integration
+with AI/ML, from ITU and other sources. In particular, 3GPP
+shall ensure multi-vendor interoperability in RAN among the
+base stations, and with the core network as well as the UEs.
+As NFV and cloud-native paradigm begin to change how the
+RAN devices are implemented, other SDOs including ETSI
+and O-RAN Alliance may play a critical role in the RAN
+cloud infrastructure that host the RAN functions, which is in-
+strumental for the forward compatibility in terms of hardware.
+Moreover, the SDOs other than 3GPP may also complement
+the RAN architecture with cutting-edge innovations, on the
+premise that the enhancements are compliant with the 3GPP
+standards, and that the work is open and non-discriminative.
+Under the umbrella framework set by ITU, different options
+for the split of work between 3GPP and other SDOs can be
+considered for the standardization of 6G AI Native RAN. A
+recommended option is illustrated in Fig. 10. In this option,
+3GPP is responsible for the 6G RAN nodes (6gNB and the
+new AI Node) and their management aspects, as well as
+the core network and the UE. The interfaces associated with
+those functions are also within the 3GPP scope. Apart from
+the hierarchical architecture associated with the AI Node, a
+consistent set of AI/ML LCM mechanisms shall be specified in
+3GPP, which will impact all the interfaces and their protocols,
+in particular, the air interface and the new interface between
+AI Node and 6gNBs. As complement to 3GPP RAN, the RAN
+applications hosted by the AI Node, and the associated APIs,
+may benefit from the expertise in O-RAN Alliance and may
+continue their journey outside 3GPP. Such RAN applications
+can also have their variants in RAN OAM, to enable flexibility
+and innovation in the management domain. This paradigm
+has been proved valuable in 5G O-RAN with its featured
+hierarchy of Non-RT and Near-RT RICs. ETSI and O-RAN
+will also contribute to the implementation of cloud-native
+RAN. The RAN cloud infrastructure and its interface towards
+the integrated management and orchestration system will fall
+in scope for the SDOs other than 3GPP. It is anticipated that
+an open and coherent ecosystem will prosper in 6G with its
+promise for new services and verticals.
+An alternative option can also be considered. In this option,
+the AI Node, along with the hosted RAN applications, is out
+of scope for 3GPP but specified in O-RAN. The interfaces
+and protocols associated with the AI Node are also part of
+O-RAN’s work. Apart from that, 3GPP is still responsible
+for the 6gNBs and their management aspects, as well as the
+core network and the UE. As 3GPP RAN will define the
+AI/ML LCM for the 6gNBs, it may be in the best interests
+of the telecom industry for O-RAN to align its LCM designs
+with those in 3GPP RAN. The collaboration among SDOs is
+expected to catalyze innovation in AI-native 6G RAN.
+15
+Fig. 11: Three phases nationwide large scale field trial.
+V. NATIONWIDE LARGE SCALE FIELD TRIALS
+A. Overview
+In this section, we will share the exploration and field trial
+practices on the typical use cases and key features of the AI-
+Native RAN architecture from China Mobile’s perspective.
+To empirically validate the technical feasibility, architecture
+features and commercial viability of AI-Native RAN envi-
+sioned for 6G, a nationwide large-scale field trial is planned
+across three iterative phases as illustrated in Fig. 11. Built upon
+the nationwide 5G-A commercial network, this trial aims to
+systematically evaluate key features advancing the 6G vision,
+including the scalability of the proposed hierarchical AI-Native
+RAN architecture, the potential of experience-centric service
+models, and the convergence of communication and edge
+intelligence.
+Phase 1 focused on the core architecture feature valida-
+tion, i.e., the centralized and distributed AI coordination, and
+three typical use cases, including the AI-enabled differentiated
+service quality assurance, network energy saving, and root
+cause analysis for poor user experience. A centralized AI
+computing unit (CCU) is introduced and deployed in the trial
+for the computationally intensive AI inferences in the proposed
+solution, which reflects the AI node component as proposed
+in the 6G RAN architecture. Phase 1 tests started from Jan.
+2024 to Dec. 2024 and covers the 31 cities in China with 5000
+5G-A base stations.
+Building upon Phase 1, Phase 2 extends testing to 475,000
+gNBs and incorporates diverse deployment scenarios, includ-
+ing high-density urban environments such as stadiums, con-
+cert venues, and tourist hotspots. This phase introduces AI-
+driven radio resource management (RRM) techniques, such as
+intelligent resource scheduling and multi-cell coordination, to
+enhance network performance and SLA assurance capabilities.
+Additionally, Phase 2 explores AI-based user profiling and
+proactive service subscription recommendations to monetize
+“experience-centric” service models. For instance, users run-
+ning extended reality (XR) applications in congested urban
+environments may be prompted to subscribe to an “Ultra-
+Low Latency” assurance plan, which offers dynamic and deter-
+ministic service guarantees that outperform those available to
+non-subscribed users. These advancements also validate the
+synergistic coordination of the RAN, network management
+systems (NMS), and business support systems (BSS).
+Phase 3 targets nationwide deployment and addresses
+emerging scenarios, such as AI-driven unmanned aerial vehicle
+(UAV) mobility management and QoE assurance for embodied
+intelligence systems. Architecturally, this phase will further
+investigate RAN capability exposure and the feasibility of edge
+AI service provisioning leveraging RAN infrastructure. Phase
+3 represents a pioneering step toward realizing the 6G AIaaS
+vision, positioning AI-Native RAN as foundational enablers
+of next-generation intelligent ecosystems.
+In the following, the deployment architecture for the trials
+and three typical case studies in Phase 1 will be elaborated in
+detail.
+B. Deployment Architecture
+The newly introduced AI-driven processes are computation-
+ally intensive, imposing demands that exceed the capabilities
+of existing gNBs. To resolve this limitation, a CCU—aligned
+with the AI node component proposed in 6G RAN architec-
+tures—was deployed in the trial. This unit consolidates com-
+putational resources to execute resource-intensive AI inference
+tasks across a cluster of gNBs, effectively serving as a shared
+AI hub. The CCU supports centralized model training, real-
+time inference, and cross-gNB coordination within its serviced
+gNB cluster. This architecture facilitates centralized and dis-
+tributed AI coordination as well as elastic resource scaling,
+which significantly improves RAN computing infrastructure
+efficiency and enables dynamic resource sharing. Notably, the
+16
+Fig. 12: The deployment architecture, topology and networking of the testing
+computing capability of the CCU can be flexibly scaled out
+to accommodate growing AI workloads. Furthermore, surplus
+computing capacity within the CCU can be repurposed to
+host edge AI applications (e.g., distributed video analytics),
+leveraging RAN infrastructure to deliver low-latency edge AI
+services in a cost-effective manner.
+To validate the potential of AI-enabled RAN optimization,
+China Mobile led a large-scale field trial in 2024 with three
+typical use cases, shown as the Phase 1 program in Fig. 11.
+The deployment architecture, topology and networking of the
+testing in the field trial are illustrated in Fig. 12.
+C. Case Study 1: AI-enabled differentiated service assurance
+In this subsection, we present a case study on AI-enabled
+differentiated service assurance. The case study also validates
+the superiority of the centralized AI computing unit in enabling
+an AI-Native RAN architecture.
+To achieve deterministic service assurance for critical ap-
+plications, such as those prioritized for VIP customers, an
+AI-empowered solution was designed. The solution employs
+AI-based real-time service perception to dynamically classify
+traffic and enforce service-level guarantees based on operator-
+defined policies. For example, to ensure uninterrupted short-
+video streaming (e.g., TikTok) for VIP users, the AI perception
+model identifies and monitors their TikTok traffic in real
+time. When service degradation is detected, QoS optimization
+is triggered, incorporating application-specific requirements
+and real-time network conditions to prioritize the VIP user’s
+experience. AI plays a pivotal role in this optimization process:
+prediction AI models can be trained to estimate user-specific
+metrics such as data rate, latency, and QoE, enabling proactive
+adjustments like priority-weighted resource scheduling and
+dynamic radio resource allocation. Specifically, the AI-driven
+optimization function can be formulated as:
+ˆau = arg max
+a∈A E [U (ˆqu(a, xu))] ,
+where ˆau denotes the optimal action (e.g., scheduling weight,
+resource allocation) selected for user u; xu represents the
+observed context of user u, including application type, RAN
+metrics, and mobility state; ˆqu(·) is the AI-predicted vector of
+service-level quality metrics (e.g., latency, throughput, QoE);
+A is the space of feasible actions; and U(·) is a utility
+function reflecting the operator’s policy objective, such as
+QoE maximization or latency minimization. This formulation
+allows the centralized AI model to make proactive, context-
+aware decisions tailored to individual users and applications.
+Four representative test scenarios were selected for the
+trial: central business districts (CBDs), university campuses,
+hospital complexes, and residential zones. These scenarios
+encompass diverse coverage conditions (with reference signal
+receiving power (RSRP) ranging from -85 dBm to -115
+dBm) and heterogeneous traffic load conditions, including
+light traffic (physical resource block (PRB) utilization <30%),
+medium load (PRB ∈[30%, 50%]), and heavy load (PRB
+∈[50%, 70%]).
+The AI-based service perception model was trained to clas-
+sify 1000+ distinct application types, achieving an accuracy
+exceeding 95%. Leveraging the CCU, the system enables real-
+time identification of service types for 4,800 concurrent users
+across 8 gNBs.
+To validate performance, results for two representative ap-
+plications—short video streaming and QR code scanning—are
+analyzed. Fig. 13 and 14 illustrate the latency reductions
+observed for these applications, respectively.
+For short videos, as shown in Fig. 13, the proposed solu-
+tion significantly reduces air interface latency across diverse
+coverage and load conditions. In scenarios with poor coverage
+(RSRP ≤-105 dBm) and heavy traffic loads (PRB utilization
+≥50%), latency decreased by 33.6% and 30.5%, respectively.
+The average air interface latency dropped from 43.0 ms to
+32.0 ms, representing a 25.6% improvement.
+Similarly, in Fig. 14, for QR code scanning application,
+latency reductions of 25.9% and 26.8% were achieved in
+scenarios with poor coverage (RSRP ≤-105 dBm) and heavy
+traffic loads (PRB utilization ≥50%), respectively. The average
+latency improved from 18.5 ms to 14.5 ms, yielding a 21.9%
+overall reduction.
+It is worth noting that the proposed service assurance
+17
+30.6
+37.8
+52.9
+25.6
+29.3
+36.7
+16.2%
+22.5%
+30.5%
+0%
+5%
+10%
+15%
+20%
+25%
+30%
+35%
+0 
+10 
+20 
+30 
+40 
+50 
+60 
+轻载<30%
+中载【30,50】
+重载【50,70】
+Gain(%)
+Latency(ms)
+保障前
+保障后
+相对增益
+23.3
+28.1
+41.7
+68.8
+21.1
+24.2
+31.3
+45.7
+9.3%
+13.8%
+24.9%
+33.6%
+0%
+5%
+10%
+15%
+20%
+25%
+30%
+35%
+0 
+10 
+20 
+30 
+40 
+50 
+60 
+70 
+80 
+极好点
+好点
+中点
+差点
+Gain(%)
+Latency(ms)
+保障前
+保障后
+相对增益
+Before
+After
+Relative gain
+Extremely good 
+point
+Good point
+Medium point
+Bad point
+Light load<30%
+Medium load[30, 50]
+Heavy load[50, 70]
+Before
+After
+Relative gain
+(a)
+(b)
+Fig. 13: Average air interface latency of short videos. (a) average latency (ms) vs. coverage; (b) average latency (ms) vs. load.
+13.3
+14.9
+19.7
+24.4
+11.8
+12.7
+14.4
+18.1
+11.1%
+15.3%
+26.9%
+25.9%
+0%
+5%
+10%
+15%
+20%
+25%
+30%
+0 
+5 
+10 
+15 
+20 
+25 
+极好点
+好点
+中点
+差点
+Gain(%)
+Latency(ms)
+保障前
+保障后
+相对增益
+14.8
+18.1
+22.7
+12.4
+14.3
+16.6
+16.2%
+20.5%
+26.8%
+0%
+5%
+10%
+15%
+20%
+25%
+30%
+0 
+5 
+10 
+15 
+20 
+25 
+轻载<30%
+中载【30,50】
+重载【50,70】
+Gain(%)
+Latency(ms)
+保障前
+保障后
+相对增益
+Before
+After
+Relative gain
+Good point
+Medium point
+Bad point
+Light load<30%
+Medium load[30, 50]
+Heavy load[50, 70]
+Before
+After
+Relative gain
+(a)
+(b)
+Extremely good point
+Fig. 14: Average air interface latency of QR code scanning application. (a) average latency vs. coverage; (b) average latency
+vs. load.
+3.6%
+3.4%
+3.2%
+3.5%
+5.2%
+4.5%
+4.2%
+4.4%
+5.7%
+5.2%
+4.0%
+4.7%
+0%
+1%
+2%
+3%
+4%
+5%
+6%
+CBD
+高校
+居民区
+医院
+轻载
+中载
+重载
+College
+Residential area
+Hospital
+Light load
+Medium load
+Heavy load
+Fig. 15: Traffic volume growth under varying scenarios and
+loads
+framework not only enhances deterministic performance but
+also boosts user traffic volume in 5G-A networks. Stabilized
+radio link quality incentivizes applications like short video
+platforms to dynamically upgrade streaming resolutions (e.g.,
+from 720p to 1080p/4K), thereby improving user experience
+and increasing per-user data consumption . As illustrated in
+Fig. 15, the framework drives 3–6% traffic growth across
+the four test scenarios, even under heterogeneous network
+conditions.
+Beyond technical performance improvements, the proposed
+framework enables operators to adopt experience-centric mon-
+etization strategies, shifting from traditional traffic-based mod-
+els to value-added service tiers (e.g., premium ultra-low-
+latency subscriptions). By ensuring deterministic performance
+guarantees, the framework supports fine-grained service dif-
+ferentiation that enhances QoE and drives user adoption of
+premium offerings. It further positions operators to capitalize
+on emerging 5G-A and future 6G ecosystems by transform-
+ing network performance into a scalable revenue stream,
+effectively aligning infrastructure investments with long-term
+profitability.
+D. Case Study 2: AI-enabled root cause analysis for poor user
+experience
+This use case targets the root causes of poor user experience
+by leveraging multi-dimensional data across UE, network,
+and application layers. A central AI unit enables fine-grained
+application awareness, correlating service-level metrics (e.g.,
+throughput, delay, loss) with RAN indicators like signal to
+interference plus noise ratio (SINR), RSRP, handover failures,
+and mobility traces. These enriched per-user datasets are
+reported to the management system for real-time analysis. Fig.
+16 illustrates one example of the correlated downlink TCP
+round-trip time (RTT) data, synchronization signaling block
+(SSB)-RSRP and SINR in the grid granularity in the field
+trial, where the grid size is 50m × 50m. At the management
+layer, multi-cell data and user session records (xDRs) are fused
+to enable second-level, per-user, per-service correlation. An
+XGBoost model classifies user types (e.g., indoor, outdoor,
+high-speed) with over 90% precision, enabling tailored root
+cause analysis. To enable such high-accuracy prediction, we
+define a supervised learning model that maps multi-layer
+network observations to user-level performance labels. To
+enable such high-accuracy prediction, we define a supervised
+learning model that maps multi-layer network observations to
+user-level performance labels. The model predicts the user
+state or root cause category ˆyu for each user u based on a
+18
+DL TCP RTT (ms)
+SSB-RSRP (dBm)
+SSB-SINR(dB)
+Fig. 16: The grid level correlated data of DL TCP RTT, SSB-RSRP and SINR. The grid size is 50m × 50m.
+fused feature vector:
+ˆyu = fθ
+ xApp
+u , xRAN
+u
+, xUE
+u , xMob
+u
+
+.
+Here, fθ(·) denotes the AI model (e.g., XGBoost) param-
+eterized by θ; xApp
+u
+includes application-layer features such
+as TCP RTT and packet loss; xRAN
+u
+contains radio KPIs
+such as SINR, RSRP, and handover statistics; xUE
+u
+repre-
+sents device-level attributes; and xMob
+u
+captures spatiotemporal
+mobility patterns (e.g., grid-based positioning). This fused
+modeling framework enables second-level, per-user diagnosis
+and supports high-precision classification across diverse radio
+environments.
+Temporal correlation techniques further pinpoint major per-
+formance issues, such as coverage gaps, handover failures,
+and interference. Compared to traditional rule-based methods,
+this AI-driven approach improves root cause identification
+accuracy by 20% and classification recall by 30%, enabling
+scalable real-time diagnostics and more proactive network
+optimization.
+E. Case Study 3: AI-enabled network energy saving
+This case study demonstrates the potential of AI to revolu-
+tionize network energy management, offering a practical and
+scalable approach for building adaptive and sustainable green
+mobile networks.
+To fully tap into energy-saving (ES) potential, China Mobile
+has implemented more than 20 energy-saving technologies
+across the time, frequency, spatial, and power domains in
+its commercial 5G network. The core principle behind these
+techniques is to dynamically align network resource utilization
+with real-time traffic demand by switching off or scaling down
+cells, carriers, antennas, or PAs during periods of low traffic.
+To quantitatively assess the energy-saving potential of various
+strategies, the total energy consumption of the network is
+modeled as follows:
+E =
+N
+X
+n=0
+M
+X
+m=0
+T
+X
+t=0
+
+P P A(P, m, t) + P transceiver(m, t) + P digital IF(m, t, C)
+
++
+N
+X
+n=0
+T
+X
+t=0
+
+P baseband(t, C) + P0
+
+.
+In this model, E denotes the total energy consumption
+over the network. N, M, and C represent the number of
+base stations, channels (spatial domain), and carriers (fre-
+quency domain), respectively. T denotes the operating time,
+and P is the transmit power. P P A, P transceiver, P digital IF, and
+P baseband denote the power consumption of power amplifiers,
+transceivers, digital intermediate frequency modules, and base-
+band processors, respectively. P0 represents the static power
+consumption of other essential components. This formulation
+allows for fine-grained analysis and comparison of energy
+usage across different domains and system elements. However,
+the above mentioned ES approaches often depend on manually
+configured parameters, such as fixed time windows and static
+traffic thresholds, which lack the agility to respond to dynamic
+traffic patterns, resulting in suboptimal energy efficiency.
+To overcome these limitations, two AI-enabled energy-
+saving solutions are proposed and validated in the large-scale
+field trial. For solution 1, AI is integrated into the network
+management system to predict traffic patterns and dynami-
+cally adjust energy-saving thresholds based on cell-level data
+sampled at a 15-minute interval. This improves flexibility
+over static configurations but remains limited by coarse data
+granularity and slower reaction times. While for solution 2,
+CCUs are further deployed at base stations to enable real-
+time service type recognition. By identifying delay-tolerant
+traffic, AI enables intelligent scheduling strategies such as
+packet aggregation, extending radio resource sleep periods
+without degrading user experience. This edge-intelligent ap-
+proach complements centralized management and significantly
+19
+21.28%
+26.60%
+34.16%
+0.00%
+5.00%
+10.00%
+15.00%
+20.00%
+25.00%
+30.00%
+35.00%
+ES w/o AI
+ES w/ AI solution 1
+ES w/ AI solution 2
+Fig. 17: Performance gain of the AI-enabled energy saving.
+boosts energy-saving efficiency through fine-grained, service-
+aware optimization.
+All results are benchmarked against a baseline scenario
+without energy-saving mechanisms. Compared to this baseline,
+the proposed AI-based approaches show significant improve-
+ments: solution 1 achieves 26.6% energy saving, while solu-
+tion 2 further increases the savings to 34.16%. This represents
+an additional 5.32% and 12.88% improvement, respectively,
+over traditional non-AI energy-saving methods.
+F. Insights for 6G
+The three-phase nationwide field trial is pivotal for ad-
+vancing 6G and offers critical insights into the integration
+of AI-Native architectures within 5G-A/6G RANs. Phase 1’s
+validation of the CCU coordinating multiple gNBs—provides
+a foundational reference for 6G standardization, demonstrat-
+ing how centralized intelligence enhances resource efficiency
+and deterministic service assurance. However, the trials also
+revealed unresolved challenges: the absence of standardized
+interfaces between the CCU and multi-vendor gNBs hindered
+cross-platform collaborative inference, while the lack of modu-
+lar API encapsulation for the AI capabilities limited their open-
+ness and reusability across diverse scenarios. These findings
+underscore the necessity for 6G standardization bodies to pri-
+oritize interoperable AI service frameworks, enabling vendor-
+agnostic coordination and flexible deployment of network-
+native intelligence.
+VI. CONCLUSIONS
+This paper presents an operator-oriented view on AI-Native
+RAN design for 6G, with a focus on potential Day 1 standard-
+ization priorities. Building on a review of AI/ML integration
+in 5G and 5G-A, we first articulate the concept of AI-
+Native RAN and its three essential capabilities. For each
+capability, we identify key enabling technologies and discuss
+corresponding Day 1 standardization considerations.
+The paper further articulated our perspective on the scope
+and objectives of Day 1 standardization for AI-Native RAN
+in 6G. In particular, we proposed that the introduction of
+an AI Node is essential and should be realized from Day
+1. To validate the proposed architecture, concepts, and key
+enabling technologies, a large-scale field trial was conducted
+throughout 2024, spanning 31 cities in China and involving
+over 5000 5G-A base stations. The results demonstrated sig-
+nificant improvements, including a 25.6% and 21.9% reduction
+in latency for short video streaming and QR code scanning,
+respectively, along with a 3–6% increase in overall network
+traffic across diverse scenarios. The trial highlighted the
+value of centralized AI in enhancing resource efficiency and
+service assurance, while also revealing gaps in standardized
+interfaces and modular APIs for AI capabilities. In addition,
+field trials on energy saving and root cause analysis use
+cases were performed. Notably, the proposed AI-driven root
+cause analysis framework achieved up to 20% improvement in
+diagnostic accuracy and a 30% gain in user type classification
+recall compared to rule-based methods, enabling scalable and
+proactive network optimization.
+Moving forward, as the 6G standardization progresses, we
+anticipate further refining the design of AI-Native RAN and
+conducting more validations in diverse practical scenarios.
+It is expected that the research and practice presented in
+this paper will provide strong support for the standardization
+and commercialization of 6G AI-Native RAN, and drive the
+development of communication networks towards intelligence,
+efficiency, and sustainability.
+VII. ACKNOWLEDGMENT
+This work was supported by the National Key Re-
+search and Development Program of China under Project
+2022YFB2902100.
+REFERENCES
+[1] 3GPP, “Architecture enhancements for 5G System (5GS)
+to support network data analytics services,” Technical
+Specification (TS) 23.288, 2025.
+[2] 3GPP, “Management and orchestration; Artificial Intelli-
+gence/ Machine Learning (AI/ML) management,” Tech-
+nical Specification (TS) 28.104, 2025.
+[3] 3GPP, “Architecture enhancements for 5G System (5GS)
+to support network data analytics services,” Technical
+Specification (TS) 28.105, 2025.
+[4] 3GPP, “Study on enhancement for data collection for NR
+and ENDC,” Technical Report (TR) 37.817, 2019.
+[5] 3GPP, “Study on Artificial Intelligence (AI)/Machine
+Learning (ML) for NR air interface,” Technical Report
+(TR) 38.843, 2019.
+[6] 3GPP, “Study on Artificial Intelligence (AI)/Machine
+Learning (ML) for mobility in NR,” Technical Report
+(TR) 38.744, 2024.
+[7] ITU-R M.2160, “Framework and overall objectives of the
+future development of IMT for 2030 and beyond,” 2023.
+[8] J. Wu, R. Li, X. An, C. Peng, Z. Liu, J. Crowcroft,
+and H. Zhang, “Toward native artificial intelligence in 6g
+networks: System design, architectures, and paradigms,”
+arXiv preprint arXiv:2103.02823, 2021.
+[9] M. Iovene, L. Jonsson, D. Roeland, M. D’Angelo,
+G. Hall, M. Erol-Kantarci, and J. Manocha, “Defining
+ai native: A key enabler for advanced intelligent telecom
+networks,” Ericsson white paper, 2023.
+[10] J.
+Hoydis,
+F.
+A.
+Aoudia,
+A.
+Valcarce,
+and
+H. Viswanathan, “Toward a 6g ai-native air interface,”
+20
+IEEE Communications Magazine, vol. 59, no. 5, pp.
+76–81, 2021.
+[11] 3GPP. Overview of AI/ML related Work in 3GPP.
+(2025, Feb. 16). [Online]. Available: https://docbox.etsi.
+org/Workshop/2025/02 AICONFERENCE/SESSION05/
+3GPPRAN MONTOJO JUAN QUALCOMM.pdf
+[12] L. Kundu, X. Lin, R. Gadiyar, J.-F. Lacasse, and
+S. Chowdhury, “Ai-ran: Transforming ran with ai-
+driven
+computing
+infrastructure,”
+arXiv
+preprint
+arXiv:2501.09007, 2025.
+[13] Q. Sun, N. Li, I. Chih-Lin, J. Huang, X. Xu, and Y. Xie,
+“Intelligent ran automation for 5g and beyond,” IEEE
+wireless communications, vol. 31, no. 1, pp. 94–102,
+2023.
+[14] N. Li, Y. Wang, Q. Sun, X. Li, J. Huang, C. Liu,
+Y. Huang, Z. Hu, Y. Han, and C.-L. I, “Rethinking ran
+architecture for deep fusion of ai and communication in
+6g,” IEEE Wireless Communications, vol. 32, no. 3, pp.
+164–174, 2025.
+[15] 3GPP, “5G System (5GS); Study on traffic characteristics
+and performance requirements for AI/ML model trans-
+fer,” Technical Report (TR) 22.874, 2021.
+[16] 3GPP, “System architecture for the 5G System (5GS),”
+Technical Specification (TS) 23.501, 2025.
+[17] 3GPP, “Data Collection and Reporting; General De-
+scription and Architecture,” Technical Specification (TS)
+26.531, 2024.
+[18] 3GPP, “Study on Artificial Intelligence and Machine
+learning in 5G media services,” Technical Report (TR)
+26.531, 2025.
+[19] 3GPP, “Study on 3GPP AI/ML Consistency Alignment,”
+Technical Report (TR) 22.850, 2025.
+[20] O-RAN Alliance, “O-RAN Architecture Description,”
+Technical Specification (TS) WG1.OAD, 2024.
+[21] O-RAN Alliance, “O-RAN Non-RT RIC: Architecture,”
+Technical Specification (TS) WG2.Non-RT-RIC-ARCH,
+2024.
+[22] O-RAN Alliance, “O-RAN Near-RT RIC Architecture,”
+Technical Specification (TS) WG3.RICARCH, 2024.
+[23] O-RAN Alliance, “O-RAN Use Cases and Require-
+ments,” Technical Specification (TS) WG3.UCR, 2024.
+[24] ITU-T, “Architectural framework for machine learning in
+future networks including IMT-2020,” Recommendations
+ITU.Y.3172, 2019.
+[25] ITU-T, “Autonomous networks - Architecture frame-
+work,” Recommendations ITU.Y.3061, 2023.
+[26] ETSI, “Experiential Networked Intelligence (ENI); ENI
+requirements,” TS GS ENI 002, 2023.
+[27] ETSI, “Zero-touch network and Service Management
+(ZSM); Reference Architecture,” TS GS ZSM 002, 2019.
+[28] 3GPP, “CMCC’s views on 6G RAN study,” Technical
+Document 6GWS-250144, 2025.
+[29] Yuan, Y., Qin, F., Liu, J. et al, “A unified data collection
+framework based on the data plane for 6G.” Front Inform
+Technol Electron Eng, vol. 26, p. 293–300, 2025.
+[30] G. Qu, Q. Chen, W. Wei, Z. Lin, X. Chen, and K. Huang,
+“Mobile edge intelligence for large language models: A
+contemporary survey,” IEEE Communications Surveys &
+Tutorials, 2025.
+[31] N. Li, X. Li, Y. Yan, Q. Sun, Y. Han, and K. Cheng,
+“Joint communication and computing resource optimiza-
+tion for collaborative ai inference in mobile networks,”
+in 2023 IEEE 98th Vehicular Technology Conference
+(VTC2023-Fall), 2023, pp. 1–5.
+[32] 3GPP, “Common API Framework for 3GPP Northbound
+APIs,” Technical Specification (TS) 23.222, 2025.
+[33] ITU-T.
+Focus
+Group
+on
+Artificial
+Intelligence
+Native
+for
+Telecommunication
+Networks
+(FG
+AINN).
+[Online].
+Available:
+https://www.itu.int/en/
+ITU-T/focusgroups/ainn/Pages/default.aspx

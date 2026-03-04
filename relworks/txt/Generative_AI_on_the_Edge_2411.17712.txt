@@ -1,0 +1,812 @@
+Generative AI on the Edge: Architecture and
+Performance Evaluation
+Zeinab Nezami∗, Maryam Hafeez∗, Karim Djemame†, Syed Ali Raza Zaidi∗
+{∗School of Electronic and Electrical Engineering, †School of Computing}, University of Leeds, UK
+{Z.Nezami, M.Hafeez, K.Djemame, S.A.Zaidi}@leeds.ac.uk
+Abstract—6G’s AI native vision of embedding advance in-
+telligence in the network while bringing it closer to the user
+requires a systematic evaluation of Generative AI (GenAI)
+models on edge devices. Rapidly emerging solutions based on
+Open RAN (ORAN) and Network-in-a-Box strongly advocate
+the use of low-cost, off-the-shelf components for simpler and
+efficient deployment, e.g., in provisioning rural connectivity. In
+this context, conceptual architecture, hardware testbeds and
+precise performance quantification of Large Language Models
+(LLMs) on off-the-shelf edge devices remains largely unex-
+plored. This research investigates computationally demanding
+LLM inference on a single commodity Raspberry Pi serving
+as an edge testbed for ORAN. We investigate various LLMs,
+including small, medium and large models, on a Raspberry
+Pi 5 Cluster using a lightweight Kubernetes distribution (K3s)
+with modular prompting implementation. We study its feasibility
+and limitations by analyzing throughput, latency, accuracy and
+efficiency. Our findings indicate that CPU-only deployment of
+lightweight models, such as Yi, Phi, and Llama3, can effectively
+support edge applications, achieving a generation throughput of 5
+to 12 tokens per second with less than 50% CPU and RAM usage.
+We conclude that GenAI on the edge offers localized inference in
+remote or bandwidth-constrained environments in 6G networks
+without reliance on cloud infrastructure.
+Index Terms—6G, GenAI, Large Language Model, Kubernetes,
+Edge AI
+I. INTRODUCTION
+R
+ESEARCH and development towards 6th generation of
+communication networks (6G) heavily emphasize the
+end-to-end integration of AI. Many AI capabilities are part
+of standardization efforts, building on existing foundations
+such as intelligent radio resource management in radio ac-
+cess network (RAN) and Network Data Analytics Function
+(NWDAF) in the core [1]. Within RAN, this integration of
+AI is accelerated by Open RAN (ORAN) which leverages
+disaggregation of the traditional architecture into modular
+interoperable components1. It further introduces the concept
+of extended applications xApps and rApps within the RAN
+Intelligence Controller to automate various management and
+optimization tasks via leveraging AI and machine learning.
+AI has evolved from convolutional [2] and recurrent neural
+networks [3] to transformers [4], enabling greater scalability
+This work is funded by the Communications Hub for Empowering Distributed
+Cloud Computing Applications and Research (CHEDDAR), supported by the
+EPSRC through UKRI’s Technology Missions Fund.
+Manuscript received April 19, 2021; revised August 16, 2021.
+1O-RAN Alliance, https://www.o-ran.org/, accessed Nov 2024
+and the development of foundation models. These models,
+such as LLMs, use large internet datasets to perform diverse
+tasks [5] without specific training for each. The computation
+of AI algorithms is shifting from centralized data centers
+to decentralized edge devices, enhancing personalization and
+robustness. Gartner predicts that by 2025, over half of deep
+neural network data analysis will occur on edge devices, or
+Edge AI, closer to data sources [6]. This shift, particularly
+in 6G networks, paves the way for LLMs on edge devices,
+democratizing AI and enabling real-time applications with
+6G’s ultra-low latency, high bandwidth, and edge computing.
+This will improve services such as NLP, real-time translation,
+personalized assistance, and optimize network performance
+through dynamic traffic prediction and resource manage-
+ment [7].
+While AI-native design of future networks with extensive
+use of GenAI is inevitable, it is becoming increasingly crucial
+to quantify the performance of these models on resource-
+constrained edge devices that lack a GPU. Significant intel-
+ligence is bundled in ORAN for low latency and enhanced
+service provision. However, it is not practical to have a GPU
+in every deployment scenario. For instance, Vodafone has
+recently showcased its low cost private 5G solutions running
+on a Raspberry Pi2. These low cost platforms are ideal and
+will become increasingly common for extending connectivity
+in an energy-efficient manner for the benefit of all sectors
+of modern economies including rural deployments. However,
+a systematic evaluation of provisioning LLM capabilities on
+such platforms remains an open question. LLM inference
+demands high computational and memory resources, typi-
+cally requiring multiple high-end accelerators, which pushes
+the limits of the infrastructure [8]. While advancements in
+lightweight models, optimization techniques, and quantization
+have made it possible to run smaller versions of LLMs on
+low-cost, low-power devices without entirely relying on cloud
+infrastructure, the performance of these advancements and
+their relative benefit in edge deployments are not yet fully
+understood.
+In this context, Edge AI testbeds are crucial for validating
+the feasibility of real-time, distributed intelligence within next-
+generation networks. In response to the growing demand
+for privacy-sensitive real-time AI applications, this research
+investigates the deployment of LLMs in edge environments,
+2Vodafone,
+https://www.vodafone.com/news/technology/
+vodafone-unveils-prototype-5g-network-built-raspberry-pi-computer,
+accessed Nov 2024
+0000–0000/00$00.00 © 2021 IEEE
+arXiv:2411.17712v1  [cs.DC]  18 Nov 2024
+specifically for PromptAI (a conversational AI assistant) on
+low-cost edge infrastructure. We examine LLM deployment
+on Raspberry Pi using a lightweight Kubernetes distribution
+(K3s), demonstrating both the feasibility and limitations of
+such setups, and providing insights to guide future research
+and optimizations for LLMs in resource-constrained edge
+infrastructures. This work aligns with the vision of 6G ORAN
+by demonstrating how AI models can be effectively deployed
+to facilitate real-time decision-making and ultra-low latency
+communication at the network edges3.
+The main contributions of this paper are as follows: (i)
+an edge computing testbed for LLM experimentation using
+Raspberry Pis orchestrated by K3s, (ii) a modular Promp-
+tAI framework for LLM application experimentation, built
+with an API-based architecture for seamless extensibility. (iii)
+preliminary evaluations of popular LLMs of different sizes,
+providing performance quantification and comparison. (iv) an
+open-source GitHub repositoryhttps://github.com/cheddarhub/
+edgeAI, a DockerHub repository for Docker imageshttps://hub.
+docker.com/repositories/edgeAI, facilitating further research
+in GenAI. The paper is structured as follows: Section 2
+reviews related work and identifies the research gap that this
+paper addresses. Section 3 describes the system architecture,
+outlining the design choices and configurations employed in
+our GenAI deployment. Section 4 details the experimental
+setup and evaluation results. Section 5 concludes the paper
+with key findings and future research directions.
+II. RELATED WORK
+Recent advances in LLMs have made LLM inference a sig-
+nificant workload, driving active research in the field. On-
+device DNN benchmarking has been explored extensively for
+mobile and edge deployments. Early works [9] introduced
+benchmarking suite for device ranking and analyzing model
+execution across various downstream tasks, while MLPerf [10]
+has become a standardized industry benchmark. Recent stud-
+ies [11] have also focused on evaluating performance in
+real-world mobile applications, highlighting the increasing
+adoption of on-device machine learning. However, the growing
+computational demands of LLMs have led most deployments
+to offload inference to the cloud [12], with on-device deploy-
+ment remaining limited. This challenge is compounded by the
+lack of suitable tools, highlighting the need for improved on-
+device measurement to support edge-based LLM execution.
+In the LLM domain, previous research has primarily ad-
+dressed training efficiency [13], [14] or optimized infer-
+ence [8], [15] within data center environments. There has
+been growing interest in enabling edge execution of LLMs
+through various frameworks. llama.cpp4 and MLC5 offer
+cross-platform accelerated execution with support for diverse
+LLM architectures. Other frameworks such as llama2.c6 focus
+on simplicity, while tinygrad7 aims at accelerated execution
+36G SNS IA whitepaper, https://6g-ia.eu/plans-papers/, accessed Oct 2024
+4llama.cpp, https://github.com/ggerganov/llama.cpp, accessed Oct 2024
+5MLC-LLM, https://github.com/mlc-ai/mlc-llm, accessed Oct 2024
+6llama2.c, https://github.com/karpathy/llama2.c, accessed Oct 2024
+7Tinygrad, https://github.com/tinygrad/tinygrad, accessed Oct 2024
+but lacks quantized model support. TinyChatEngine8 provides
+on-device inference with compressed models. MELT [5] in-
+troduces an automation infrastructure developed for execut-
+ing and benchmarking LLMs on personal mobile devices.
+Recently, operating system providers have introduced their
+own platforms, such as Google’s AICore9, though these are
+limited to specific devices. Additionally, Google has released
+MediaPipe10 to support on-device LLM execution.
+Related work reveals that the inference of LLMs is primarily
+constrained by memory and CPU power [5], [8], [15], indi-
+cating that the field is still evolving. While GPUs are often
+considered the optimal choice for running complex machine
+learning models due to their superior processing power, their
+high cost can be prohibitive for many applications. In contrast,
+spare edge devices equipped with CPUs are widely available
+and affordable, making them an attractive option for enabling
+broader access to AI capabilities in edge computing scenarios.
+This work presents a novel approach by establishing a K3s-
+based Raspberry Pi testbed, specifically designed to deploy
+and evaluate LLMs on edge devices operating solely on
+CPUs. Utilizing emerging LLMs, open-source tools, and a
+lightweight Kubernetes environment, our setup measures the
+resource consumption and inference speed of LLMs in real-
+world edge scenarios. Furthermore, this research provides a de-
+tailed performance analysis of LLMs on resource-constrained
+edge devices—an aspect that current studies on LLMs do not
+comprehensively address.
+III. SYSTEM ARCHITECTURE
+We consider a small base station (SBS) which is composed
+of two compute clusters. Considering the option for low-
+cost deployment, we consider these compute clusters to be
+Raspberry Pi single board computers (SBC). We do not assume
+any graphical processing unit (GPU) capability across these
+clusters. The first cluster hosts containerised implementation
+of ORAN. A reference implementation can run SRS RAN
+stack as demonstrated by Vodafone in recent trials. The second
+cluster operates to serve U-plane traffic and performs edge
+offloading for LLM based tasks. Our focus in this article is on
+performance of LLMs deployed on this cluster and therefore
+rest of the discussion is geared towards this. The cluster
+forms API-based edge computing testbed for LLM deployment
+on constrained hardware, consisting of four Raspberry Pis
+functioning as edge nodes, including an orchestrator (K3s
+master). The system utilizes Docker containers to deliver
+GenAI services in isolated environments across the Raspberry
+Pis, managed by K3s. Figure. 1 presents the overall system
+architecture and the core components of the container-based
+PromptAI running on the testbed. The testbed prototype is
+implemented using a cluster of Raspberry Pi 5 units, each
+equipped with a Quad-core ARM Cortex-A76 processor oper-
+ating at 2.0 GHz, with 8 GB of RAM and 128 GB of storage. A
+8TinyChatEngine, https://github.com/mit-hanlab/TinyChatEngine, accessed Oct
+2024
+9AICore, https://developer.android.com/ml/aicore, accessed Oct 2024
+10MediaPipe,
+https://developers.googleblog.com/2024/03/
+running-large-languagemodels-on-device-with-mediapipe-andtensorflow-lite.
+html, accessed Oct 2024
+Monitoring and Logging
+                
+Prompt AI
+Local 
+Model 
+Repository
+Raspberry Pi/ 
+Master
+Raspberry Pi/ 
+Worker
+Quantized
+Distributed
+Switch
+Pi Cluster2
+GenAI on Edge
+Pi Cluster1
+ORAN Setup
+Local User Plane
+Software 
+Defined Radio
+Non-quantized 
+Fig. 1: Architecture of the GenAI testbed, its key components
+and their interconnections in 6G networks
+D-Link 5-Port Desktop Gigabit PoE+ Switch used to connect
+the Raspberry Pis into a cluster. The edge nodes are not limited
+to Raspberry Pi devices; any compatible system can join the
+K3s network, supporting a scalable and heterogeneous archi-
+tecture. Integrated with sensors, Pis enable diverse applica-
+tions, including Edge AI. Deploying LLM services as Docker
+containers ensures secure, isolated execution on resource-
+constrained devices, improving flexibility and efficiency in
+edge hardware deployment. K3s: K3s is a streamlined version
+of Kubernetes specifically designed for resource-constrained
+IoT and edge computing environments. It boasts a significantly
+reduced memory footprint, fast startup times, and simplified
+configuration, making it ideal for lightweight, distributed
+deployments. The K3s master node in this testbed acts as
+the central orchestrator, interfacing with the system’s API to
+manage the allocation and release of edge resources. K3s
+efficiently orchestrates services across edge nodes, ensuring
+smooth operation in resource-constrained environments, with
+automated updates and easy scalability.
+Docker container: The testbed deploys a distributed Promp-
+tAI system using Docker containers, ensuring fast initial-
+ization and lightweight operation across the Raspberry Pi
+cluster. This system includes interconnected services running
+via APIs, including a prompt front-end, proxy, and model
+containers. The PromptAI front-end, developed using FastAPI
+and Node.js, allows users to select from a pool of LLMs
+sourced from Hugging Face and stored in a Docker Hub
+repository, enabling them to engage with their chosen model.
+Requests are forwarded through a proxy service that directs
+traffic to the appropriate model container on the Raspberry Pi
+nodes. By leveraging Docker containers, each component runs
+in an isolated, reproducible environment, providing scalability,
+flexibility, and ease of management—qualities essential for ef-
+ficient edge computing in resource-constrained environments.
+Grafana/Prometheus: The testbed is equipped with open-
+source tools such as Prometheus and Grafana to facilitate
+comprehensive monitoring and visualization of system metrics.
+Prometheus collects and stores time-series data for tracking
+TABLE I: Overview of Tested Models
+Model
+Size
+HF Repository
+Large Models (Above 6B)
+InternLM
+7.74B
+second-state/internlm2 5-7b-chat-GGUF
+Mistral
+7.25B
+bartowski/Mistral-7B-Instruct-v0.3-GGUF
+Llama2
+6.74B
+TheBloke/Llama-2-7b-Chat-GGUF
+Medium Models (Between 3B and 6B)
+Phi
+3.82B
+bartowski/Phi-3.5-mini-instruct-GGUF
+Llama3
+3.21B
+bartowski/Llama-3.2-3B-Instruct-GGUF
+Small Models (Below 3B)
+Zephyr
+2.8B
+TheBloke/stablelm-zephyr-3b-GGUF
+Gemma
+2.61B
+bartowski/gemma-2-2b-it-GGUF
+Yi
+1.48B
+bartowski/Yi-Coder-1.5B-Chat-GGUF
+key performance metrics, while Grafana offers interactive data
+visualization. Together, they enable real-time monitoring of
+CPU, memory, and network usage across edge resources, with
+customizable Grafana dashboards for tailored GenAI testbed
+visualization.
+Models: This work utilizes quantized models that use less
+memory and computational power, making them more suitable
+for running on resource-constrained devices, while maintain-
+ing a balance between performance and resource use. We
+focus on the GPT-Generated Unified Format (GGUF), a more
+recent and advanced quantization method for LLMs11, using
+its optimized storage and quantization to enable faster LLM
+inference. We select 4-bit quantized models, which strike a
+balance between minimal accuracy loss and significant size
+reduction. As outlined in Table I, we selected a diverse
+set of decoder-only models from the open llm leaderboard12
+on the Huggingface website, along with the latest popular,
+regularly updated models. These models are then deployed and
+evaluated in three groups, categorized by size: large, medium,
+and small. Large models include InternLM, developed by
+Shanghai AI Lab and SenseTime, which excels in multilingual
+tasks such as comprehension, reasoning, and coding; Mistral,
+optimized for high-performance text generation; and Meta’s
+Llama2, focused on inference and fine-tuning tasks. Medium-
+sized models feature Microsoft’s Phi, an ONNX-based model
+efficient across diverse hardware and ideal for resource-limited
+settings, along with Meta’s Llama3, a compact multilingual
+model for dialogue and summarization that balances capability
+with efficiency. Small models include Yi, which targets code
+generation and natural language tasks with minimal resource
+usage; Stability AI’s StableLM Zephyr, optimized for inter-
+active applications on mobile and edge devices; and Gemma,
+a smaller LLaMA-based model that performs well in text
+completion.
+IV. EVALUATION
+This section examines LLM inference performance of pop-
+ular LLM models using real conversations. We employ a
+subset of prompts from the OpenAssistant/oasst1 dataset13 [5],
+consisting of 50 distinct dialogues, each with a minimum of
+11Ggml library: Large language models for everyone, https://github.com/
+rustformers/llm/tree/main/crates/ggml, accessed Oct 2024
+12https://huggingface.co/spaces/open-llm-leaderboard/open llm leaderboard
+13OpenAssistant dataset, https://huggingface.co/datasets/OpenAssistant/oasst1,
+accessed Oct 2024
+0
+50
+100
+150
+200
+250
+300
+350
+400
+Prompt Index
+0
+50
+100
+150
+200
+250
+Number of Words
+Fig. 2: Prompt lengths across conversations (highlighted by
+different colors)
+five interaction turns per conversation. As shown in Figure. 2,
+the dataset has a moderate average prompt length of 25 words
+but exhibits high variability, with a standard deviation of 30.67
+words and prompt lengths ranging from 1 to 241 words. Each
+experiment is repeated three times to ensure consistency and
+reliability of results. We assess five key metrics—memory
+usage, CPU utilization, latency, accuracy, and computational
+throughput—offering a comprehensive view of resource de-
+mands and efficiency for PromptAI in resource-constrained
+settings. Since GGUF model evaluation is in its early stages,
+with limited supporting libraries, we use the llama.cpp frame-
+work to capture fine-grained data for PromptAI operations
+during inference. To ensure deterministic execution, maximum
+token generation is set to 500.
+A. Throughput and Latency
+Inference in LLMs involves two key phases: Prefill and
+Decode (i.e., generation). The Prefill phase computes the key-
+value cache for the prompt input tokens before autoregressive
+generation begins. The Decode phase then selects the next
+token(s) from a probability distribution generated by the
+model and converts them into human-readable output. Figure 3
+illustrates average throughput for Prefill and Decode phases,
+highlighting model efficiency in processing conversational
+prompts. Among large models, Llama2 and InternLM show
+stable Prefill throughput with low variability. Llama2 achieves
+around 7% higher Decode throughput than InternLM, though
+InternLM’s higher Prefill variability may introduce output
+speed fluctuations in time-sensitive applications. Mistral’s Pre-
+fill throughput aligns closely with InternLM’s but has 5.8%
+higher Decode throughput.
+For medium-size models, Llama3 significantly outperforms
+Phi in Prefill throughput by 25%, suggesting it can handle ini-
+tial token processing more efficiently and reduce initial latency.
+However, Llama3’s Prefill variability may affect consistency
+on constrained devices. Phi’s Decode throughput is strong,
+though Llama3 exceeds it by 13%, providing advantages in
+both initial and ongoing processing. In small models, Yi
+achieves standout Prefill throughput, roughly 4.5 times higher
+than Gemma and Zephyr. Yi also leads in Decode throughput
+with 170% greater efficiency than other small models, though
+its high Prefill variability may impact response-time pre-
+dictability. Gemma outperforms Zephyr in Prefill throughput
+by about 21%, with similar Decode throughput between them,
+making both suitable for edge applications needing moderate
+Yi
+Gemma
+Zephyr
+Llama 3
+Phi
+Llama 2
+Mistral InternLM
+0
+20
+40
+60
+80
+Throughput (Tokens/s)
+Prefill
+Decode
+Fig. 3: Throughput performance for Prefill and Decode stages
+across models
+throughput and stability. In summary, Llama3 suits tasks
+prioritizing high throughput, despite some Prefill variability.
+Yi delivers high performance but may introduce inconsistency
+in real-time settings, while Gemma and Zephyr offer balanced
+throughput and stability, fitting for moderately demanding
+edge applications. Furthermore, the throughput of LLMs is
+fundamentally constrained by the Decode phase; however, ini-
+tiatives like Distributed Llama, currently under development14,
+leverage tensor parallelism across multiple devices and show
+promising potential to address this limitation.
+Figure 4 (a-c) shows the percentage of time each model
+spends in the Prefill and Decode phases relative to total
+time. We normalized the timing data to calculate the average
+time per token, with Total Time representing the cumulative
+duration from input to output (end-to-end latency). The latency
+analysis reveals notable performance differences among the
+models. In the large model category, Llama2 has a slightly
+faster Prefill time (252.64 ms per token), about 8% faster than
+Mistral and InternLM. In contrast, Llama3 and Phi have much
+faster Prefill times of 32.59 ms and 41.50 ms, respectively,
+being 88% and 85% faster than InternLM, making them ideal
+for scenarios requiring efficient processing.
+In the small model category, Gemma and Zephyr show
+higher latencies, with Prefill times of 82.02 ms and 102.62
+ms, respectively. Their Decode times further increase total
+processing time, with Gemma taking 238.93 ms and Zephyr
+taking 233.88 ms, resulting in total times of 251.98 ms and
+243.63 ms. In comparison, Yi achieves a total processing
+time over 80% faster than both, with a Prefill time of just
+13.79 ms—about 20 times faster than InternLM’s 276.42 ms.
+When considering end-to-end latency (Average Total Time),
+Figure 4 d, the differences are more pronounced. Yi’s 47.41 s
+is much faster than InternLM (251.96 s) and Llama2 (228.14
+s), highlighting that smaller models such as Yi and Llama3
+are competitive for applications requiring both low Prefill and
+overall low latency.
+B. Resource Consumption
+Figure. 5 presents a comparative analysis of CPU and mem-
+ory usage across various models during inference. Memory
+usage exhibits variability across model groups, with larger
+models typically demanding more resources. InternLM, Mis-
+tral, and Llama2 show higher memory usage, with values rang-
+ing from approximately 0.66 GB to 3.14 GB. In comparison,
+14Distributed Llama, https://github.com/b4rtaz/distributed-llama, accessed Nov
+2024
+1.3%
+7.6%
+9.5%
+3.0%
+3.9%
+23.5%
+25.6%
+25.7%
+(a) Prefill Time (%)
+3.3%
+9.0%
+8.8%
+6.8%
+7.8%
+21.1%
+20.8%
+22.5%
+(b) Decode Time (%)
+3.2%
+9.1%
+8.8%
+6.8%7.6%
+21.0%
+21.0%
+22.4%
+(c) Total Time (%)
+0
+100
+200
+300
+End-to-end Latency (s)
+Yi
+Gemma
+Zephyr
+Llama3
+Phi
+Llama2
+Mistral
+InternLM
+Models
+(d) Total Time (s)
+Yi
+Gemma
+Zephyr
+Llama3
+Phi
+Llama2
+Mistral
+InternLM
+Fig. 4: Timing metrics across models: (a)-(c) Prefill, Decode, and total time per token for each model; (d) Total time (in
+seconds)
+0
+2
+4
+Memory Usage (GB)
+InternLM
+Mistral
+Llama2
+Phi
+Llama3
+Zephyr
+Gemma
+Yi
+0
+1
+2
+3
+4
+CPU Usage Across 4 Cores (%)
+Fig. 5: Memory and CPU usage across different models
+small models demonstrate lower memory requirements, with
+averages ranging from 0.65 GB to 2.59 GB. Notably, Yi has
+the lowest average memory usage among the small models
+at 0.65 GB, which is about 79% lower than Mistral’s 3.14
+GB. Across all models, CPU utilization remains consistently
+low, with mean CPU usage centering around 50%. There
+is minimal variation across the models in terms of CPU
+demand, suggesting low computational overhead despite the
+differences in model size. The results indicate that smaller
+models, with their lower memory and CPU demands, are
+well-suited for memory-constrained edge devices, while larger
+models may require more powerful hardware or optimizations
+using model pruning. Larger models may occasionally cause
+slight CPU spikes, but their overall CPU demand remains low,
+making them feasible for deployment in edge environments
+with limited processing resources.
+C. Deployment Stability and Accuracy
+The models studied in this research did not encounter out-
+of-memory (OOM) errors or hardware restarts during cluster
+deployment, demonstrating robustness and stability in han-
+dling large workloads. While quantization effectively reduces
+memory usage and accelerates inference, it often sacrifices
+accuracy, especially at lower precision levels (e.g., 4 bits).
+To evaluate accuracy, we use the Winogrande benchmark
+dataset15, designed for common-sense reasoning, and the LM-
+Evaluation Harness [16] framework with its inference server to
+serve our quantized models. The dataset includes Natural Lan-
+guage Inference (NLI) tasks, where models select the answer
+with the highest log likelihood, which is then compared to
+the correct label. Model accuracy on Winogrande benchmark
+varies significantly, with InternLM leading at 0.8, followed
+by Gemma at 0.7, and Llama3 at 0.69. Mistral, Llama2,
+and Phi all share an accuracy of 0.68. Yi and Zephyr score
+lower at 0.49 and 0.46, respectively. These differences largely
+stem from model architecture and size [5]. It is important
+to note that we evaluate the non-fine-tuned variants of the
+models, which typically serve as a proxy for the accuracy
+degradation in downstream models [5]. We selected pre-trained
+models rather than fine-tuned versions due to the alignment
+in fine-tuning processes, which often leads to performance
+enhancements that are not directly comparable to the base
+models.
+D. Contextual Sensitivity
+This experiment examines how context length impacts lan-
+guage models throughput in conversational settings, such as
+dialogue agents and customer support. Figure. 6 measures
+throughput variability across models using the Coefficient
+of Variation (CV), the ratio of standard deviation to mean
+throughput, providing insights into stability across different
+context lengths. The Prefill throughput analysis reveals dis-
+tinct clusters of performance consistency among the various
+models. In Llama3, Phi, and Yi, Prefill CV aligns with the
+prompt length fluctuations, indicating that longer prompts add
+variability to the model’s processing efficiency. Conversely,
+models such as Llama2, Mistral, Gemma, and Zephyr show
+stable CV values across various conversation lengths, demon-
+strating consistency in Prefill stages regardless of context size,
+making them more suited for contexts with varied conversation
+lengths. On the other hand, Decode CV varies slightly in
+response to increasing conversation length and prompt size.
+InternLM and Mistral maintain the lowest Decode CVs, aver-
+aging around 0.0046, indicating very stable performance with
+minimal fluctuations, even as context length increases. Llama2
+shows a higher CV (0.0157), indicating a more pronounced
+response to varying conversation lengths. Phi, Llama3, and
+Gemma show moderate variability, with Decode CVs ranging
+15https://huggingface.co/datasets/automated-research-group/winogrande,
+accessed Nov 2024
+5
+6
+7
+8
+9
+10
+0.0
+0.1
+0.2
+0.3
+0.4
+Prefill CV
+5
+6
+7
+8
+9
+10
+Number of Prompts per Conversation
+0.0
+0.1
+0.2
+0.3
+0.4
+Decode CV
+22.5
+25.0
+27.5
+30.0
+Average Prompt Length
+InternLM
+Mistral
+Llama2
+Phi
+Llama3
+Zephyr
+Gemma
+Yi
+Fig. 6: Coefficient of Variance for Prefill and Decode through-
+put across LLMs
+from approximately 0.0097 to 0.0112, suggesting these models
+are almost consistent, but with slight fluctuations as prompt
+lengths increase. Yi also exhibits moderate variability, similar
+to Phi and Llama3, although with slightly less fluctuation.
+Among the models, Zephyr shows the highest variability, indi-
+cating more substantial fluctuations in performance as prompt
+lengths increase. Overall, Mistral and InternLM show stable
+throughput across varying context lengths, while Llama2 and
+Zephyr exhibit more variability, especially in the Decode
+stage. Llama3, Phi, and Yi maintain moderate performance
+consistency with slight fluctuations.
+E. Putting it All Together
+Figure. 7 reveals the performance characteristics of dif-
+ferent models in terms of end-to-end latency, throughput,
+and accuracy. Large models, such as InternLM, Mistral,
+and Llama2, show significant trade-offs between latency and
+throughput, with InternLM having the highest latency and
+lowest throughput but achieving high accuracy. Medium-sized
+models, including Phi and Llama3, balance efficiency with
+capability. Llama3 demonstrates relatively lower latency and
+higher throughput compared to the large models, while Phi
+offers moderate efficiency. Lastly, small models, such as Yi,
+Zephyr, and Gemma, excel in latency and throughput. Yi leads
+with the lowest latency and highest throughput but sacrifices
+accuracy, while Gemma outperforms Yi in all metrics, though
+it lags behind Llama3.
+V. CONCLUSION
+This paper demonstrates the feasibility and limitations
+of deploying GenAI on edge devices, specifically targeting
+conversational AI applications. Using a Raspberry Pi-based
+edge computing testbed, we evaluated the performance of
+various LLMs across large, mid, and small model sizes. Our
+custom Kubernetes-based framework, built on APIs, supports
+modular integration and plug-and-play functionality, making
+it easy to add or swap models. By leveraging open-source
+0.00
+0.25
+0.50
+0.75
+1.00
+Latency
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Decode Throughput
+Y
+G
+Z
+L3
+P
+L2
+M
+I
+0.5
+0.6
+0.7
+0.8
+Accuracy (%)
+0.0
+0.5
+1.0
+Latency
+0.0
+0.5
+1.0
+Prefill
+Y
+G
+Z
+L3
+P
+L2
+M
+I
+Y   Yi
+Z   Zephyr
+P   Phi
+G   Gemma
+L3  Llama3
+I   InternLM
+Fig. 7: Comparison of model performance across multiple
+metrics
+tools, the testbed remains highly extensible and adaptable
+for ongoing and future experimentation. Evaluation results
+show that lightweight models such as Yi and Phi achieve
+sufficient throughput and latency for edge settings, presenting
+a viable solution for distributed intelligence without the need
+for specialized accelerators. In future work, we will to leverage
+the Testbed to develop a robust AI agent framework optimized
+for 6G network management.
+REFERENCES
+[1] 3GPP. 5g nr; technical specification group radio access network; nr;
+release 18, 2023.
+[2] Alex Krizhevsky, Ilya Sutskever, and Geoffrey E Hinton.
+Imagenet
+classification with deep convolutional neural networks. Communications
+of the ACM, 60(6):84–90, 2017.
+[3] Felix A Gers, J¨urgen Schmidhuber, and Fred Cummins. Learning to for-
+get: Continual prediction with lstm. Neural computation, 12(10):2451–
+2471, 2000.
+[4] A Vaswani. Attention is all you need. Advances in Neural Information
+Processing Systems, 2017.
+[5] Stefanos Laskaridis, Kleomenis Katevas, Lorenzo Minto, and Hamed
+Haddadi. Melting point: Mobile evaluation of language transformers.
+ArXiv, abs/2403.12844, 2024.
+[6] Inc. Gartner. Gartner hype cycle for edge computing, 2024, 2024.
+[7] Khen Bo Kan, Hyunsu Mun, Guohong Cao, and Youngseok Lee.
+Mobile-llama: Instruction fine-tuning open-source llm for network anal-
+ysis in 5g networks. IEEE Network, 2024.
+[8] Woosuk Kwon, Zhuohan Li, Siyuan Zhuang, Ying Sheng, Lianmin
+Zheng, Cody Hao Yu, Joseph Gonzalez, Hao Zhang, and Ion Stoica.
+Efficient memory management for large language model serving with
+pagedattention. In Proceedings of the 29th Symposium on Operating
+Systems Principles, pages 611–626, 2023.
+[9] Andrey Ignatov, Radu Timofte, William Chou, Ke Wang, Max Wu,
+Tim Hartley, and Luc Van Gool. Ai benchmark: Running deep neural
+networks on android smartphones.
+In Proceedings of the European
+Conference on Computer Vision (ECCV) Workshops, pages 0–0, 2018.
+[10] Vijay Janapa Reddi, Christine Cheng, David Kanter, Peter Mattson,
+Guenther Schmuelling, Carole-Jean Wu, Brian Anderson, Maximilien
+Breughe, Mark Charlebois, William Chou, et al.
+Mlperf inference
+benchmark. In 2020 ACM/IEEE 47th Annual International Symposium
+on Computer Architecture (ISCA), pages 446–459. IEEE, 2020.
+[11] Mengwei Xu, Jiawei Liu, Yuanqiang Liu, Felix Xiaozhu Lin, Yunxin
+Liu, and Xuanzhe Liu. A first look at deep learning apps on smartphones.
+In The World Wide Web Conference, pages 2125–2136, 2019.
+[12] Yuyi Mao, Changsheng You, Jun Zhang, Kaibin Huang, and Khaled B
+Letaief.
+A survey on mobile edge computing: The communication
+perspective.
+IEEE communications surveys & tutorials, 19(4):2322–
+2358, 2017.
+[13] Samyam Rajbhandari, Jeff Rasley, Olatunji Ruwase, and Yuxiong He.
+Zero: Memory optimizations toward training trillion parameter models.
+In SC20: International Conference for High Performance Computing,
+Networking, Storage and Analysis, pages 1–16. IEEE, 2020.
+[14] Jie You, Jae-Won Chung, and Mosharaf Chowdhury. Zeus: Understand-
+ing and optimizing GPU energy consumption of DNN training. In 20th
+USENIX Symposium on Networked Systems Design and Implementation
+(NSDI 23), pages 119–139, 2023.
+[15] Reza Yazdani Aminabadi, Samyam Rajbhandari, Ammar Ahmad Awan,
+Cheng Li, Du Li, Elton Zheng, Olatunji Ruwase, Shaden Smith, Minjia
+Zhang, Jeff Rasley, et al.
+Deepspeed-inference: enabling efficient
+inference of transformer models at unprecedented scale.
+In SC22:
+International Conference for High Performance Computing, Networking,
+Storage and Analysis, pages 1–15. IEEE, 2022.
+[16] Leo Gao, Jonathan Tow, Stella Biderman, Sid Black, Anthony DiPofi,
+Charles Foster, Laurence Golding, Jeffrey Hsu, Kyle McDonell, Niklas
+Muennighoff, et al. A framework for few-shot language model evalua-
+tion. Version v0. 0.1. Sept, 10:8–9, 2021.

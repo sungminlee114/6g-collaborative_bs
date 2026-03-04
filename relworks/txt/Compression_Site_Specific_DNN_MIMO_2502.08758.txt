@@ -1,0 +1,662 @@
+Compression of Site-Specific Deep Neural Networks
+for Massive MIMO Precoding
+Ghazal Kasalaee, Ali Hasanzadeh Karkan, Jean-François Frigon, and François Leduc-Primeau
+Department of Electrical Engineering, Polytechnique Montréal, Montréal, QC H3C 3A7, Canada
+Emails: {ghazal.kasalaee, ali.hasanzadeh-karkan, j-f.frigon, francois.leduc-primeau}@polymtl.ca
+Abstract—The deployment of deep learning (DL) models for
+precoding in massive multiple-input multiple-output (mMIMO)
+systems is often constrained by high computational demands
+and energy consumption. In this paper, we investigate the com-
+pute energy efficiency of mMIMO precoders using DL-based
+approaches, comparing them to conventional methods such as zero
+forcing and weighted minimum mean square error (WMMSE).
+Our energy consumption model accounts for both memory access
+and calculation energy within DL accelerators. We propose a
+framework that incorporates mixed-precision quantization-aware
+training and neural architecture search to reduce energy usage
+without compromising accuracy. Using a ray-tracing dataset
+covering various base station sites, we analyze how site-specific
+conditions affect the energy efficiency of compressed models. Our
+results show that deep neural network compression generates
+precoders with up to 35 times higher energy efficiency than
+WMMSE at equal performance, depending on the scenario and
+the desired rate. These results establish a foundation and a
+benchmark for the development of energy-efficient DL-based
+mMIMO precoders.
+I. INTRODUCTION
+The deployment of deep learning (DL) models in massive
+multiple-input multiple-output (mMIMO) systems has shown
+great potential to advance wireless communication, particularly
+to optimize beamforming strategies. Deep Neural Network
+(DNN)s can dynamically adjust the beamforming to achieve
+better performance than traditional methods. However, the
+large size and overparameterization of these networks present
+challenges for practical deployment, especially on resource-
+constrained edge devices where memory, energy consumption,
+and processing latency are critically limited.
+Designing energy-efficient communication systems is critical
+for the realization of mMIMO systems. However, finding a
+precoding solution that maximizes energy efficiency under low-
+resolution quantizer constraints remains a significant challenge
+[1]. Quantized convolution neural networks (CNNs) are a
+popular choice for reducing hardware complexity. In CNNs,
+quantization can be applied to inputs, weights, and activa-
+tions [2]. Typically, weights and activations are represented
+using 32-bit or 64-bit floating-point formats, but they can be
+quantized to lower-precision fixed-point representations, such
+as 2-bit or even 1-bit precision, to further reduce computational
+and memory requirements. Lowering the precision leads to a
+smaller model size; however, it can also reduce accuracy, so
+choosing the number of precision bits is a non-trivial task.
+These constraints hinder the direct application of DNNs in
+real-world mMIMO systems. The celebrated weighted mini-
+mum mean square error (WMMSE) algorithm proposed in [3]
+is based on the equivalence between the glsSINR and mean
+square error, which is then solved using the block coordinate
+descent method. The WMMSE algorithm provides state-of-the-
+art performance and is widely used as a benchmark in the
+literature. However, existing iterative algorithms like WMMSE
+face challenges due to their computational complexity, which
+grows rapidly with the number of antennas and the network
+size. This increase in complexity leads to higher latency,
+making such algorithms less suitable for real-time applications
+or large-scale systems where rapid decision-making is critical.
+To address these resource limitations, quantization tech-
+niques have emerged as an effective solution. Quantization
+reduces the complexity of neural networks by lowering the
+bit-width of model weights and activations, which decreases
+memory usage and energy consumption. Common approaches
+such as post-training quantization (PTQ) and quantization-
+aware training (QAT) apply uniform precision across the entire
+network to optimize performance on resource-constrained plat-
+forms [4], [5]. However, these methods often fail to account
+for the varying sensitivity of different network layers to quanti-
+zation, leading to inefficiencies and potential performance loss
+when aggressive quantization is applied uniformly.
+In contrast, Mixed-Precision Quantization (MPQ) provides
+a more flexible approach by allowing different layers to use
+varying bit-widths, enabling a better balance between accuracy
+and energy efficiency [6]. By leveraging search algorithms
+such as Exhaustive Search, mixed-precision quantization can
+optimize bit-width allocation for specific layers, leading to
+significant reductions in energy consumption while maintaining
+high performance. This approach is particularly advantageous
+for complex models like DNNs, which are widely used in
+energy-efficient tasks such as real-time signal processing in
+mMIMO systems.
+This paper proposes a mixed-precision quantization frame-
+work, augmented with Neural Architecture Search (NAS)
+[7], to optimize energy consumption in DL models used for
+mMIMO beamforming. Our approach employs a streamlined
+neural architecture with a single CNN layer followed by
+three fully connected layers, designed to balance computational
+complexity and signal-to-interference-noise ratio (SINR) per-
+formance. Additionally, by adapting our quantization strategy
+to site-specific conditions using ray-tracing datasets, we fur-
+ther enhance the model’s energy efficiency without sacrificing
+arXiv:2502.08758v1  [eess.SP]  12 Feb 2025
+accuracy or SINR performance.
+In this paper, we address the challenge of enhancing energy
+efficiency in DL-based beamforming for mMIMO systems. We
+propose a mixed-precision quantization-aware framework that
+significantly reduces energy consumption compared to standard
+deep learning methods while maintaining competitive sum rate
+performance. This approach achieves results comparable to
+traditional techniques such as zero forcing (ZF) and WMMSE,
+with a strong emphasis on energy efficiency. Additionally, we
+introduce site-specific model compression, a scalable method
+designed to adapt to unique site conditions. By leveraging site-
+specific ray-tracing datasets, this approach enables adaptive
+quantization that accounts for environmental factors, enhancing
+energy efficiency without compromising accuracy. This work
+establishes a solid foundation for advancing energy-efficient
+deep learning-based beamforming, offering a compelling al-
+ternative to conventional methods like ZF and WMMSE,
+particularly in scenarios where energy consumption is a critical
+concern.
+II. SYSTEM MODEL
+This work considers a multi-user mMIMO system where a
+base station (BS) with NT transmit antennas serves NU single-
+antenna users simultaneously. Let xu represent the transmitted
+symbol for each user. The received signal at the uth user can
+be represented as
+yu = h†
+u
+X
+∀u
+wuxu + η ,
+(1)
+in which hu ∈CNT×1 is the wireless channel vector between
+the BS and uth user; the term η ∼CN(0, σ2) denotes complex
+symmetric Gaussian noise with zero mean and a variance of
+σ2; the downlink transmit fully digital precoder (FDP) vector
+is denoted as W = [w1, . . . , xu, . . . , wNU] ∈CNT×NU. The
+corresponding SINR for user u is formulated as
+SINR(wu) =
+h†
+uwu
+2
+P
+j̸=u
+h†
+uwj
+2 + σ2 .
+(2)
+The goal is to find such a precoding W that maximizes the
+throughput under the maximal transmit power Pmax constraint.
+Thus, the downlink sum rate maximization problem can be
+formulated as
+max
+W
+R(W) ,
+(3)
+s.t.
+X
+∀u
+w†
+uwu ≤Pmax ,
+(4)
+where for a precoding matrix W, the sum rate is
+R(W) =
+X
+∀u
+log2
+
+1 + SINR(wu)
+
+.
+(5)
+A. Problem Definition
+Beamforming is crucial in wireless communication, partic-
+ularly at mmWave frequencies, where directional signal trans-
+mission is essential due to the limitations of omnidirectional
+Fig. 1. DNN architecture template.
+antennas. DNNs have shown promise in maximizing the sum
+rate, but despite their enhanced performance, DNNs come
+with high computational complexity and substantial energy
+requirements, posing challenges for deployment on resource-
+limited devices like edge platforms.
+To tackle the complexities and energy demands associated
+with DNN-based precoders in mMIMO systems, we focus on
+developing a method that preserves the high throughput of
+DNNs while making them suitable for resource-constrained
+environments. This requires overcoming inefficiencies caused
+by uniformly applied quantization, which overlooks the varying
+sensitivity of different network layers to precision reduction.
+In this work, we introduce a novel framework that com-
+bines mixed-precision quantization-aware training with neural
+architecture search (NAS). Our method is designed to signif-
+icantly lower the energy consumption of DNNs in precoder
+design while sustaining high throughput for site-specific BSs.
+Extensive experiments validate that our approach achieves
+superior energy efficiency compared to existing DL-based and
+conventional beamforming techniques.
+III. METHODOLOGY
+A. Model Architecture and NAS
+The proposed DNN architecture for digital beamforming,
+illustrated in Figure 1, is specifically designed to address the
+demands of mMIMO systems. The architecture gets the real
+and imaginary parts of the channel state information through
+two separate channels as input and predicts the precoding
+matrix. The network comprises a single CNN layer with the
+kernel size of 3 for feature extraction, followed by three fully
+connected layers (FCLs) to map the extracted features into
+the real and imaginary components of the digital precoder.
+To enhance model generalization and stability, the architecture
+incorporates ReLU activation functions, 5% dropout to mitigate
+overfitting, and batch normalization to accelerate convergence
+and improve robustness during training. Our approach opti-
+mizes quantization by exploring a search space of bit-width
+configurations for the weights across the layers of the DNNs.
+We vary the precision levels for each layer—[CONV, FCL1,
+FCL2, FCL3]—with multiple bit-width choices, allowing for
+a large number of possible permutations. Additionally, we
+consider different model architectures by varying the output
+channel size Cout of the convolutional layer and the size
+DFCL of FCLs. This results in a comprehensive search space
+combining quantization and architectural configurations. We
+use exhaustive search to explore all possible combinations,
+ensuring that optimal configurations are identified without
+overlooking any potential solutions. The small model size and
+fast training times make this exhaustive search feasible. Ulti-
+mately, this method helps to balance energy efficiency and sum
+rate performance, which is essential for energy-constrained
+mMIMO systems where optimizing both performance and
+resource usage is critical.
+B. Quantization Methods
+This study examines several quantization techniques to en-
+hance energy efficiency and maintain performance in DNNs
+for mMIMO systems. The main objective is to minimize
+energy consumption and memory demands while preserving
+an acceptable sum rate. We explore QAT using the Learned
+Step Size Quantization (LSQ) method [8] and MPQ through
+an exhaustive search. These quantization methods are then
+combined with NAS to find an optimal balance between energy
+efficiency and performance.
+1) PTQ: In preliminary experiments, we also considered
+PTQ as a simple way to reduce model complexity. This method
+applies fixed-point quantization to a pre-trained floating-point
+(FP32) model without requiring retraining. However, in our
+PTQ experiments, sum rate performance was highly degraded
+at low resolutions (4 bits or less), and therefore we focus in
+this paper on the QAT approach to investigate the best possible
+model compression.
+2) QAT: To address the limitations of PTQ, QAT fine-tunes
+a pre-trained model within quantization constraints, enabling
+the network to adapt to lower precision with minimal per-
+formance loss. We use LSQ [8], which dynamically adjusts
+quantization step sizes during training. Unlike static step
+quantization, LSQ optimizes these step sizes to mitigate quan-
+tization error, especially in low-bit scenarios. This is achieved
+through the Straight Through Estimator [9], which supports
+gradient-based optimization for non-differentiable quantization
+functions. The adaptive nature of LSQ provides significant
+gains in both sum rate and energy efficiency under low-bit
+quantization constraints.
+3) MPQ with NAS: MPQ assigns different bit-widths to
+each network layer, offering a flexible trade-off between energy
+efficiency and accuracy. We employ exhaustive search to eval-
+uate quantization combinations [2, 4, 8, and 16 bits] across four
+layers, calculated as 44 = 256. and various model architectures
+by varying Cout ∈{8, 16, 32, 64} and DFCL ∈{512, 1024}
+across the CNN and FCLs (see Fig. 1) to minimize energy
+consumption while preserving sum rate performance [10].
+C. Training Method
+All models are trained using a self-supervised approach
+[11], with sum-rate maximization as the objective function.
+This method ensures that the model learns to predict effective
+precoding vectors directly, without the need for labeled data.
+The loss function is defined as
+L = −R(W) ,
+(6)
+and models are trained with a fixed learning rate of 10−3 and
+a batch size of 1000. Additionally, we average the results from
+four training runs with distinct initialization seeds to control
+for variations in the training process.
+D. Energy Model for Quantized Neural Networks
+In order to evaluate and compare the energy consumption of
+a DNN solution, we consider a simple but realistic model of
+the energy consumed to compute the DNN output. We base our
+model on the one proposed in [12], which considers the energy
+required for memory accesses and computations, while taking
+into account the impact of the bit width of model weights and
+activations.
+The energy consumption of the DNN is thus decomposed
+into three components: computation energy (EC), weight trans-
+fer energy (EW ), and activation transfer energy (EA). The total
+energy consumption is then given by
+EDNN = EC + EW + EA .
+(7)
+The computation energy is based on counting the number of
+multiply-accumulate (MAC) operations required for the linear
+portion of each layer and the number of biasing, batch nor-
+malization, and activation function computations. To simplify
+the model, all these operations are attributed an energy EMAC.
+The computation energy EC is thus given by
+EC = EMAC · (Nc + 3 · Na) ,
+(8)
+where Nc is the total number of MAC operations required
+by the model, Na is the total number of activations, and the
+factor 3 arises since one biasing, one normalization, and one
+activation must be computed for each activation output.
+For consistency with the baseline energy model that will be
+presented next, we model EMAC in terms of the bit width Q as
+EMAC = α ·
+ Q
+16
+β
+,
+(9)
+while choosing α = 0.86 and β = 1.9 to fit the energy mea-
+surements reported in [13].
+The energy associated with transferring weights, EW , is
+expressed as
+EW = EM · Nw + EL · Nc
+√p,
+(10)
+where Nw is the total number of weights, EM and EL represent
+the energy costs of accessing the main on-chip memory and
+local buffers, respectively, and p is the number of parallel ex-
+ecution units. We use EM = 2EL = 2EMAC and p = 64
+  Q
+16
+
+.
+It is assumed that the entire DNN model fits on-chip and no
+accesses to external memory are needed.
+Finally, the energy for transferring activations, EA, is given
+by
+EA = 2 · EM · Na + EL · Nc
+√p .
+(11)
+E. Energy Model for Baseline Methods
+We compare the energy consumption of the proposed quan-
+tized DNN models to conventional algorithms, specifically the
+WMMSE and ZF methods. The WMMSE algorithm, known
+for its high computational complexity due to iterative pro-
+cessing and matrix inversions, consumes significantly more
+energy than the ZF approach. Since these energy models act
+as a baseline, we adopt a conservative (lower bound) approach
+by accounting only for the multiplications when estimating
+compute energy. For memory energy estimation, we consider
+only the local buffer accesses for the operands. The total
+number of real multiplications required for I iterations of
+WMMSE is given by
+Nc = I
+8
+3N 3
+TNU + 4N 2
+TNU + 4NT(4N 2
+U + 2NU)
++ 4N 2
+U + 56
+3 NU
+
+,
+(12)
+while the required number of real multiplications for ZF is
+Nc = 8N 2
+UNT + 8
+3N 3
+U .
+(13)
+The energy model for WMMSE and ZF can then be expressed
+as
+EB = EMAC · Nc + EL · Nc
+√p .
+(14)
+IV. NUMERICAL RESULTS
+A. Dataset Definition
+A custom dataset was generated to accurately reflect the
+channel characteristics pertinent to beamforming in mMIMO
+systems. MATLAB’s Ray-Tracing toolbox simulated both line-
+of-sight (LOS) and non-line-of-sight (NLOS) conditions. The
+simulations positioned a BS within the Montreal region, utiliz-
+ing environmental data from OpenStreetMap [14] for realism.
+The base station employed a uniform planar array antenna
+with 8x8 elements, spaced at half-wavelength, operating at a
+frequency of 2 GHz. The transmitter was set at a height of
+20 m and powered at 20 W, assuming a system loss of 10 dB.
+Users were placed in circular patterns around the base station at
+distances ranging from 50 to 350 m and at 10-degree intervals.
+This configuration captured a wide variety of deployment
+scenarios and channel conditions. The ray-tracing simulations
+considered up to 10 reflections but excluded diffraction effects,
+focusing on signal reflections from buildings and terrain to em-
+ulate multipath propagation in urban environments accurately.
+B. Energy Consumption Examples
+We first present some examples of the energy consumed
+by the different approaches, as per the model presented in
+Sections III-D and III-E. We consider the “UdeM-NLOS”
+scenario. In Table I, we report the energy for the “default”
+variants of the method, that is, for WMMSE, we set the
+stopping criterion to 10−5 to have near-optimal performance,
+and for the DNN, we use Cout = 64 and DFCL = 1024 with the
+maximum weight resolution of 16 bits. We see that the DNN
+TABLE I
+ENERGY COMPARISON OF THE DEFAULT VARIANTS ON “UDEM-NLOS”
+(NT = 64, NU = 4, SNR = 15 DB).
+Method
+Energy (µJ)
+Sum Rate (bit/s/Hz)
+WMMSE (I = 92.8)
+296
+19.2
+Default DNN
+54.5
+18.9 ± 0.007
+Zero-Forcing (ZF)
+0.008
+15.3
+TABLE II
+DNN ENERGY CONSUMPTION WITH UNIFORM QUANTIZATION
+FOR COUT = 64, DFCL = 1024 ON “UDEM-NLOS”
+(NT = 64, NU = 4, SNR = 15 DB)
+Quantization Configs
+Energy (µJ)
+Sum Rate (bit/s/Hz)
+[16, 16, 16, 16]
+54.5
+18.9 ± 0.007
+[8, 8, 8, 8]
+17.5
+18.6 ± 0.012
+[4, 4, 4, 4]
+7.4
+17.8 ± 0.014
+[2, 2, 2, 2]
+4.6
+17.1 ± 0.032
+consumes significantly less than WMMSE at the cost of a slight
+degradation in sum rate (on this scenario). ZF, on the other
+hand, is much less complex, but does not provide competitive
+performance in NLOS conditions, or at low signal-to-noise
+ratio (SNR). As a result, ZF is unlikely to be a favored solution
+in practice, since it results in significant under-utilization of the
+BS resources.
+Next, to illustrate the impact of quantization, Table II lists
+the energy consumption of the DNN for various uniform bit-
+width configurations, for the same Cout and DFCL as in Table I.
+We see that lowering the weight resolution leads to substantial
+energy savings but at the cost of a moderate decrease in
+performance.
+C. NAS Results
+Figure 2 highlights the trade-offs between computational
+energy efficiency (bits/s/Hz/µJ) and sum rate (bits/s/Hz) across
+diverse DNN configurations generated as described in Sec-
+tion III, on the “UdeM-LOS” scenario. Each curve shows
+the Pareto front corresponding to a particular architecture
+configuration, while each point in this curve uses a different
+quantization configuration.
+A few trends can be mentioned among the Pareto-optimal
+results for each architecture. Firstly, the first layer, CONV, is
+often kept at high precision, particularly in smaller models,
+to maintain performance while reducing energy consumption.
+Interestingly, no Pareto-optimal model uses uniform quantiza-
+tion across all layers. Moreover, even models that achieve the
+highest sum rates do not employ more than two layers at the
+highest precision. These results emphasize the importance of
+efficiently distributing bit precision across layers to optimize
+energy consumption.
+The configuration yielding the highest energy efficiency is
+(Cout = 8, DF CL = 512) with quantization [2, 8, 8, 8], achiev-
+ing 26.2 bits/s/Hz/µJ at a moderate sum rate of 28.5 bits/s/Hz.
+On the other hand, the configuration achieving the high-
+27
+28
+29
+30
+31
+Sum-Rate (bit/s/Hz)
+0
+5
+10
+15
+20
+25
+Energy Eﬃciency (bit/s/Hz/µJ)
+14.5×
+1.2×
+Cout = 8
+DFCL = 512
+Cout = 16
+DFCL = 512
+Cout = 32
+DFCL = 512
+Cout = 16
+DFCL = 1024
+Cout = 32
+DFCL = 1024
+Cout = 64
+DFCL = 1024
+Fig. 2.
+Trade-off between energy efficiency and sum rate for CNNs with
+varying Cout, DFCL, and MPQ bit widths, on the “UdeM-LOS” scenario
+(NT = 64, NU = 4, average SNR = 29 dB). All the model configurations that
+were evaluated are shown, while the curves provide the Pareto front associated
+with each architecture configuration.
+est sum rate is (Cout = 64, DF CL = 1024) with quantization
+[16, 16, 4, 8], which reaches 31.3 bits/s/Hz but does not use full
+precision, making it more interesting from an energy efficiency
+perspective. An alternative worth mentioning is the model with
+the second-best sum rate of 31.1 bits/s/Hz, achieved with an
+architecture of (Cout = 64, DF CL = 1024) and quantization
+[16, 2, 2, 2], which uses nearly 5× less energy than the highest
+sum-rate model. We do observe compute energy efficiency
+decreasing rapidly near the highest sum-rate, but of course this
+could simply mean that switching to a larger and/or different
+DNN architecture would be preferable at that point.
+To further illustrate the importance of of NAS and model
+compression in finding efficient DNN precoders, Figure 2
+includes horizontal and vertical arrows that quantify the impact
+on performance of the design choices. The horizontal arrow
+measures the difference in sum rate between the worst and
+best configurations at equal energy efficiency, revealing a 20%
+improvement through optimal model selection. Similarly, the
+vertical arrow shows the difference in energy efficiency at an
+equal sum rate, demonstrating a 14.5× gain.
+D. Impact of Deployment Environment and Energy Efficiency
+Comparison
+Figure 3 compares energy efficiency (bits/s/Hz/µJ) and sum-
+rate (bits/s/Hz) across two contrasting deployment scenarios:
+UdeM-NLOS, characterized by challenging multipath condi-
+tions, and Okapark-LOS, offering clear LOS signal propa-
+gation. These two scenarios highlight the adaptability and
+15
+20
+25
+30
+35
+40
+Sum-Rate (bit/s/Hz)
+10−1
+100
+101
+Energy Eﬃciency (bit/s/Hz/µJ)
+UdeM-NLOS
+Okapark-LOS
+6.1×
+35×
+6.1×
+Cout = 8
+DFCL = 512
+Cout = 16
+DFCL = 512
+Cout = 32
+DFCL = 512
+Cout = 16
+DFCL = 1024
+Cout = 32
+DFCL = 1024
+Cout = 64
+DFCL = 1024
+WMMSE
+1.2×
+Fig. 3. Comparison of energy efficiency (bits/s/Hz/µJ) and sum rate (bits/s/Hz)
+across two environments: UdeM-NLOS (average SNR = 15 dB) and Okapark-
+LOS (average SNR = 28 dB). The proposed method achieves a superior
+balance of energy efficiency and sum rate performance compared to WMMSE.
+Results are derived for models with varying (Cout) and (DF CL).
+effectiveness of the proposed quantized models. For the DNN
+precoders, each curve shows the Pareto-optimal configurations
+across the entire search space, whereas for WMMSE, the
+trade-off between sum-rate and energy efficiency is varied by
+adjusting the stopping criterion.
+In the UdeM-NLOS environment, sum rates are constrained
+between 15 and 20 bits/s/Hz due to severe signal attenuation
+and multipath effects. Despite these limitations, the quantized
+models achieve significant energy savings, with improvements
+of up to 35× in energy efficiency compared to the WMMSE
+baseline, all while maintaining competitive sum rates.
+In contrast, the Okapark-LOS environment, which benefits
+from clear signal paths, supports higher sum rates ranging
+from about 30 to 40 bits/s/Hz. Depending on the desired sum-
+rate, the DNN precoders can provide improvements in energy
+efficiency ranging from 6.1× to 1.2×. However, with the DNN
+architecture template and training method considered in this
+paper, the DNN precoder is unable to achieve the highest sum-
+rate that can be provided by WMMSE.
+These results emphasize the adaptability of the quantized
+models across diverse deployment environments, and their
+ability to achieve the same performance with less compute
+energy. Interestingly, the energy gains provided by DNNs
+appear to be larger in more difficult (low SNR, non line-of-
+sight) environments.
+V. CONCLUSION
+We proposed a novel framework for finding efficient com-
+pressed DNN models for mMIMO precoding. By using
+quantization-aware training with LSQ and MPQ, while also
+searching through different DNN architecture sizes, we find
+DNN models with significantly lower energy consumption at
+equal performance. A variety of Pareto-optimal models were
+generated, showing the ability of DNN solutions to provide dif-
+ferent tradeoffs between energy consumption and performance.
+Compared to WMMSE, the obtained DNN models achieve
+superior energy efficiency across diverse deployment scenarios.
+This work demonstrates the promise of DNN solutions to ob-
+tain high-performance mMIMO precoders with much improved
+energy efficiency.
+ACKNOWLEDGEMENT
+This work was supported by Ericsson - Global Artificial
+Intelligence Accelerator AI-Hub Canada in Montréal and
+jointly funded by NSERC Alliance Grant 566589-21 (Ericsson,
+ECCC, InnovÉÉ).
+REFERENCES
+[1] J. Choi, J. Park, and N. Lee, “Energy efficiency maximization precoding
+for quantized massive MIMO systems,” IEEE Transactions on Wireless
+Communications, vol. 21, no. 9, pp. 6803–6817, 2022.
+[2] S. Tridgell, D. Boland, P. H. Leong, R. Kastner, A. Khodamoradi,
+and Siddhartha, “Real-time automatic modulation classification using
+RFSoC,” in 2020 IEEE International Parallel and Distributed Processing
+Symposium Workshops (IPDPSW), 2020, pp. 82–89.
+[3] Q. Shi, M. Razaviyayn, Z.-Q. Luo, and C. He, “An iteratively weighted
+MMSE approach to distributed sum-utility maximization for a MIMO
+interfering broadcast channel,” IEEE Transactions on Signal Processing,
+vol. 59, no. 9, pp. 4331–4340, 2011.
+[4] R. Gray and D. Neuhoff, “Quantization,” IEEE Transactions on Infor-
+mation Theory, vol. 44, no. 6, pp. 2325–2383, 1998.
+[5] S. Han, H. Mao, and W. J. Dally, “Deep compression: Compressing deep
+neural network with pruning, trained quantization and huffman coding,”
+in 4th Int. Conf. on Learning Representations, (ICLR), 2016.
+[6] J. Choi, Z. Wang, S. Venkataramani, P. I. Chuang, V. Srinivasan,
+and K. Gopalakrishnan, “PACT: parameterized clipping activation
+for
+quantized
+neural
+networks,”
+2018.
+[Online].
+Available:
+http:
+//arxiv.org/abs/1805.06085
+[7] T. Elsken, J. H. Metzen, and F. Hutter, “Neural architecture search: A
+survey,” Journal of Machine Learning Research, vol. 20, no. 55, pp.
+1–21, 2019.
+[8] S. K. Esser, J. L. McKinstry, D. Bablani, R. Appuswamy, and D. S.
+Modha, “Learned step size quantization,” in International Conference
+on Learning Representations, 2020.
+[9] R. Desislavov, F. Martínez-Plumed, and J. Hernández-Orallo, “Trends
+in AI inference energy consumption: Beyond the performance-vs-
+parameter laws of deep learning,” Sustainable Computing: Informatics
+and Systems, vol. 38, p. 100857, 2023. [Online]. Available: https:
+//www.sciencedirect.com/science/article/pii/S2210537923000124
+[10] Y. Li, W. Wang, H. Bai, R. Gong, X. Dong, and F. Yu, “Efficient
+bitwidth search for practical mixed precision neural network,” 2020.
+[Online]. Available: https://arxiv.org/abs/2003.07577
+[11] A. H. Karkan, H. Hojatian, J.-F. Frigon, and F. Leduc-Primeau, “SAGE-
+HB: Swift adaptation and generalization in massive MIMO hybrid beam-
+forming,” in 2024 IEEE International Conference on Machine Learning
+for Communication and Networking (ICMLCN), 2024, pp. 323–328.
+[12] B. Moons, K. Goetschalckx, N. Van Berckelaer, and M. Verhelst,
+“Minimum energy quantized neural networks,” in 2017 51st Asilomar
+Conf. on Signals, Systems, and Computers, Oct 2017, pp. 1921–1925.
+[13] M. Horowitz, “1.1 computing’s energy problem (and what we can do
+about it),” in 2014 IEEE International Solid-State Circuits Conference
+Digest of Technical Papers (ISSCC), 2014, pp. 10–14.
+[14] OpenStreetMap
+contributors,
+“Planet
+dump
+retrieved
+from
+https://planet.osm.org ,” https://www.openstreetmap.org, 2017.

@@ -1,0 +1,2287 @@
+Machine Intelligence on Wireless Edge Networks
+Sri Krishna Vadlamani1,*, Kfir Sulimany1,*, Zhihui Gao2, Tingjun Chen2, and Dirk Englund1
+1Research Laboratory of Electronics, Massachusetts Institute of Technology, Cambridge, MA, USA
+2Department of Electrical and Computer Engineering, Duke University, Durham, NC 27708, USA
+*These authors contributed equally to this work.
+Abstract
+Machine intelligence on edge devices enables low-latency processing and improved privacy, but is often limited
+by the energy and delay of moving and converting data. Current systems frequently avoid local model storage
+by sending queries to a server, incurring uplink cost, network latency, and privacy risk. We present the opposite
+approach:
+broadcasting model weights to clients that perform inference locally using in-physics computation
+inside the radio receive chain. A base station transmits weights as radio frequency (RF) waveforms; the client
+encodes activations onto the waveform and computes the result using existing mixer and filter stages—RF
+components already present in billions of edge devices such as cellphones—eliminating repeated signal conversions
+and extra hardware.
+Analysis shows that thermal noise and nonlinearity create an optimal energy window
+for accurate analog inner products.
+Hardware-tailored training through a differentiable RF chain preserves
+accuracy within this regime.
+Circuit-informed simulations, consistent with a companion experiment, demon-
+strate reduced memory and conversion overhead while maintaining high accuracy in realistic wireless edge scenarios.
+1
+Introduction
+Machine intelligence on edge devices enables perception,
+control, and decision-making close to where data is gen-
+erated. This reduces latency, saves network bandwidth,
+and improves privacy for applications ranging from wear-
+ables and augmented reality to industrial monitoring
+and autonomous systems.
+However, running modern
+machine-learning models on the edge is often constrained
+not by computational throughput, but by the cost of
+moving and converting data. Transporting parameters
+and activations between memory and processing units,
+and converting signals between analog and digital do-
+mains, dominate both energy consumption and latency
+[1–5].
+A common way to avoid storing large models locally
+is to send sensor data or features to a remote server for
+inference.
+This offloading paradigm removes the need
+for local model storage but consumes uplink bandwidth,
+increases energy use, adds network latency, and can com-
+promise privacy [6–8]. These drawbacks are compounded
+when many devices share backhaul resources or operate
+under unreliable connectivity.
+In this work we explore the opposite approach: in-
+stead of sending data to the server, we send the model to
+the client. Model parameters can be broadcast to many
+clients, amortizing their transmission cost over time and
+across devices, while allowing raw sensor data to remain
+local.
+The challenge is enabling such an architecture
+without requiring the client to store the full model or
+to repeatedly convert signals between analog and digital
+form between layers.
+A promising direction is in-physics computation, in
+which core operations of inference or learning are per-
+formed directly within existing physical signal paths
+[9–13], eliminating the need for separate digital com-
+pute and reducing data motion.
+This principle has
+been demonstrated in photonic systems that leverage
+light for high-throughput, energy efficient, low-latency,
+or quantum-secure computations [8, 14–29]. Related con-
+cepts appear in processing-in-memory platforms, where
+vector–matrix products and logic are computed di-
+rectly in memory arrays, including crossbar and three-
+dimensional architectures [30–41]. Logic-in-memory ap-
+proaches and low-precision learning further align compu-
+tation with device operating ranges [42–47].
+In wireless networks, the natural superposition of sig-
+nals over the multiple-access channel has long been ex-
+ploited for over-the-air computation, allowing functions
+such as sums to be evaluated directly in the medium
+rather than after demodulation [48–51].
+Recent work
+has shaped propagation or modulation to implement neu-
+ral network primitives, including reconfigurable-surface-
+assisted layers and wireless mappings of fully con-
+nected layers [52–56]. RF circuit research has demon-
+strated microwave-domain neural operations, from re-
+configurable analog matrix multipliers to integrated mi-
+crowave neural networks and continuous-time reservoirs
+[57–59]. These methods reduce communication or imple-
+ment analog primitives, but they generally rely on en-
+gineered propagation environments or specialized front
+ends, and do not provide end-to-end inference on unmod-
+ified commodity clients without local weight storage for
+deployment in billions of existing wireless edge devices.
+Here, we apply in-physics computation to wireless edge
+inference by placing the core multiply–accumulate oper-
+ations inside the client’s radio receive path (Fig. 1). A
+base station broadcasts the model weights as RF wave-
+forms; the client encodes activations onto a carrier and
+1
+arXiv:2506.12210v2  [cs.ET]  4 Sep 2025
+uses the standard mixer and filter stages of its receive
+chain to perform the necessary multiplications and accu-
+mulations [60–62]. This removes the need to store the
+model locally and avoids repeated signal conversions be-
+tween layers. Unlike array-based analog accelerators, our
+design uses the RF hardware already present in com-
+modity transceivers; unlike channel-engineered schemes,
+it requires no reconfigurable surfaces or controlled prop-
+agation. The result decouples model capacity from client
+memory and shifts cost from data movement to RF front-
+end operations already amortized by communication [63].
+We analyze the accuracy limits of this architecture,
+showing how thermal noise and front-end nonlinearity
+produce an energy–accuracy trade-off with a well-defined
+optimal operating range.
+This behavior is consistent
+with classical thermal-noise theory for receivers [64, 65]
+and aligns with a companion experimental demonstra-
+tion of disaggregated deep learning at radio frequencies
+with ultra-low energy consumption [66].
+We also in-
+troduce two end-to-end pipelines: a digital-tailored ver-
+sion that merges Fourier transforms into the weights via
+IQ modulation [67, 68], and a hardware-tailored version
+that trains through a differentiable mixer–filter model to
+maintain accuracy without intermediate signal conver-
+sions [11, 14, 15, 69]. We refer to this family of architec-
+tures as Machine Intelligence on Wireless Edge Networks
+(MIWEN).
+2
+Results
+We first show how standard wireless-receiver mixers en-
+able matrix–vector multiplication (MVM) using time-
+and frequency-multiplexed encodings (Sec. 2.1), as il-
+lustrated in Fig. 1.
+We then analyze accuracy lim-
+its imposed by thermal noise and mixer nonlinearity
+and translate them into an effective-bit metric and
+energy-per-MAC trade-offs (Sec. 2.2). Building on these
+primitives, we present two computation pipelines:
+a
+digital-tailored variant that absorbs the receiver’s Fourier
+transform stage into the model weights via IQ modula-
+tion and demodulation, eliminating the need for explicit
+Fourier transform at the client, and a hardware-tailored
+variant that trains through a differentiable model of
+the mixer–filter chain to avoid inter-layer conversion
+(Sec. 2.3). Finally, we report classification accuracy re-
+sults versus total input energy.
+2.1
+Matrix-Vector
+Multiplication
+via
+Wireless Receivers
+Modern deep learning hardware systems require the abil-
+ity to efficiently implement matrix-vector multiplication
+(MVM). Inspection of the block diagrams of wireless re-
+ceivers reveals that they contain an analog frequency
+mixer that performs frequency up- and down-conversion
+in the standard communication pipeline. An ideal mixer
+takes in waveforms w(t) and x(t), and outputs the in-
+stantaneous product waveform y(t) = w(t) · x(t) [60].
+Receiver mixers can be utilized in different ways to cal-
+culate MVM, depending on how the matrix and vector
+are encoded into the RF signals.
+2.1.1
+Time-Multiplexed Encoding
+One way of using a mixer to calculate the inner product
+of vectors w, x ∈Rd, given by w · x, is to encode the
+components of each vector into the amplitudes of two
+separate time-multiplexed voltage trains of d pulses each,
+w(t) and x(t), and send them as inputs to the mixer. The
+output y(t) is then a voltage train of d pulses whose am-
+plitudes are element-wise products of the vectors w and
+x. An op-amp integrator can be used to integrate this
+pulse train to obtain the final inner product w · x. To
+generalize this to the matrix-vector product of matrix
+W ∈Rm×d and vector x ∈Rd, one could make m iden-
+tical copies, denoted by x(i), of the vector x (or fanout)
+and compute for each index i the inner product of x(i)
+with w(i), the i-th row of W, hence yielding all the com-
+ponents yi of y = W ·x. This method was proposed and
+investigated in [70]. While this approach is simple and
+appealing, wireless receivers rarely contain integrating el-
+ements. Therefore, to obtain a practical implementation,
+we would need to convert the output product pulse trains
+y(i)(t) to the digital domain before summing up the pulse
+amplitudes to obtain the inner products yi that make up
+the output vector y.
+The analog-to-digital conversion
+erases all the energy and latency gains from the previous
+analog mixer multiplication step.
+2.1.2
+Frequency-Multiplexed Encoding
+In
+frequency-encoding,
+the
+weights
+{Wpq|p ∈[m], q ∈[d]} (where we use [n] to denote
+the set {1, . . . , n}) of a matrix W ∈Rm×d are encoded
+into the amplitudes of the frequency components of a
+single waveform w(t), while the components {xr|r ∈[d]}
+of the vector x are encoded into the amplitudes of the
+frequency components of a different waveform x(t).
+More precisely, we set:
+w(t) =
+ m
+X
+r=1
+d
+X
+n=1
+Wrnei((r0+r)∆ωs+(n0+n)∆ωl)t
+!
+eiωat + c.c.
+(1)
+x(t) =
+ d
+X
+p=1
+xpei((n0+p)∆ωl)t
+!
+eiωbt + c.c.,
+(2)
+where ωa, ωb are the weight and activation waveform car-
+rier frequencies, ∆ωl is a larger ‘super-frequency spac-
+ing’, ∆ωs is a smaller ‘sub-frequency spacing’, and c.c
+refers to the complex conjugate of the preceding terms
+that is added in to ensure that the resulting signal is
+real-valued.
+The basic idea of the above ‘comb’-like encoding is that
+all the elements of the first column of W are modulated
+into the amplitudes of consecutive frequency comb lines
+spaced by ∆ωs intervals, followed by all the elements of
+2
+  AI Models
+5G
+Wireless network
+Edge devices
+Wi-Fi
+𝐖
+𝐖
+𝐖
+Freq.
+Local 
+oscillator
+Mixer
+Filter
+RF Chain
+9
+Layer 1
+Layer 2
+Layer 3
+ADC
+Figure 1: System illustration. The edge device utilizes the existing radio frequency (RF) analog chain of wireless
+transceivers to perform disaggregated deep learning. The weights, denoted as w, are transmitted as RF signals from
+a server (left), encoded in either the frequency or time domain. These signals are received by the edge device, where
+they are multiplied by the data signals using an RF diode ring mixer. The signal is then filtered and passed through
+the mixer again for the next multiplication (right). In the top right, we present the frequency-encoded signals (see
+main text) representing the numeric weights of a three-layer model trained to classify the MNIST dataset. The
+weights are not stored on the client, which mixes them in-path with locally encoded activations and samples the
+result using an analog-to-digital converter (ADC).
+the second column of W, and so on. ∆ωl is the spacing
+between the comb lines that encode the column leaders,
+W11, W12, . . . . The column leader spacing ∆ωl has to be
+chosen to be equal to m∆ωs so that all elements of the
+q-th column of W are accommodated between the q-th
+column leader and the (q + 1)-th column leader comb
+lines. We emphasize once again that all elements of the
+matrix W, as opposed to just a single column, are en-
+coded into the waveform in this method. The encoding
+of the vector x is more straightforward, with the compo-
+nents being encoded onto the amplitudes of comb lines
+spaced ∆ωl apart.
+This method has been used in the optical domain to
+demonstrate ultra-efficient MVM with minimal analog-
+to-digital conversions [71]. We shall, however, focus on
+achieving multiplication through the native RF mixers
+in wireless receivers. The output waveform y(t) is:
+y(t) = w(t) x(t)
+(3)
+= e i(ωa+ωb)t Y+(t) + e i(ωa−ωb)t Y−(t) + c.c.
+Y+(t) =
+m
+X
+r=1
+d
+X
+n,p=1
+Wrn xp e i{(r0+r)∆ωs+(2n0+n+p)∆ωl}t,
+Y−(t) =
+m
+X
+r=1
+d
+X
+n,p=1
+Wrn x∗
+p e i{(r0+r)∆ωs+(n−p)∆ωl}t.
+From the preceding expression, one sees that the output
+y(t) is itself a frequency comb that is centered at the sum
+and difference carrier frequencies, ωa + ωb and ωa −ωb.
+It can be seen that the output comb line at ωr = ωa −
+ωb + (r0 + r)∆ωs has the amplitude:
+y(ωr) =
+d
+X
+n=1
+Wrn x∗
+n,
+(4)
+which is the r-th component of W ·x∗. One could there-
+fore capture only the matrix-vector product by using a
+bandpass filter to pass all the components of W·x∗while
+blocking all other spurious frequencies. We shall use this
+kind of filtration repeatedly in the paper.
+Since the frequency-encoding method achieves full
+MVM through a single use of the mixer without the need
+for an integrator, it is naturally suited for implementa-
+tion on standard wireless receivers. Our concrete pro-
+posal is to implement this technique on RF receivers to
+achieve energy- and space-efficient machine learning in-
+ference on size, weight, and power (SWaP)-constrained
+edge devices and sensors. In this protocol, a base sta-
+tion streams out the weights W of a model, in the form
+of the frequency-multiplexed signal w(t), over a wireless
+channel which are then received and applied by wireless
+clients on their local activations x, which are themselves
+pre-encoded into the frequency-multiplexed signal x(t).
+2.2
+Fundamental Limits on Physical In-
+ner Product Computations
+Since physical systems operate at finite temperatures,
+physical computations naturally face interference from
+thermal noise, caused by fluctuating energy exchanges
+between the system and its surroundings. In an analog
+inner product engine for instance, this noise mechanism
+leads to discrepancies between the physically computed
+inner product and the true inner product. Discrepancies
+3
+are also caused by the imperfect nature of analog multi-
+pliers. We go into more details on each of these concepts
+next.
+2.2.1
+Noise, Mixer Non-Idealities, and Effective
+Precision
+Noise
+Every resistor in an electrical circuit, by virtue
+of the fluctuation-dissipation theorem, produces fluctu-
+ating thermal noise voltages, referred to as Johnson-
+Nyquist noise, across its terminals [64].
+The Johnson
+noise voltage ∆v(th)(t) across a resistor R at time t is a
+random white noise with mean 0 and variance 4kTR∆f
+where ∆f is the bandwidth of frequencies allowed by the
+circuit, k is the Boltzmann constant, and T is the tem-
+perature of the resistor.
+Mixing in RF circuits
+Active mixers called Gilbert
+cells [60] can perform exact multiplication of two RF
+waveforms w(t) and x(t) to produce the output y(t) =
+w(t)x(t).
+The downside is that they are composed of
+transistors and need to be driven actively. Passive mix-
+ers, such as the diode ring mixer, on the other hand,
+consume no energy to be operated but tend to perform
+only approximate multiplication. For weight and activa-
+tion signals w(t), x(t), the diode ring mixer operates as
+follows:
+y(t) = w(t)
+2
++ VT
+2 · ln
+
+e
+x(t)
+VT + e
+−w(t)
+VT
+e
+x(t)
+VT + e
+w(t)
+VT
+
+,
+(5)
+in which VT = kT/e, where k, T have their usual mean-
+ings and e is the electron charge. The derivation of this
+formula is provided in the Methods 4.3. At small signal
+levels the mixer behaves as an effective multiplier with
+gain ≈1/(4VT ) (Methods 4.3), which explains the initial
+accuracy increase before high-order terms dominate at
+larger powers.
+We assume that the two input ports of the mixer have
+input impedances of Rw and Rx, which add Johnson
+noise ∆v(th)
+w
+(t) and ∆v(th)
+x
+(t) to their respective input
+waveforms. Moreover, we assume that the mixer’s out-
+put impedance Ry adds Johnson noise ∆v(th)
+y
+(t) to the
+mixer’s output waveform. The electronic shot noise in
+the system is ignored. Therefore, the final model for the
+mixer is:
+y(t) =w(t) + ∆v(th)
+w
+(t)
+2
+(6)
++ VT
+2 · ln
+
+e
+x(t)+∆v(th)
+x
+(t)
+VT
++ e
+−w(t)−∆v(th)
+w
+(t)
+VT
+e
+x(t)+∆v(th)
+x
+(t)
+VT
++ e
+w(t)+∆v(th)
+w
+(t)
+VT
+
+
+Information content of physical inner products
+Mutual information: A common metric to measure
+the discrepancy between digital and analog computa-
+tion is to define the average relative absolute error
+Erel = ⟨|(w · x)analog −(w · x)digital|/|(w·x)digital|⟩w,x,
+where the angular bracket notation ⟨·⟩denotes averages
+and the subscript indicates that the averaging is per-
+formed over pairs of vectors w, x sampled from some
+chosen distribution.
+A shortcoming of this metric is that it could fail to
+meaningfully connect to the actual information theoretic
+transformations caused during the computation. A more
+appealing and theoretically robust metric is to compute
+the amount of information about the exact computation
+that is preserved by the physical machine in the presence
+of analog noise.
+This idea is captured exactly by the
+mutual information I((w ·x)analog; (w ·x)digital) between
+the analog and digital inner products.
+ENOB: Effective number of bits: Another way of
+evaluating the performance is through the signal-to-noise
+ratio of the output. Let a general noisy inner product
+engine be given by:
+y =
+"X
+i
+
+wi + n(w)
+i
+ 
+xi + n(x)
+i
+#
++ n(y).
+(7)
+The squared average output ⟨y⟩2
+n for a given w, x,
+but averaged over all the noise components, is ⟨y⟩2
+n =
+(P
+i wixi)2 = (w · x)2.
+The “noise strength” Varn(y)
+for the same w, x is given by the variance of y com-
+puted over the noise random variables. The signal and
+noise strengths for the overall setup are defined as the
+average of ⟨y⟩2
+n and Varn(y) over all choices of w, x:
+S = ⟨⟨y⟩2
+n⟩w,x, N = ⟨Varn(y)⟩w,x.
+The SNR of our
+inner product engine is then SNR =
+S
+N . One can then
+define the effective number of bits ENOB in the output
+as:
+ENOB = 1
+2 log2 (1 + SNR)
+(8)
+We use this ENOB as an information-theoretic precision
+metric for all subsequent plots and ablations. It turns out
+that this definition of ENOB can in fact be derived from
+the mutual information I((w · x)analog; (w · x)digital) in-
+troduced earlier — Methods 4.1 provides this derivation.
+We will use this definition to compute the information
+theoretic bit precision of our inner product engine in the
+next section.
+2.2.2
+RF Energy per MAC for Inner-Product
+Computation
+In this section, we present results for the variation of the
+bit precision of the inner products produced by a diode
+ring mixer as a function of the power of the weights and
+activation signals input to it. To this end, we developed
+custom layers in PyTorch for each step in the compu-
+tation pipeline of the RF inner product scheme.
+The
+weight and activation vectors w, x ∈Rd are sampled
+independently from a unit normal distribution and en-
+coded into voltage waveforms w(t), x(t) as described in
+the frequency-encoding section earlier. The waveforms
+w(t), x(t) are then inserted into Eq. (5) and the resultant
+inner product (extracted from the appropriate comb line
+4
+2.5e-10
+2.5e-08
+2.5e-06
+2.5e-04
+Client power (W)
+2.5e-10
+2.5e-08
+2.5e-06
+2.5e-04
+Server power (W)
+1
+2
+3
+4
+5
+6
+6
+6
+6
+7
+8
+9
+10
+1e-17
+1e-15
+1e-13
+1e-11
+Client energy per MAC (J)
+1e-17
+1e-15
+1e-13
+1e-11
+Server energy per MAC (J)
+2
+4
+6
+8
+10
+RF mixer output effective number of bits
+Figure 2:
+Effective number of bits (ENOB) for in-
+ner product computation vs power consumption.
+ENOB in the output of the radio frequency inner prod-
+uct computation w · x is plotted as a function of client
+and server energy per Multiply-Accumulate (MAC) for
+a diode ring mixer. Here “client energy per MAC” ac-
+counts for the client’s activation waveform energy at a
+50 Ωinput; “server energy per MAC” accounts for the
+transmitted weight waveform energy; ADC energy is ex-
+cluded in both. Contour labels denote ENOB. Axes show
+client/server power (W, log scale); top axes show corre-
+sponding per-MAC energies (J) A fixed bandwidth of
+25 MHz is used to encode the components of the input
+vectors w, x, the vector length is 256, ENOB is com-
+puted over 200 joint random initializations of the vectors
+w, x. The inner product accuracy improves with increas-
+ing client and server power, reaches a peak, and reduces
+with further increases in input power due to the deviation
+of the diode ring transfer function from exact multipli-
+cation; see the main text for more details.
+in the frequency domain) is then plugged into Eq. (8)
+to obtain the effective number of bits of the calculation.
+The weights or activations power incident on the mixer
+input ports is computed using the standard V 2/R for-
+mula where R here is assumed to be an input resistance
+of 50 Ω(see Methods 4.2 for detailed definitions of power,
+energy, and energy per MAC).
+Fig. 2 presents the bit precision of the inner product
+computation (ENOB) as a function of the energy ex-
+penditure incurred by the client and the server. In the
+bottom-left corner of the figure, the accuracy of the inner
+product improves with increasing client or server power.
+The accuracy reaches a peak at a certain client power
+and server power and then deteriorates with further in-
+creases in the energy of either input. This is due to the
+mathematical behavior of the diode ring mixer: at low
+input powers, its transfer function Eq. (5) is well approx-
+imated by the lowest Taylor series terms in the voltages
+w(t), x(t) and behaves like an exact multiplier w(t)x(t).
+For higher input powers, the higher Taylor series terms
+become important and the overall transfer function devi-
+ates from exact multiplication, leading to a drop in inner
+product accuracy.
+2.3
+Machine Learning Performance
+In this section, we discuss the extension of the frequency-
+domain inner product protocol to the case of multi-
+layer neural networks.
+We will discuss two versions:
+a digital-tailored protocol that performs conventional
+matrix-vector products and utilizes intermediary analog-
+to-digital and digital-to-analog conversions, and a dif-
+ferent, hardware-tailored protocol that more naturally
+utilizes the physics of the RF pipeline itself.
+In the digital-tailored approach (Fig. 3), the neural
+network inputs x and the weights W of the first layer
+are encoded into the frequency domain. The output z(t)
+of the mixer then contains the output pre-activations z
+of the first layer. The challenge then is to apply an ele-
+mentwise nonlinearity on each frequency comb line of the
+output signal. A direct way of doing this is to pass z(t)
+through an Analog-to-Digital Converter (ADC), perform
+a Fast Fourier Transform (FFT) to extract the ampli-
+tudes of the frequency comb lines zi, apply the nonlin-
+earity on them, perform an inverse FFT to obtain the
+time domain post-activation function a(t), and then re-
+encode a(t) into the analog domain through a Digital-to-
+Analog Converter (DAC) for subsequent multiplication
+with the weights of the next layer in the mixer. It turns
+out that the digital FFT operations in this approach can
+in fact be merged into the weight matrices and performed
+in analog with the help of IQ modulators; moreover, this
+‘merging’ trick enables us to encode weights and activa-
+tions directly in the time-domain which in turn enables
+simple element-wise application of the nonlinearities on
+the time-domain encoded output activations (Fig. 3). We
+present this digital-tailored protocol first.
+Next, we will move away entirely from attempting to
+faithfully mimic matrix-vector multiplications and move
+towards time-domain encoding of the weights and activa-
+tions. The weights will be learned directly by training on
+the task loss function through the inherent mathemati-
+cal behavior of the underlying analog hardware, includ-
+ing the nonidealities. In other words, the ‘digital twin’ of
+the hardware will be used to train and obtain networks
+that are inherently optimized for the hardware’s physics.
+We shall call this the ‘hardware-tailored’ approach (see
+Fig. 4).
+2.3.1
+Digital-Tailored Pipeline
+The digital-tailored approach is demonstrated experi-
+mentally in our companion paper [66] — we describe
+it here to lay the groundwork for the hardware-tailored
+approach.
+This pipeline merges FFT/IFFT into the
+weights via IQ modulation so that the client applies non-
+linearities in the time domain without performing digital
+FFTs.
+The composition of the l-th and (l+1)-th layers of the
+5
+neural network can be represented by:
+z(l+1) = W(l+1) · σ
+
+W(l)a(l−1)
+.
+(9)
+It should be kept in mind that all the above values are
+encoded in the frequency domain in MIWEN. We do this
+using single-sideband IQ modulators as discussed next.
+IQ modulators
+The frequency encoded weight and ac-
+tivation signals in the MIWEN scheme can be expressed
+in the general language of single-sideband modulation as
+follows. Given an input sequence of N complex numbers
+a1, a2, . . . , aN, single-sideband modulation onto different
+frequency components produces the signal a(t):
+a(t) = Re
+ 
+eiωct X
+i
+aieiωit
+!
+,
+(10)
+where ωc is the carrier frequency. How would this be im-
+plemented in practice? Given a complex-valued envelope
+function ˜a(t), IQ modulators produce the signal a(t):
+a(t) = Re
+ eiωct˜a(t)
+
+(11)
+where ωc is the carrier frequency.
+The envelope func-
+tion ˜a(t) is assumed to be slowly-varying compared to
+the carrier ωc. This suggests that a way of encoding the
+MIWEN signals is to first Inverse Fourier Transform the
+ais into the envelope ˜a(t) and feed it into an IQ modula-
+tor to produce a(t). We would like to avoid performing
+this “encoding” Inverse Fourier Transform on the client’s
+side. This can be done by lumping Fourier transform ma-
+trices F into Eq. (9) as we show next.
+Eliminating the encoding FFTs
+We introduce the
+N × N orthonormal Fourier transform matrix FN and
+its conjugate transpose F†
+N into Eq. (9):
+z(l+1) = W(l+1) · σ
+
+W(l)F†
+NFNa(l−1)
+(12)
+= W(l+1) · σ
+
+W(l)preapre(l−1)
+,
+(13)
+where
+we
+defined
+the
+pre-encoded
+activations
+apre(l−1)
+:=
+FNa(l−1)
+and pre-encoded weights
+W(l)pre := W(l)F†
+N. We will now demand that W(l)pre
+be broadcast by the server so that the client can process
+it with its local apre(l−1). From the previous section, we
+know that we simply have to perform an Inverse Fourier
+Transform on apre(l−1) to obtain samples of the its cor-
+responding time domain ˜apre(t). But the Inverse Fourier
+Transform F†
+N performed on apre(l−1)
+=
+FNa(l−1)
+simply yields a(l−1)! Therefore, the samples of ˜apre(t)
+that the IQ modulator needs in order to generate apre(t)
+are simply the direct activations a(l−1) themselves, with
+no need for any Fourier transform to be performed on
+it.
+This trick enables us to eliminate Fourier trans-
+forming the activations before encoding them using IQ
+modulators.
+Eliminating the decoding FFTs
+We note that the
+output W(l)preapre(l−1) in Eq. (13) is encoded in the fre-
+quency domain of the output waveform z(t). Implement-
+ing the nonlinearity in the frequency domain is more dif-
+ficult than doing it in the time domain. For this reason,
+we will actually demand that the weights sent by the
+server take on the following modified form:
+Wpost(l)pre := FMW(l)F†
+N.
+(14)
+This ensures that the output recorded in the frequency
+domain of the output is FMW(l)a(l−1), which implies
+that the time domain signal obtained when this output
+is sampled by an IQ demodulator is W(l)a(l−1).
+The
+ReLU nonlinearity is then applied on the time bin out-
+put of the IQ demodulator via a simple diode before it
+is upconverted using another IQ modulator and passed
+onto a mixer for subsequent mixing with the incoming
+weights of the next layer Wpost(l+1)pre.
+Filtration and nonlinearity in the time-domain
+The components of the vector FW(l)a(l−1) form a subset
+of the set of Fourier components of the output z(t) of the
+mixer. The other components are spurious products that
+follow naturally from the frequency domain convolution
+performed by our protocol [71]. z(t) is downconverted
+by an IQ demodulator that yields the vector W(l)a(l−1)
+as time-bin amplitudes as its output. The spurious fre-
+quencies are converted to time-bin pulses as well and are
+temporally filtered away through a switch. The neural
+network nonlinearity σ(·) is applied individually on the
+remaining time-bins before they are routed to the IQ
+modulator for mixing with the next wave of incoming
+weights from the server. This completes our description
+of the digital-tailored neural network protocol.
+A de-
+tailed, quantitative description of the protocol applied
+to a real system, together with its experimental demon-
+strations, is reported in our companion paper [66].
+2.3.2
+Hardware-Tailored Pipeline
+In the hardware-tailored pipeline (Fig. 4), weights and
+activations are encoded directly in time, mixed through
+a diode-ring nonlinearity, and then uses analog filter-
+ing and layer-norm to provide inter-time-bin coupling
+and stability without any A/D interfaces between lay-
+ers. In the hardware-tailored setting, we leverage the fact
+that our objective is not to compute exact inner prod-
+ucts in any particular domain (time, frequency, or oth-
+erwise), but to enable energy-efficient inference that di-
+rectly maps to our analog hardware. Therefore, we move
+away from reliance on precise numerical multiplication
+and accumulation (like we did earlier with frequency-
+encoding or time-encoding with FFT merging) and in-
+stead exploit the native physical properties of diode ring
+mixing and filtering to approximate the desired compu-
+tation.
+To this end, we encode the weights and activations
+directly in the time domain in a fixed time window,
+using interpolation on the activations since they have
+6
+𝐹𝑊(𝑙)𝐹†
+Flatten
+Inverse 
+FFT
+IQ 
+mod.
+Server
+IQ 
+mod.
+IQ 
+demod.
+mixer
+𝑡
+𝑎1
+(𝑙−1)
+𝑎2
+(𝑙−1)
+𝑎3
+(𝑙−1)
+𝑎𝑁
+(𝑙−1)
+Client
+𝑡
+𝑎1
+(𝑙)
+𝑎𝑀
+(𝑙)
+Time-bin
+filtering
+Time-bin
+nonlinearity
+𝑧(𝑡)
+Figure 3: Digital-tailored machine learning computation pipeline. In our digital-tailored proposal, the client
+only makes use of IQ modulators and demodulators and completely eschews the digital FFT and IFFT operations.
+Spurious frequency produced by the multiplication process appear as spurious time bins after IQ demodulation and
+are temporally filtered out. The activations are passed through a time-bin nonlinearity before being looped around
+to get multiplied by the incoming weights of the next layer from the server.
+fewer components than the weight matrix.
+These sig-
+nals are passed through the diode ring mixer, which is
+time-instantaneous. Since the diode ring mixer does not
+allow for interaction between different time bins, we sup-
+plement the mixing process with filtration which mixes
+time bins to build a neural network layer.
+These lay-
+ers are integrated into the training process, allowing the
+neural network to learn weights and representations that
+are inherently optimized for the hardware’s physics.
+The combination of analog mixing and filtering opera-
+tions enables the system to perform expressive transfor-
+mations of the input signals (Fig. 4). Mixing shifts differ-
+ent input components to distinct frequencies, and filter-
+ing isolates or weights them selectively — together these
+operations provide sufficient computational flexibility for
+learning-based tasks like classification. By co-designing
+the physical layer operations and the network training
+procedure, we achieve high inference accuracy despite
+the lack of precise digital-style inner product computa-
+tion. This approach eliminates the need for ADCs or dig-
+ital logic between layers. All computation is performed
+directly on modulated analog signals, significantly reduc-
+ing overhead while preserving task-specific performance.
+Stabilizing activations with a modified layer-norm
+For networks constructed with the mixing formula in
+Eq. (5), we noticed that training suffered from vanish-
+ing activations and gradients. To mitigate this problem,
+we introduced a modified, fully analog, layer-norm layer
+to control the activations and gradients [72] (Fig. 4).
+Layer Normalization (LayerNorm) is a normalization
+technique that improves the training stability of deep
+neural networks by normalizing across the feature di-
+mensions of each individual sample.
+Given a vector
+x = [x1, x2, . . . , xd], LayerNorm computes the mean and
+modulation
+Server
+filtration
+mixer
+Client
+𝑡
+LayerNorm
+weights
+Figure 4:
+Hardware-tailored
+machine
+learning
+computation pipeline.
+The server sends waveform
+w(t) that gets mixed with the local time-encoded activa-
+tions waveform x(t) at the client’s side. The result is sent
+through a layernorm layer (implemented via opamps)
+to stabilize the activations.
+The result is then passed
+through a linear filter to enable mixing between time-
+bins and enhance the expressivity of the physical neural
+network.
+The resultant final waveform is then mixed
+with the weights of the next layer.
+variance as
+µ = 1
+d
+d
+X
+j=1
+xj,
+σ2 = 1
+d
+d
+X
+j=1
+(xj −µ)2,
+and applies normalization followed by an affine transfor-
+mation:
+ˆxj = xj −µ
+√
+σ2 + ϵ
+,
+yj = γj ˆxj + βj,
+where γj and βj are learnable scaling and shifting pa-
+rameters for each feature, and ϵ > 0 ensures numerical
+7
+stability.
+We define a variant of LayerNorm that retains only
+the shifting component by fixing γj = 1 for all j. The
+resulting transformation becomes
+yj = ˆxj + βj,
+preserving unit variance while allowing the mean to
+adapt through the learnable shift βj. To enable further
+mixing between time-bins, we also include the same ana-
+log bandpass filters after each layernorm module that
+were introduced in Section 2.1 in the context of Eq. (4).
+In summary, each layer of the hardware-tailored network
+consists of diode ring mixing followed by layernorm and
+filtration (Fig. 4).
+2.3.3
+Numerical Results
+To evaluate the achievable test accuracy as a function
+of energy cost, we wrote custom layers in the popular
+machine learning package PyTorch that describe the op-
+eration of each step of our protocol. This includes all
+the components of the computation chain: encoding of
+activation vectors and weights into signals x(t), w(t), in-
+corporation of thermal noise at the appropriate points,
+and a physically accurate description of the diode ring
+mixing process. The custom layers were then composed
+into neural networks that were trained on the MNIST
+(Modified National Institute of Standards and Technol-
+ogy) digit recognition task.
+Fig. 5 presents the variation in test accuracy as a
+function of client energy for two different network archi-
+tectures (smaller: 49-32-16-10 and larger: 196-64-32-10)
+across two energy-accounting modes: activation energy
+and total energy. The energy thresholds are applied to
+the client-side processing. Square markers represent test
+accuracy versus activation energy alone (the energy asso-
+ciated with the client input waveform x(t)), while circle
+markers account for total energy, which includes both
+the activation energy and the implicit amplification in-
+troduced by the LayerNorm modules (see Sec. 2.3.2). As
+noted earlier, LayerNorm enhances training stability and
+facilitates convergence. However, recent research [73] has
+demonstrated the potential for normalization-free train-
+ing, offering a promising direction for reducing the am-
+plification overhead in MIWEN. The markers represent
+the median, and the error bars represent the interquar-
+tile range. For each energy point, the weights and biases,
+broadcast by the server, are optimized to yield the cor-
+responding classification accuracy. Since our system op-
+erates in a disaggregated memory configuration—where
+the weights w(t) are streamed from a remote server—we
+focus solely on the client-side energy required to process
+these weights, referred to as ‘input energy’ in Fig. 5. To
+generate inputs of the correct size, MNIST images were
+downsampled by patch-averaging from their original 28
+× 28 resolution.
+The performance of both networks as a function of the
+activation energy (square markers) is equivalent to ran-
+dom guessing below the attojoule (aJ) level. As energy
+10
+20
+10
+18
+10
+16
+10
+14
+10
+12
+10
+10
+10
+8
+10
+6
+10
+4
+Input Energy (J)
+0
+10
+20
+30
+40
+50
+60
+70
+80
+90
+100
+Test Accuracy (%)
+49-32-16-10
+(no amp)
+196-64-32-10
+(no amp)
+49-32-16-10
+196-64-32-10
+Figure 5:
+MNIST classification accuracy of RF
+analog deep learning. MNIST classification accuracy
+is presented as a function of the total energy per inference
+for MIWEN. The legend indicates the network architec-
+ture and whether the energy of the layernorm implicit
+amplification is taken into account. The test accuracy
+starts out at random guessing, increases to near-digital
+accuracy, and then deteriorates again as the diode mixer
+deviates from exact multiplication w(t)x(t). The dotted
+lines depict the test accuracy as a function of the energy
+of the client input waveform x(t), while the solid lines
+depict the same test accuracies but now include the am-
+plification energy implicitly expended in the layernorm
+layers. Accuracy reaches 95% on MNIST at 100 pJ in-
+put energy before degrading at the nJ level as the diode
+nonlinearity departs from ideal multiplication. Results
+are for 5 models trained at each energy level; the median
+and inter-quartile range are presented as the center point
+and error bars respectively.
+increases, accuracy rises sharply, reaching near-digital
+performance of about 95% at 100 pJ. Beyond the nano-
+joule (nJ) regime, however, the diode ring mixer de-
+parts from ideal multiplicative behavior, and accuracy
+degrades, with the severity depending on network size.
+The accuracy as a function of the total energy rises from
+100 nJ, the typical energy required for the Layernorm
+amplification, and achieves near digital accuracy around
+microjoule level µJ. These results show that the same
+RF chain used for communication in edge devices can
+also carry out machine-learning inference with accuracy
+close to digital implementations, when operated within
+the typical energy constraints of standard front-end re-
+ceivers in such devices.
+3
+Discussion
+We introduce Machine Intelligence on Wireless Edge Net-
+works (MIWEN), an approach that reuses the RF receive
+chain already embedded in billions of edge devices to
+perform neural inference. Instead of storing the model
+locally or offloading queries to a server, MIWEN broad-
+casts model weights as RF waveforms and computes mul-
+tiply–accumulate operations directly in the client’s mixer
+8
+and filter stages. This design eliminates the need for lo-
+cal weight storage and repeated signal conversions, while
+building entirely on hardware that is already present in
+commodity transceivers.
+Our results demonstrate that inference accuracy im-
+proves with client input energy and reaches near-digital
+levels within the standard energy budgets of wireless
+communication front ends in edge devices. These find-
+ings confirm that the same RF hardware already used
+for communication can also execute machine-learning in-
+ference without additional hardware overhead.
+By in-
+corporating a differentiable model of the RF chain into
+training, our hardware-tailored pipelines maintain accu-
+racy without requiring conversions between layers.
+Looking ahead, MIWEN opens opportunities for large-
+scale deployments involving multiple clients and servers,
+where scheduling becomes critical to balance computa-
+tion and communication. Further work may explore op-
+timizations for network constraints such as bandwidth,
+latency and power allocation, and evaluate the approach
+under realistic traffic conditions. Together, these direc-
+tions will help establish MIWEN as a practical frame-
+work for distributed, low-power intelligence at the wire-
+less edge.
+4
+Methods
+4.1
+Deriving the Effective Number of
+Bits (ENOB) for Analog Computa-
+tion
+4.1.1
+Noisy Analog Inner-Product Engine
+Let w, x be vectors from Rd whose components are indi-
+vidually independently drawn from arbitrary mean-zero
+probability distributions.
+Consider their digital inner
+product
+ydigital = w · x,
+and the noisy analog counterpart
+yanalog = w · x + n,
+where n is additive Gaussian noise, n ∼N(0, σ2
+n).
+We wish to quantify how many bits of information
+about ydigital are contained in yanalog. By definition, the
+mutual information between ydigital and yanalog is
+I
+ ydigital; yanalog
+
+= H
+ yanalog
+
+−H
+ yanalog
+ ydigital
+
+.
+Because once ydigital = w·x is known, the only remaining
+uncertainty in yoptical is the Gaussian noise n, we have
+H
+ yanalog
+ ydigital
+
+= H(n) = 1
+2 log2
+ 2πe σ2
+n
+
+.
+To evaluate H
+ yanalog
+
+, we note that w · x is a sum of
+(not necessarily identically distributed) independent ran-
+dom variables and appeal to the Central Limit Theorem
+to obtain,
+w · x ∼N
+ 0, E[(w · x)2]
+
+,
+so that
+yanalog =
+w · x
+| {z }
+N(0, E[(w·x)2])
++
+n
+|{z}
+N(0, σ2n)
+(15)
+∼N
+
+0, E[(w · x)2] + σ2
+n
+
+.
+(16)
+Hence its differential entropy is
+H
+ yanalog
+
+= 1
+2 log2
+
+2πe
+
+E[(w · x)2] + σ2
+n
+
+.
+Putting these pieces together gives
+I
+ ydigital; yanalog
+
+= 1
+2 log2
+
+1 + E[(w · x)2]
+σ2n
+
+.
+By defining the signal-to-noise ratio SNR = E[(w·x)2]
+σ2n
+, we
+obtain the result
+I
+ ydigital; yanalog
+
+= 1
+2 log2
+ 1 + SNR
+
+.
+Finally, identifying this mutual information (in bits) with
+the effective number of bits (ENOB) of the analog com-
+putation yields
+ENOB = I
+ ydigital; yanalog
+
+= 1
+2 log2
+ 1 + SNR
+
+.
+4.1.2
+Noisy Analog Diode-Ring Mixer
+We note in this section that we do not have an exact
+analog inner product engine in our system; instead our
+system performs
+yanalog = f(w + nw, x + nx) + n
+(17)
+where n, nw, nx are Gaussian noise random variables. To
+fit this into the model we discussed in the previous sub-
+section, we rewrite his equation as:
+yanalog = w · x + (f(w + nw, x + nx) −w · x + n)
+(18)
+≈w · x + n′
+where n′ captures the total discrepancy between the true
+digital inner product and the analog inner product due
+to both noise and functional differences. To compute the
+ENOB, we will continue to use the formula
+I
+ ydigital; yanalog
+
+= 1
+2 log2
+ 1 + SNR
+
+.
+with the same signal definition S = E
+h
+(w · x)2i
+but with
+the noise now defined as N = E[n′2]. We used this defini-
+tion to compute the variation of the inner product ENOB
+with client and server power in Fig. 2 in the main text.
+9
+4.2
+SNR and Energy per MAC of the RF
+Inner-Product Engine
+4.2.1
+SNR Estimation
+We shall estimate the SNR of the RF mixer by working
+at low voltages where the noisy RF mixing process can
+be approximated by:
+yRF(t) =
+e
+4kT · [w(t) + nw(t)] · [x(t) + nx(t)] + ny(t).
+In our implementation, the activations xi and the weights
+wi are encoded into orthonormal frequency basis, thus
+yielding the following noisy inner product model:
+y =
+e
+4kT
+1
+√
+N
+"X
+i
+
+wi + n(w)
+i
+ 
+xi + n(x)
+i
+#
++ n(y)
+(19)
+The components wi and xj are drawn independently
+from normal distributions as mentioned in the main text.
+The noise components n(w)
+i
+, n(x)
+j , n(y) are all assumed
+to be independently drawn from normal distributions of
+mean 0 and variance 4kTR∆f.
+We note that we have a peculiar situation where the
+signal is produced by an underlying random process and
+the noise on top of it is also produced by a different
+underlying random process. We define the SNR for this
+kind of situation in the following way. We first compute
+the squared average output ⟨y⟩2
+n for a given w, x, but
+averaged over all the noise components:
+⟨y⟩2
+n =
+ e
+4kT
+2 1
+N
+ X
+i
+wixi
+!2
+=
+ e
+4kT
+2 1
+N (w · x)2
+(20)
+The quantity above will be treated as the “signal
+strength” for the given w, x. The “noise strength” for
+the same w, x is given by the variance of y computed
+over the noise random variables:
+Varn(y) =
+ e
+4kT
+2 1
+N
+X
+i
+Varn
+
+wi + n(w)
+i
+ 
+xi + n(x)
+i
+
++ Varn
+
+n(y)
+(21)
+=
+ e
+4kT
+2 1
+N
+X
+i
+ σ2
+wx2
+i + σ2
+xw2
+i + σ2
+wσ2
+x
+
++ σ2
+y
+Now, we shall define the signal and noise strengths for
+our overall setup as the average of ⟨y⟩2
+n and Varn(y) over
+all choices of w, x. For this purpose, we assume that the
+wi, xi have variances M 2
+w, M 2
+x respectively:
+S =
+D
+⟨y⟩2
+n
+E
+w,x =
+ e
+4kT
+2
+M 2
+wM 2
+xd/N
+(22)
+Noise = ⟨Varn(y)⟩w,x
+(23)
+=
+ e
+4kT
+2 d
+N
+ M 2
+xσ2
+w + M 2
+wσ2
+x + σ2
+wσ2
+x
+
++ σ2
+y
+(24)
+The SNR of our inner product engine is then:
+SNR = S
+N =
+ e
+4kT
+2 M 2
+wM 2
+xd/N
+ e
+4kT
+2 d
+N (M 2xσ2w + M 2wσ2x + σ2wσ2x) + σ2y
+(25)
+For encoding in the orthonormal Fourier domain, we have
+σ2
+w = σ2
+x = σ2
+y = 4kTR∆f, where we chose to keep
+the total bandwidth constant even when the input size
+is varied.
+Since d and N are essentially proportional
+to one another, the formula predicts that the SNR is
+independent of d for d ≳10.
+4.2.2
+Energy per MAC
+The total energy Ex of the x(t) waveform generated by
+the client is:
+Ex =
+Z
+dtx2(t)
+R
+≈∆t
+X
+n
+x2[n]
+R
+(26)
+Since
+we
+encode
+our
+inputs
+in
+the
+orthonormal-
+ized Fourier domain, Parseval’s theorem states that
+P
+n |x[n]|2 = P
+k |X[k]|2.
+Since the d X[k]s that cor-
+respond to the activation vector each have variance M 2
+x,
+the client energy per MAC is:
+Ex
+d ≈∆t
+d
+X
+k
+|X[k]|2
+R
+≈∆tM 2
+x
+R
+(27)
+The signal energy per MAC is:
+Ew
+d
+≈∆t
+d
+X
+k
+|W[k]|2
+R
+≈∆tM 2
+w
+R
+(28)
+4.3
+Circuit Analysis
+Here we utilize a passive diode ring mixer to perform
+the signal mixing in the radio-frequency (RF) domain.
+The schematic of the diode ring mixer is shown in Fig. 6,
+where the signal path is routed through balanced and un-
+balanced transformer stages (T1 and T2), with the core
+mixer circuit composed of four diodes (D1, D2, D3, D4).
+The current ID flowing through each diode is given by
+the equation ID = GVD + GNV 2
+D, where G and GN rep-
+resent the conductance parameters, and VD is the diode
+voltage. This setup enables the core functionality of the
+mixer while minimizing energy losses associated with un-
+necessary signal conversions.
+4.3.1
+Diode-Ring Small-Signal Derivation
+We first write out the characteristic equation of the
+diode, and then expand it up to the second order in Tay-
+lor series.
+I = I0
+
+e
+qV
+kT −1
+
+= I0
+
+e
+V
+VT −1
+
+(29)
+= I0
+V
+VT
++ I0
+V 2
+2V 2
+T
+= GV + GNV 2
+(30)
+10
+Unbalanced
+LO
+Primary
+Secondary
+Balanced
+Balanced
+Balanced
+Balanced
+Secondary
+Unbalanced
+RF
+Core
+T2
+Core
+T1
+Primary
+D4
+D1
+D2
+D3
+𝐼𝐷𝑖= 𝐺𝑉𝐷𝑖+ 𝐺𝑁𝑉𝐷𝑖
+2
+Figure 6: Schematic of the passive diode ring mixer. The
+diagram illustrates the signal path through the trans-
+formers (T1 and T2), the core mixer circuit, and the four
+diodes (D1, D2, D3, D4) involved in the frequency mix-
+ing process. The current ID through each diode is related
+to the voltage VD by the expression ID = GVD + GNV 2
+D,
+where G and GN are the conductance parameters.
+where we set VT := kT/q. Denoting the potentials at the
+four corners of the ring by A, B, C, D, and writing out
+the voltage equations implied by the circuit connectivity,
+we get:
+A −C = VLO
+(31)
+A + C = 0
+(32)
+D −B = VRF
+(33)
+IA = IC, IB = ID
+(34)
+VIF = (B + D)/2
+(35)
+The current going into A is:
+IA =G (n1 + n4 + VLO −2B −VRF)
+(36)
++ GN
+ −V 2
+RF −2BVRF + VRFVLO
+
+(37)
+IA = G (VLO −2B −VRF) +
+(38)
+GN
+ −V 2
+RF −2BVRF + VRFVLO
+
+(39)
+while the current leaving C is:
+IC =G (n2 + n3 + VLO + 2B + VRF)
+(40)
++ GN
+ −V 2
+RF −2BVRF −VRFVLO
+
+(41)
+IC = G (VLO + 2B + VRF)
+(42)
++GN
+ −V 2
+RF −2BVRF −VRFVLO
+
+(43)
+Setting IA = IC, we get:
+B = −VRF
+2
++ GN
+2G VRFVLO
+(44)
+D = VRF
+2
++ GN
+2G VRFVLO
+(45)
+The output we are interested in, VIF, is then:
+VIF = GN
+2G VRFVLO + n1 + n4 −n2 −n3
+4
+(46)
+=
+1
+4VT
+VRFVLO + n1 + n4 −n2 −n3
+4
+(47)
+VIF = GN
+2G VRFVLO =
+1
+4VT
+VRFVLO ≈10VRFVLO
+(48)
+4.3.2
+Diode-Ring Exact Derivation
+The diode’s characteristic:
+I = I0
+
+e
+qV
+kT −1
+
+= I0
+
+e
+V
+VT −1
+
+(49)
+where we set VT := kT/q. Denoting the potentials at the
+four corners of the ring by A, B, C, D, and writing out
+the voltage equations implied by the circuit connectivity,
+we get:
+A −C = VLO
+(50)
+A + C = 0
+(51)
+D −B = VRF
+(52)
+IA = IC, IB = ID
+(53)
+VIF = (B + D)/2
+(54)
+The current going into A is:
+IA = I0
+
+e
+Vlo/2−B
+VT
+−e
+B+Vrf −Vlo/2
+VT
+
+(55)
+while the current leaving C is:
+IC = I0
+
+e
+Vlo/2+B
+VT
+−e
+−B−Vrf −Vlo/2
+VT
+
+(56)
+Setting IA = IC, we get:
+B = VT
+2 ln
+
+e
+Vlo
+2VT + e
+−Vrf −Vlo/2
+VT
+e
+Vlo
+2VT + e
+Vrf −Vlo/2
+VT
+
+
+(57)
+Then, the output is:
+Vif = Vrf
+2
++ VT
+2 ln
+
+e
+Vlo
+VT + e
+−Vrf
+VT
+e
+Vlo
+VT + e
+Vrf
+VT
+
+
+(58)
+4.3.3
+Second-Order Expansion Derivation
+We want to show that
+z = y
+2 + V T
+2
+ln
+
+ex/V T +e−y/V T
+ex/V T +ey/V T
+
+reduces, up to second order in
+x
+V T and
+y
+V T , to
+z =
+x y
+4 V T .
+Introduce dimensionless parameters
+Define
+α =
+x
+V T ,
+β =
+y
+V T .
+Then
+z = y
+2 + V T
+2
+ln
+eα + e−β
+eα + eβ
+
+.
+We focus on the argument of the logarithm:
+ln
+eα + e−β
+eα + eβ
+
+= ln
+ N/D
+
+,
+where
+N = eα + e−β,
+D = eα + eβ.
+11
+Expand exponentials to second order
+For small α
+and β, we use the expansions:
+eα ≈1 + α + 1
+2 α2,
+eβ ≈1 + β + 1
+2 β2,
+e−β ≈1 −β + 1
+2 β2.
+Hence, up to second order,
+N = eα + e−β ≈
+ 1 + α + 1
+2 α2
++
+ 1 −β + 1
+2 β2
+= 2 + (α −β) + 1
+2(α2 + β2),
+D = eα + eβ ≈
+ 1 + α + 1
+2 α2
++
+ 1 + β + 1
+2 β2
+= 2 + (α + β) + 1
+2(α2 + β2).
+For compactness, set
+A = α + β,
+B = α −β,
+Q =
+1
+2 (α2 + β2).
+Then
+N = 2 + B + Q,
+D = 2 + A + Q.
+We want the ratio
+R = N
+D =
+2 + B + Q
+2 + A + Q
+only up to second order in α and β.
+Expand N
+D to second order
+Factor out 2:
+R = 2
+ 1 + B+Q
+2
+
+2
+ 1 + A+Q
+2
+ = 1 + X
+1 + Y ,
+where
+X = B + Q
+2
+,
+Y = A + Q
+2
+.
+For small X, Y , we expand:
+1 + X
+1 + Y
+= 1 + (X −Y ) −(X −Y )2
+2
++ · · · ,
+but it is sufficient just to keep track of terms through
+second order. After collecting terms carefully, one finds
+R = 1 +
+ −β + α β
+2 + β2
+2
+
++ · · · = 1 + r,
+where
+r = −β + α β
+2
++ β2
+2
++ · · · .
+Expand ln(R) to second order
+Since R = 1+r with
+r small,
+ln(R) = ln(1 + r) = r −r2
+2 + · · · .
+Here r itself is already first- plus second-order, so
+r2 ≈β2
+(since the first-order part of r is −β).
+Thus,
+ln(R) =
+
+−β+α β
+2 +β2
+2
+
+−β2
+2 + · · · = −β + α β
+2
++ · · · .
+Recalling β =
+y
+V T and α =
+x
+V T :
+ln(R) ≈−y
+V T +
+x y
+2 (V T)2 .
+Substitute back into z
+We have
+z = y
+2 + V T
+2
+ln(R).
+Therefore,
+V T
+2
+ln(R) = V T
+2
+ −y
+V T +
+x y
+2 (V T )2
+
+= −y
+2 +
+x y
+4 V T .
+Hence
+z =
+y
+2
+|{z}
+first part
++
+
+−y
+2 +
+x y
+4 V T
+
+|
+{z
+}
+V T
+2
+ln(R)
+=
+x y
+4 V T .
+This completes the derivation.
+Acknowledgments
+S.K.V. was supported by the NSF RAISE-TAQS pro-
+gram, grant number 1936314, and the NTT Research Inc.
+grants “Large-scale nanophotonic circuits for neuromor-
+phic computing” and “Netcast”, administered by MIT.
+K.S. acknowledges the support of the Israeli Council for
+Higher Education and the Zuckerman STEM Leadership
+Program. D.E. acknowledges partial support from the
+NSF RAISE-TAQS program (grant number 1936314),
+NSF C-Accel program (grant number 2040695), and
+DARPA QuANET program.
+Z.G. and T.C. acknowl-
+edge partial support from the NSF Athena AI Institute
+for Edge Computing (CNS-2112562).
+Author Contributions
+S.K.V. and K.S performed the analysis and simulations
+under the supervision of D.E. Z.G. and T.C. contributed
+to the design and methods. All authors contributed to
+the writing.
+Data and Code Availability
+All the data and code for this paper have been
+made
+available
+at
+the
+following
+GitHub
+link:
+https://github.com/QPG-MIT/MIWEN
+References
+[1] Vivienne Sze, Yu-Hsin Chen, Tien-Ju Yang, and Joel S Emer.
+Efficient processing of deep neural networks: A tutorial and
+survey. Proceedings of the IEEE, 105(12):2295–2329, 2017.
+[2] Mark Horowitz. Computing’s energy problem (and what we
+can do about it).
+In Proc. IEEE International Solid-State
+Circuits Conference (ISSCC), 2014.
+[3] Norman P Jouppi, Cliff Young, Nishant Patil, David Patter-
+son, Gaurav Agrawal, Raminder Bajwa, Sarah Bates, Suresh
+Bhatia, Nan Boden, Al Borchers, et al.
+In-datacenter per-
+formance analysis of a tensor processing unit.
+In Proc.
+IEEE/ACM International Symposium on Computer Archi-
+tecture (ISCA), 2017.
+[4] Mahadev Satyanarayanan. The emergence of edge computing.
+Computer, 50(1):30–39, 2017.
+12
+[5] Tien-Ju Yang, Yu-Hsin Chen, Joel Emer, and Vivienne Sze.
+A method to estimate the energy consumption of deep neu-
+ral networks.
+In 2017 51st asilomar conference on signals,
+systems, and computers, pages 1916–1920. IEEE, 2017.
+[6] Praneeth Vepakomma, Otkrist Gupta, Tristan Swedish, and
+Ramesh Raskar. Split learning for health: Distributed deep
+learning without sharing raw patient data.
+arXiv preprint
+arXiv:1812.00564, 2018.
+[7] Ping Li, Jin Li, Zhengan Huang, Tong Li, Chong-Zhi Gao, Siu-
+Ming Yiu, and Kai Chen. Multi-key privacy-preserving deep
+learning in cloud computing.
+Future Generation Computer
+Systems, 74:76–85, 2017.
+[8] Kfir
+Sulimany,
+Sri
+Krishna
+Vadlamani,
+Ryan
+Hamerly,
+Prahlad Iyengar, and Dirk Englund. Quantum-secure multi-
+party deep learning. arXiv preprint arXiv:2408.05629, 2024.
+[9] Ali Momeni, Babak Rahmani, Benjamin Scellier, Logan G.
+Wright, Peter L. McMahon, Clara C. Wanjura, Yuhang Li,
+Anas Skalli, Natalia G. Berloff, Tatsuhiro Onodera, Ilker
+Oguz, Francesco Morichetti, Philipp del Hougne, Manuel Le
+Gallo, Abu Sebastian, Azalia Mirhoseini, Cheng Zhang, Dani-
+jela Markovi´c, Daniel Brunner, Christophe Moser, Sylvain
+Gigan, Florian Marquardt, Aydogan Ozcan, Julie Grollier,
+Andrea J. Liu, Demetri Psaltis, Andrea Al`u, and Romain
+Fleury.
+Training of physical neural networks.
+Nature, 645:
+53–61, 2025. doi: 10.1038/s41586-025-09384-2. URL https:
+//www.nature.com/articles/s41586-025-09384-2.
+[10] Ali Momeni, Babak Rahmani, Matthieu Mall´ejac, Philipp
+Del Hougne, and Romain Fleury. Backpropagation-free train-
+ing of deep physical neural networks.
+Science, 382(6676):
+1297–1303, 2023.
+[11] Logan G Wright, Tatsuhiro Onodera, Martin M Stein, Tianyu
+Wang, Darren T Schachter, Zoey Hu, and Peter L McMahon.
+Deep physical neural networks trained with backpropagation.
+Nature, 601(7894):549–555, 2022.
+[12] Gordon Wetzstein, Aydogan Ozcan, Sylvain Gigan, Shanhui
+Fan, Dirk Englund, Marin Soljaˇci´c, Cornelia Denz, David AB
+Miller, and Demetri Psaltis. Inference in artificial intelligence
+with deep optics and photonics.
+Nature, 588(7836):39–47,
+2020.
+[13] Abu Sebastian, Manuel Le Gallo, Riduan Khaddam-Aljameh,
+and Evangelos Eleftheriou. Memory devices and applications
+for in-memory computing. Nature Nanotechnology, 15(7):529–
+544, 2020.
+[14] Bhavin J Shastri, Alexander N Tait, Thomas Ferreira de Lima,
+Wolfram HP Pernice, Harish Bhaskaran, C David Wright, and
+Paul R Prucnal. Photonics for artificial intelligence and neuro-
+morphic computing. Nature Photonics, 15(2):102–114, 2021.
+[15] Zhiwei Xue, Tiankuang Zhou, Zhihao Xu, Shaoliang Yu,
+Qionghai Dai, and Lu Fang.
+Fully forward mode training
+for optical neural networks. Nature, 632(8024):280–286, 2024.
+[16] Mustafa Yildirim, Niyazi Ulas Dinc, Ilker Oguz, Demetri
+Psaltis, and Christophe Moser. Nonlinear processing with lin-
+ear optics. Nature Photonics, 18(10):1076–1082, 2024.
+[17] Peter L McMahon. The physics of optical computing. Nature
+Reviews Physics, 5(12):717–734, 2023.
+[18] Farshid Ashtiani, Alexander J Geers, and Firooz Aflatouni.
+An on-chip photonic deep neural network for image classifica-
+tion. Nature, 606(7914):501–506, 2022.
+[19] Johannes Feldmann, Nathan Youngblood, Maxim Karpov,
+Helge Gehring, Xuan Li, Maik Stappers, Manuel Le Gallo,
+Xin Fu, Anton Lukashchuk, Arslan S Raja, et al.
+Parallel
+convolutional processing using an integrated photonic tensor
+core. Nature, 589(7840):52–58, 2021.
+[20] Zaijun Chen, Alexander Sludds, Ronald Davis III, Ian Chris-
+ten, Liane Bernstein, Lamia Ateshian, Tobias Heuser, Niels
+Heermeier, James A Lott, Stephan Reitzenstein, et al. Deep
+learning with coherent vcsel neural networks. Nature Photon-
+ics, 17(8):723–730, 2023.
+[21] Tianyu Wang, Shi-Yuan Ma, Logan G Wright, Tatsuhiro On-
+odera, Brian C Richard, and Peter L McMahon. An optical
+neural network using less than 1 photon per multiplication.
+Nature Communications, 13(1):123, 2022.
+[22] Xingyuan Xu, Mengxi Tan, Bill Corcoran, Jiayang Wu, An-
+dreas Boes, Thach G Nguyen, Sai T Chu, Brent E Little,
+Damien G Hicks, Roberto Morandotti, et al. 11 tops photonic
+convolutional accelerator for optical neural networks. Nature,
+589(7840):44–51, 2021.
+[23] Wim Bogaerts, Daniel P´erez, Jos´e Capmany, David AB
+Miller, Joyce Poon, Dirk Englund, Francesco Morichetti, and
+Andrea Melloni. Programmable photonic circuits. Nature, 586
+(7828):207–216, 2020.
+[24] Saumil Bandyopadhyay, Kfir Sulimany, Alexander Sludds,
+Ryan Hamerly, Keren Bergman, and Dirk Englund. A three-
+terminal nanophotonic integrator for deep neural networks. In
+2025 Optical Fiber Communications Conference and Exhibi-
+tion (OFC), pages 1–3. IEEE, 2025.
+[25] Marc Gong Bacvanski, Sri Krishna Vadlamani, Kfir Sulimany,
+and Dirk Robert Englund. Qamnet: Fast and efficient optical
+qam neural networks. arXiv preprint arXiv:2409.12305, 2024.
+[26] David AB Miller.
+Attojoule optoelectronics for low-energy
+information processing and communications. IEEE Journal
+of Lightwave Technology, 35(3):346–396, 2017.
+[27] Natalia Berloff, Kirill Kalinin, Hitesh Ballani, and Francesca
+Parmigiani. Analog optical computer for ai inference and com-
+binatorial optimization. 2025.
+[28] Zhihao Xu, Tiankuang Zhou, Muzhou Ma, ChenChen Deng,
+Qionghai Dai, and Lu Fang.
+Large-scale photonic chiplet
+taichi empowers 160-tops/w artificial general intelligence. Sci-
+ence, 384(6692):202–209, 2024.
+[29] Xing Lin, Yair Rivenson, Nezih T Yardimci, Muhammed Veli,
+Yi Luo, Mona Jarrahi, and Aydogan Ozcan. All-optical ma-
+chine learning using diffractive deep neural networks. Science,
+361(6406):1004–1008, 2018.
+[30] Ali Shafiee, Anirban Nag, Naveen Muralimanohar, Rajeev
+Balasubramonian, John Paul Strachan, Miao Hu, R Stanley
+Williams, and Vivek Srikumar. Isaac: A convolutional neural
+network accelerator with in-situ analog arithmetic in cross-
+bars. ACM SIGARCH Computer Architecture News, 44(3):
+14–26, 2016.
+[31] Ping Chi, Shuangchen Li, Cong Xu, Tao Zhang, Jishen Zhao,
+Yongpan Liu, Yu Wang, and Yuan Xie.
+Prime:
+A novel
+processing-in-memory architecture for neural network compu-
+tation in reram-based main memory. ACM SIGARCH Com-
+puter Architecture News, 44(3):27–39, 2016.
+[32] Aayush Ankit, Izzat El Hajj, Sai Rahul Chalamalasetti, Ge-
+offrey Ndu, Martin Foltin, R Stanley Williams, Paolo Fara-
+boschi, Wen-mei W Hwu, John Paul Strachan, Kaushik Roy,
+et al. PUMA: A programmable ultra-efficient memristor-based
+accelerator for machine learning inference. In Proc. ACM In-
+ternational Conference on Architectural Support for Program-
+ming Languages and Operating Systems (ASPLOS), 2019.
+[33] Qiang Huo, Yiming Yang, Yiming Wang, Dengyun Lei, Xi-
+angqu Fu, Qirui Ren, Xiaoxin Xu, Qing Luo, Guozhong Xing,
+Chengying Chen, et al. A computing-in-memory macro based
+on three-dimensional resistive random-access memory. Nature
+Electronics, 5(7):469–477, 2022.
+[34] Malte J Rasch, Fabio Carta, Omobayode Fagbohungbe, and
+Tayfun Gokmen. Fast and robust analog in-memory deep neu-
+ral network training.
+Nature Communications, 15(1):7133,
+2024.
+[35] Corey Lammie,
+Julian B¨uchel,
+Athanasios Vasilopoulos,
+Manuel Le Gallo, and Abu Sebastian. The inherent adversarial
+robustness of analog in-memory computing. Nature Commu-
+nications, 16(1):1756, 2025.
+[36] Giacomo Pedretti and Daniele Ielmini. In-memory computing
+with resistive memory circuits: Status and outlook. Electron-
+ics, 10(9):1063, 2021.
+[37] Seungchul Jung, Hyungwoo Lee, Sungmeen Myung, Hyunsoo
+Kim, Seung Keun Yoon, Soon-Wan Kwon, Yongmin Ju, Minje
+Kim, Wooseok Yi, Shinhee Han, et al. A crossbar array of
+magnetoresistive memory devices for in-memory computing.
+Nature, 601(7892):211–216, 2022.
+[38] Sungsoo Cheon,
+Kyeongho Lee,
+and Jongsun Park.
+A
+2941-tops/w charge-domain 10t sram compute-in-memory for
+ternary neural network. IEEE Transactions on Circuits and
+Systems I: Regular Papers, 70(5):2085–2097, 2023.
+[39] Hiroto Tagata, Takashi Sato, and Hiromitsu Awano.
+Dou-
+ble mac on a cell: A 22-nm 8t-sram based analog in-memory
+13
+accelerator for binary/ternary neural networks featuring split
+wordline. IEEE Open Journal of Circuits and Systems, 2024.
+[40] Fuxi Cai, Suhas Kumar, Thomas Van Vaerenbergh, Xia
+Sheng, Rui Liu, Can Li, Zhan Liu, Martin Foltin, Shimeng
+Yu, Qiangfei Xia, et al.
+Power-efficient combinatorial opti-
+mization using intrinsic noise in memristor hopfield neural
+networks. Nature Electronics, 3(7):409–418, 2020.
+[41] Manuel Le Gallo, Riduan Khaddam-Aljameh, Milos Stanisavl-
+jevic, Athanasios Vasilopoulos, Benedikt Kersting, Martino
+Dazzi, Geethan Karunaratne, Matthias Br¨andli, Abhairaj
+Singh, Silvia M Mueller, et al.
+A 64-core mixed-signal in-
+memory compute chip based on phase-change memory for
+deep neural network inference. Nature Electronics, 6(9):680–
+693, 2023.
+[42] Orian Leitersdorf, Ronny Ronen, and Shahar Kvatinsky.
+Multpim:
+Fast stateful multiplication for processing-in-
+memory. IEEE Transactions on Circuits and Systems II: Ex-
+press Briefs, 69(3):1647–1651, 2021.
+[43] Orian Leitersdorf, Ronny Ronen, and Shahar Kvatinsky. Mat-
+pim: Accelerating matrix operations with memristive stateful
+logic.
+In 2022 IEEE International Symposium on Circuits
+and Systems (ISCAS), pages 215–219. IEEE, 2022.
+[44] Shahar Kvatinsky, Dmitry Belousov, Slavik Liman, Guy Sa-
+tat, Nimrod Wald, Eby G Friedman, Avinoam Kolodny, and
+Uri C Weiser. Magic—memristor-aided logic. IEEE Trans-
+actions on Circuits and Systems II: Express Briefs, 61(11):
+895–899, 2014.
+[45] Itay Hubara, Matthieu Courbariaux, Daniel Soudry, Ran El-
+Yaniv, and Yoshua Bengio. Quantized neural networks: Train-
+ing neural networks with low precision weights and activa-
+tions.
+journal of machine learning research, 18(187):1–30,
+2018.
+[46] Itay Hubara, Matthieu Courbariaux, Daniel Soudry, Ran El-
+Yaniv, and Yoshua Bengio. Binarized neural networks. Ad-
+vances in neural information processing systems, 29, 2016.
+[47] Fadi Jebali,
+Atreya Majumdar,
+Cl´ement Turck,
+Kamel-
+Eddine Harabi, Mathieu-Coumba Faye, Eloi Muhr, Jean-
+Pierre Walder, Oleksandr Bilousov, Amad´eo Michaud, Elisa
+Vianello, et al. Powering ai at the edge: A robust, memristor-
+based binarized neural network with near-memory computing
+and miniaturized solar cell. Nature Communications, 15(1):
+741, 2024.
+[48] Bobak Nazer and Michael Gastpar.
+Computation over
+multiple-access channels. IEEE Transactions on information
+theory, 53(10):3498–3516, 2007.
+[49] Mario Goldenbaum and Slawomir Stanczak.
+Robust ana-
+log function computation via wireless multiple-access chan-
+nels.
+IEEE Transactions on Communications, 61(9):3863–
+3877, 2013.
+[50] Mario Goldenbaum, Holger Boche, and S lawomir Sta´nczak.
+Nomographic functions:
+Efficient computation in clustered
+gaussian sensor networks.
+IEEE Transactions on Wireless
+Communications, 14(4):2093–2105, 2014.
+[51] Alphan S¸ahin and Rui Yang. A survey on over-the-air com-
+putation. IEEE Communications Surveys & Tutorials, 25(3):
+1877–1908, 2023.
+[52] Sara Garcia Sanchez, Guillem Reus-Muns, Carlos Bocanegra,
+Yanyu Li, Ufuk Muncuk, Yousof Naderi, Yanzhi Wang, Stratis
+Ioannidis, and Kaushik Roy Chowdhury. AirNN: Over-the-
+air computation for neural networks via reconfigurable intel-
+ligent surfaces. IEEE/ACM Transactions on Networking, 31
+(6):2470–2482, 2022.
+[53] Guillem Reus-Muns, Kubra Alemdar, Sara Garcia Sanchez,
+Debashri Roy, and Kaushik R Chowdhury. AirFC: Designing
+fully connected layers for neural networks with wireless sig-
+nals. In Proc. ACM International Symposium on Theory, Al-
+gorithmic Foundations, and Protocol Design for Mobile Net-
+works and Mobile Computing (MobiHoc), 2023.
+[54] Jinho Choi.
+Wireless distributed matrix-vector multiplica-
+tion using over-the-air computation and analog coding. IEEE
+Transactions on Wireless Communications, 23(8):9826–9838,
+2024.
+[55] Kyriakos Stylianopoulos and George C Alexandropoulos. Uni-
+versal approximation with xl mimo systems:
+Ota classi-
+fication via trainable analog combining.
+arXiv preprint
+arXiv:2504.12758, 2025.
+[56] Saeed Razavikia, Jos´e Mairton Barros da Silva, and Carlo Fis-
+chione. Computing functions over-the-air using digital mod-
+ulations.
+In ICC 2023-IEEE International Conference on
+Communications, pages 5780–5786. IEEE, 2023.
+[57] Minning Zhu, Tzu-Wei Kuo, and Chung-Tse Michael Wu.
+A reconfigurable linear rf analog processor for realizing mi-
+crowave artificial neural network. IEEE Transactions on Mi-
+crowave Theory and Techniques, 72(2):1290–1301, 2023.
+[58] Bala Govind, Maxwell G Anderson, Fan O Wu, Peter L
+McMahon, and Alyssa Apsel. An integrated microwave neu-
+ral network for broadband computation and communication.
+Nature Electronics, pages 1–13, 2025.
+[59] Alen
+Senanian,
+Sridhar
+Prabhu,
+Vladimir
+Kremenetski,
+Saswata Roy, Yingkang Cao, Jeremy Kline, Tatsuhiro On-
+odera, Logan G Wright, Xiaodi Wu, Valla Fatemi, et al. Mi-
+crowave signal processing using an analog quantum reservoir
+computer. Nature Communications, 15(1):7490, 2024.
+[60] Barrie Gilbert. A precise four-quadrant multiplier with sub-
+nanosecond response. IEEE journal of solid-state circuits, 3
+(4):365–373, 1968.
+[61] PJ Sulivan, BA Xavier, and Walter H Ku. Low voltage per-
+formance of a microwave CMOS Gilbert cell mixer.
+IEEE
+Journal of Solid-State Circuits, 32(7):1151–1155, 1997.
+[62] Mini-Circuits.
+Coaxial frequency mixer, 300–4300 MHz.
+https://www.minicircuits.com/pdfs/ZEM-4300+.pdf.
+[63] Shai Bergman, Priyank Faldu, Boris Grot, Llu´ıs Vilanova, and
+Mark Silberstein. Reconsidering os memory optimizations in
+the presence of disaggregated memory. In Proceedings of the
+2022 ACM SIGPLAN International Symposium on Memory
+Management, pages 1–14, 2022.
+[64] Harry Nyquist. Thermal agitation of electric charge in con-
+ductors. Physical review, 32(1):110, 1928.
+[65] Herbert B Callen and Theodore A Welton. Irreversibility and
+generalized noise. Physical Review, 83(1):34, 1951.
+[66] Zhihui Gao, Sri Krishna Vadlamani, Kfir Sulimany, Dirk
+Englund, and Tingjun Chen.
+Disaggregated deep learning
+via in-physics computing at radio frequency. arXiv preprint
+arXiv:2504.17752, 2025.
+[67] Omid Abari, Ezz Hamed, Haitham Hassanieh, Abhinav Agar-
+wal, Dina Katabi, Anantha P Chandrakasan, and Vladimir
+Stojanovic.
+A 0.75-million-point fourier-transform chip for
+frequency-sparse signals. In Proc. IEEE International Solid-
+State Circuits Conference (ISSCC), 2014.
+[68] Bastian Bloessl, Michele Segata, Christoph Sommer, and
+Falko Dressler.
+An IEEE 802.11a/g/p OFDM receiver for
+GNU Radio. In Proc. 2nd Workshop on Software Radio Im-
+plementation Forum (SRIF), 2013.
+[69] Sunil Pai, Zhanghao Sun, Tyler W Hughes, Taewon Park, Ben
+Bartlett, Ian AD Williamson, Momchil Minkov, Maziyar Mi-
+lanizadeh, Nathnael Abebe, Francesco Morichetti, et al. Ex-
+perimentally realized in situ backpropagation for deep learn-
+ing in photonic neural networks. Science, 380(6643):398–404,
+2023.
+[70] Ryan Hamerly, Liane Bernstein, Alexander Sludds, Marin
+Soljaˇci´c, and Dirk Englund. Large-scale optical neural net-
+works based on photoelectric multiplication. Physical Review
+X, 9(2):021032, 2019.
+[71] Ronald Davis III, Zaijun Chen, Ryan Hamerly, and Dirk En-
+glund.
+RF-photonic deep learning processor with shannon-
+limited data movement. arXiv preprint arXiv:2207.06883v2,
+2024.
+[72] Jimmy Lei Ba, Jamie Ryan Kiros, and Geoffrey E Hinton.
+Layer normalization. arXiv preprint arXiv:1607.06450, 2016.
+[73] Jiachen Zhu, Xinlei Chen, Kaiming He, Yann LeCun, and
+Zhuang Liu. Transformers without normalization. In Proceed-
+ings of the Computer Vision and Pattern Recognition Con-
+ference, pages 14901–14911, 2025.
+14

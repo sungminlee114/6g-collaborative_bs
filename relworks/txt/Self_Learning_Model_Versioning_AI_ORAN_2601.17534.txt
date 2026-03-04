@@ -1,0 +1,909 @@
+Efficient Self-Learning and Model Versioning for
+AI-native O-RAN Edge
+Mounir Bensalem∗, Fin Gentzen∗, Tuck-Wai Choong†, Yu-Chiao Jhuang†, Admela Jukan∗, Jenq-Shiou Leu†
+∗Technische Universit¨at Braunschweig, Germany;
+{mounir.bensalem, f.gentzen, a.jukan}@tu-bs.de
+†National Taiwan University of Science and Technology, Taipei, Taiwan
+{d11302001, d10902011, jsleu}@mail.ntust.edu.tw
+Abstract—The AI-native vision of 6G requires Radio Access
+Networks to train, deploy, and continuously refine thousands of
+machine learning (ML) models that drive real-time radio network
+optimization. Although the Open RAN (O-RAN) architecture
+provides open interfaces and an intelligent control plane, it
+leaves the life-cycle management of these models unspecified.
+Consequently, operators still rely on ad-hoc, manual update
+practices that can neither scale across the heterogeneous, multi-
+layer stack of Cell-Site, Edge-, Regional-, and Central-Cloud
+domains, nor across the three O-RAN control loops (real-, near-
+real-, and non-real-time). We present a self-learning framework
+that provides an efficient closed-loop version management for an
+AI-native O-RAN edge. In this framework, training pipelines in
+the Central/Regional Cloud continuously generate new models,
+which are cataloged along with their resource footprints, security
+scores, and accuracy metrics in a shared version repository.
+An Update Manager consults this repository and applies a self-
+learning policy to decide when and where each new model version
+should be promoted into operation. A container orchestrator
+then realizes these decisions across heterogeneous worker nodes,
+enabling multiple services (rApps, xApps, and dApps) to obtain
+improved inference with minimal disruption. Simulation results
+show that an efficient RL-driven decision-making can guarantee
+quality of service, bounded latencies while balancing model
+accuracy, system stability, and resilience.
+I. INTRODUCTION
+AI-Native integration has emerged as a core feature of 6G,
+with artificial intelligence (AI) distributed across all network
+layers to support new services and enable network automation
+and optimization [1]. The Open Radio Access Network (O-
+RAN) architecture, founded on openness, intelligence, virtu-
+alization, and interoperability [2], offers the programmable
+control plane (SMO/RIC) and standardized interfaces required
+to embed AI capabilities. However, realizing an autonomous
+and self-learning 6G O-RAN edge presents an important
+operational challenge: how to manage the life-cycle of a
+rapidly growing amount of ML models that must be re-trained,
+versioned, and rolled out at scale while guaranteeing service
+continuity. On the other hand, towards achieving AI-native
+vision of O-RAN, the ability to train, deploy, and continuously
+refine machine-learning (ML) models is critical for radio-
+resource management, traffic steering, energy savings, security
+enforcement, and a host of emerging 6G services.
+In radio environments, traffic patterns and user behaviors
+can change in minutes. To stay effective, RAN-optimization
+models (e.g., those driving beamforming or hand-over deci-
+sions) require frequent re-training on fresh data. Each training
+event yields a new model version whose benefits (higher ac-
+curacy) must be weighed against potential hazards (instability,
+security vulnerabilities, resource spikes). In today’s deploy-
+ments, operators rely on manual or heuristic update policies
+that do not scale to the hundreds of rApps/xApps/dApps
+foreseen for 6G, and the O-RAN specifications intentionally
+leave life-cycle management to vendor-specific solutions. Con-
+sequently, networks risk either lagging behind the state-of-the-
+art or suffering disruptive roll-outs. This is an open issues in
+today’s networks that needs to be urgently addressed.
+This paper proposes for the first time an efficient, self-
+learning ML model versioning management for an AI-native
+O-RAN edge. We design the first end-to-end ML life-cycle
+framework that unifies cloud-based training with multi-layer
+O-RAN inference, explicitly accounting for accuracy, relia-
+bility, security, and stability across the three O-RAN control
+loops. We propose a practical RL-driven update policy that
+leverages fine-grained telemetry and a version repository to
+maximize network utility while safeguarding stability. Simu-
+lation results show that in a dynamic environment when AI-
+based RIC applications (rApps/xApps/dApps) might requires
+updates, RL tends to favor stability over accuracy improvement
+of ML models for dApps while preserving delay constraints.
+At the same time, the framework tends to update ML models
+used by xApps and rApps for the scenarios where updating
+ML models has minimal impact on delay constraints.
+The rest of the paper is organized as follows. Section II
+presents the related work. Section III describes the reference
+architecture. Section IV formulates the ML model versioning
+optimization problem and the RL-based solution. Section V
+presents numerical results. Section VI concludes the paper.
+II. RELATED WORK
+The past decade has witnessed an explosive growth in the
+size and complexity of ML models, accompanied by continual
+improvements in accuracy and robustness [3]. To remain
+effective, deployed models must be re-trained and re-deployed
+whenever data distributions, operating conditions, or security
+requirements change [4]. This calls for rigorous versioning of
+models, data, and code, a problem recognized by the MLOps
+community as one of its grand challenges [5].
+arXiv:2601.17534v1  [cs.NI]  24 Jan 2026
+Central Server Cluster
+Worker 4
+SMO Framework
+Regional Server Cluster
+Edge Server Cluster
+Container Orchestrator
+UEs
+Cell Site
+Edge Cloud
+Regional Cloud
+Update
+Policy
+Publish
+Telemetry
+Central Cloud
+Timescale: <1ms
+Timescale: <10ms
+Timescale: 10ms - 1s
+Timescale: >1s
+Worker 2
+O-CU-UP
+O-CU-CP
+dApp 2
+Worker B
+Model Inference Host
+ML-x1 v1.2 ML-x2 v2.0
+Worker 3
+Near-RT RIC
+xApp 1
+xApp 2
+Node B
+Node 2
+Node 3
+Worker A
+Model Inference Host
+ML-d2 v1.5
+ML-d1 v1.0
+Worker C
+Model Inference Host
+ML-r1 v2.1 ML-r2 v1.5
+Node C
+Node A
+Node 4
+Update Manager
+Worker D
+Model Training Host
+ML-d1 v1.2
+ML-x2 v3.0
+ML-d2 v2.0
+ML-r1 v3.0
+ML-x1 v2.0
+ML-r2 v2.0
+Node D
+x
+Non-RT RIC
+rApp 1
+rApp 2
+O-RU
+IoT
+Applications
+Worker 1
+dApp 1
+O-DU
+Node 1
+O-RAN Component
+ Connection
+AI/ML Service 
+Connection
+Fig. 1: O-RAN compliant reference architecture with self-learning and ML model versioning.
+Early studies concentrated on updating a single model in
+cloud settings, e.g., forecasting data-series in [6]. More recent
+work has shifted toward edge deployments, where limited
+resources and latency constraints exacerbate the trade-off
+between accuracy, reliability, security, and system stability [7].
+Prior research—including our own optimization framework for
+edge-only scenarios [8], has shown that reinforcement-learning
+(RL) agents can automate version selection by balancing
+accuracy, stability, and security. However, those studies assume
+a homogeneous edge setting and treat model training as an
+external, offline process. The hierarchical O-RAN stack that
+spans Cell-Site, Edge-, Regional-, and Central-Cloud layers
+was not studied, in which there is a need to coordinate updates
+across treal-time, near-real-time, non-real-time control loops.
+O-RAN seeks to disaggregate the classical base station
+into an Open Radio Unit (O-RU), Open Distributed Unit (O-
+DU), and Open Central Unit (O-CU), interconnected through
+standardized open interfaces such as the Open Fronthaul
+and F1/Mid-haul [2]. Additional management and intelligence
+are provided by the Service Management and Orchestration
+(SMO) framework and by two RAN Intelligent Controllers:
+the Near-Real-Time RIC (running xApps, 10 ms–1 s loops)
+and the Non-Real-Time RIC (running rApps, loops > 1 s).
+Very recent work further proposes dApps inside the CU/DU
+to provide sub-10 ms decision making [9].
+Existing MLOps research does not consider the demanding
+latency, heterogeneous hardware, and layered control loops
+of O-RAN, whereas O-RAN-specific studies do not study,
+systematic, data-driven version management. To the best of
+our knowledge, there is still no end-to-end framework that (i)
+integrates cloud-based training with edge/near-RT inference,
+(ii) accounts for multi-objective trade-offs (accuracy, reliabil-
+ity, security, and stability), and (iii) scales across the Cell-Site,
+Edge-, Regional-, and Central-Cloud layers while respecting
+the real-time, near-real-time, and non-real-time control loops.
+This paper fills this knowledge gap by introducing a self-
+learning framework for large-scale model version management
+in AI-native 6G O-RAN. Our solution embraces the full O-
+RAN stack, coordinates updates across all three control loops,
+and is the first to unify cloud-side training with distributed
+inference while explicitly optimizing for accuracy, security,
+reliability, and service continuity.
+III. REFERENCE ARCHITECTURE
+Figure 1 presents the reference architecture adopted in this
+work, which follows the multi-layer structure and key com-
+ponents compliant with the O-RAN specifications [10]. The
+system is structured into multiple functional context layers,
+starting from User Equipment (UE) over to the central cloud.
+At the Cell-Site layer, O-RUs carry out RF processing; the
+cloudification of these units and the definition of an O-RU
+Accelerator Abstraction Layer (AAL) are still open research
+topics [11]. The Edge-Cloud layer hosts the O-DU and O-CU
+functions. The Regional-Cloud layer accommodates the Near-
+RT RIC, and (iv) the Central-Cloud layer contains the Non-RT
+RIC together with SMO services. A salient feature of these
+layered architecture is in its concentric control loops [11]:
+(i) a non-real-time loop (periods > 1s) executed by rApps
+in the Non-RT RIC for policy management and long-term
+optimization; (ii) a near-real-time loop (10ms - 1s) handled by
+xApps in the Near-RT RIC for short- to medium-term resource
+control; and, (iii) a real-time loop (< 10ms) implemented by
+dApps embedded within the E2-connected CU/DU nodes for
+immediate radio-access decisions [9]. Together, these layers
+and feedback loops provide the hierarchical control framework
+that supports the proposed networking solution.
+In the depicted architecture, the ML models reside on
+O-Cloud compute nodes, while dApps, xApps, and rApps
+Update Manager
+API Gateway
+HTTP requests
+Knowledge Base
+Update 
+agent
+Version
+Repository
+Telemetry
+publish
+- Used resources
+- Deployed ML models
+- Accuracy
+- Required
+   resources 
+- Security
+- Reliability
+Replication Manager
+Request to train
+ a new model
+train new model
+User
+Container Orchestrator
+update policy
+Fig. 2: ML Update Manager
+obtain inference by invoking the Model Inference Host run-
+ning on Workers A–C. Figure 1 further illustrates the ML
+model version management pipeline. Training jobs running in
+Worker D (e.g., ML-d1-v1.2 representing an ML task used
+by dApps, and ML-x2 v2.0 for xApps) generate candidate
+models; after validation, specific versions (e.g., ML-d1 v1.0,
+ML-x1 v1.2) are promoted to production. Additionally, Figure
+1 shows the Update Manager as an independent component
+responsible for coordinating ML model update strategies and
+releases. The Container Orchestrator is responsible for the
+actual deployment and management of ML model containers,
+ensuring smooth model updates. This design allows the system
+to flexibly deploy different versions of ML models on different
+computing resources (such as Workers A-D), thereby achiev-
+ing efficient version management and resource utilization.
+A. ML Update Manager
+The ML Update Manager uses data from the Telemetry,
+Knowledge Base, and Update Agents. Telemetry continuously
+captures operational data, including notifications of newly
+available ML model versions pushed from the cloud, and
+stores it for later analysis. Knowledge Base is assumed to
+hosts ML Version Repository that stores every model release
+along with its resource footprint and quality attributes, such
+as accuracy, stability, reliability, and security scores. Update
+Agent uses runs algorithms to decide whether an update of the
+ML model should be executed immediately, or delayed.
+The ML Update Manager decides whether a running ML-
+inference replica should keep its current ML model or switch
+to a newly released one. After every inference request, the
+Update Agent checks if a fresher model version is available.
+If it finds one, it weighs the merits of leaving the replica
+untouched versus terminating it and spawning a new instance
+that uses the latest model. The logic behind this choice may
+be based on anything from simple domain-specific heuristics
+to advanced optimization routines or reinforcement-learning
+agents trained to discover near-optimal policies.
+For lifecycle management, each model release carries two
+identifiers: a major version X and a minor version Y, expressed
+as X.Y. A major upgrade (X) signals substantial changes,
+e.g., a new network architecture or significant feature addi-
+tions—and is usually rolled out at predetermined intervals to
+avoid service disruption. Minor updates (Y) deliver targeted
+improvements, such as security patches or reliability fixes, and
+rApp 1
+ML-r1 v1.0
+E2 node
+(O-CU, O-DU)
+APP
+External
+Application
+Framework
+UE GPS
+info
+Configurations, eg. new
+M-MIMO parameters
+Data, eg. KPI's or Beam
+Pattern Configuration table
+Suggested configuration
+Reports
+Fig. 3: A simplified ML versioning flow diagram for massive
+MIMO beamforming optimization, based on [12]
+can be issued at any time in response to alerts, user feedback,
+or live performance metrics.
+B. A Sample ML-based workflow in O-RAN
+Building on the O-RAN Alliance use-case catalogue [12],
+which documents multiple scenarios that embed AI/ML infer-
+ence and training in the RAN, we illustrate the ML workflow
+in Figure 3. Here, the example is provided for Massive-MIMO
+beamforming, based on Figure 4.6.3.1-1 from [12].
+In general, External Application Framework supplies En-
+richment Data to RIC applications; rApps, xApps, and dApps.
+These applications fuse the enrichment data inputs with live
+network measurements, execute ML-enabled models, and pro-
+duce inference results that are translated into control Actions
+and Reports exchanged with E2-connected nodes (O-CU, O-
+DU). The resulting closed loop drives continuous optimization
+of radio-network performance. The ML models are denoted by
+ML-ID with a version (x.y) that can be periodically updated
+based on measurements data to provide accurate predictions
+and recommendations that improve the performance of the
+system. Here, the Application Framework forwards UE GPS
+coordinates alongside key performance indicators (KPIs) and
+current beam-pattern settings to rApp 1. The model ML-
+r1 v1.0 analyses this data and outputs recommended beam-
+configuration updates. These recommendations are applied by
+E2 nodes, which subsequently return updated performance
+metrics to rApp 1, in an ongoing, self-optimizing cycle.
+IV. ML MODEL VERSIONING WITH RL
+A. Assumptions
+We consider a system deployment, including a set of
+model inference host nodes ϵ = {E1, . . . , En, . . . , EN}, a
+set of O-RAN nodes running RIC applications in the edge,
+regional and central cloud, R = {Re, Rr, . . . , Rc}, where
+Re = {Re
+1, . . . , Re
+n, . . . , Re
+Ne} are the nodes in the edge cloud,
+Rr = {Rr
+1, . . . , Rr
+n, . . . , Rr
+Nr} the nodes in the regional cloud,
+and Rc = {Rc
+1, . . . , Rc
+n, . . . , Rc
+Nc} the nodes in the central
+cloud. We assume that each node is constrained by a certain
+amount of capacity modeled as a number of CPU units Cn,
+RAM space Sn, and Disk space Dn.We consider a set of ML
+models denoted as κ = {1, . . . , k, . . . , K}. We assume that
+each ML model k, can have a version x ∈[0, X], We define
+a decision variable a = 1 when updating a ML model k of
+version x to a newer version x + 1, 0 otherwise. We define a
+mapping function g(x, a) that gives the new version of an ML
+model k of version x after a decision update a. Each version
+x of model k requires resources bk,x = [bcpu
+k,x, bram
+k,x, bdisk
+k,x], of
+CPU units, RAM, and disk space.
+We denote by δk,x(n) the number of replicas from ML
+model k of version x allocated in node En. The resource
+allocation has the capacity constraints, i.e.,
+K
+X
+k=1
+X
+X
+x=1
+bcpu
+k,xδk,x(n) ≤Cn,
+∀n ∈[1, N]
+(1)
+K
+X
+k=1
+X
+X
+x=1
+bram
+k,xδk,x(n) ≤Rn,
+∀n ∈[1, N]
+(2)
+K
+X
+k=1
+X
+X
+x=1
+bdisk
+k,xδk,x(n) ≤Dn,
+∀n ∈[1, N]
+(3)
+The equations (1)-(3) assures that the replicas created in
+a node En does not require more that its CPU, RAM and
+Disk capacity. We consider 5 types of delays: inference delay,
+processing delay (RIC applications), transmission delay, delay
+to spawn a replica (where applicable) and queuing delay. The
+processing delay τ p
+k of a RIC application using an ML model k
+is including all O-RAN operations. The inference delay τ I
+k,x,n
+of an ML model k of version x deployed through a pod in
+node En is distributed around an average value. We consider
+transmission and propagation times to be a known parameter
+since they depend on the distance between model inference
+host nodes and the nodes that running RIC applications. The
+routing and path computation is typically managed by the
+container orchestrator (e.g., Kubernetes). We use F to denote
+the total number of requests to a model k. The time to spawn
+a new replica, τ s
+k,n(a), is assumed constant and occurs when
+resources are scaled or when the Update Manager replaces
+version x with x + 1. If no update is performed (a = 0), the
+spawn time is zero. We assume the system has a queuing buffer
+for each ML model k. We denote by τ q
+f(k) the total queuing
+delay of a request f(k) of ML model k. The queuing delay
+is measured as the difference between the departure request
+time and the arrival request time plus the transmission plus
+the spawn time and the processing and inference time. Finally,
+the total delay τf(k) for each request f(k) of ML model k,
+processed using a replica that runs version x is given as:
+τf(k)(x, a) =τ p
+k + τ I
+k,g(x,a),n + τ t
+k,n + τ s
+k,n(a)
++ τ q
+f(k),
+∀k ∈[1, K]
+(4)
+The average delay for all requests, is defined as, i.e.,
+O1(∆, a) =
+1
+KF
+K
+X
+k=1
+F
+X
+f=1
+τf(k)(x, y, a)
+(5)
+where ∆describes the state of the network, including nodes,
+and deployed replicas of ML models and their versions.
+After training an ML model k, we obtain a new version that
+is assumed to have a higher accuracy. We denote by Acck(x, a)
+the accuracy of a ML model k with version x after taking an
+update decision a. The average accuracy of all requests is
+given by:
+O2(∆, a) =
+1
+KF
+K
+X
+k=1
+F
+X
+f=1
+Acck(x, a)
+(6)
+We assume that updates can improve the stability of an ML
+model operation, defined as parameters Stk(x, a), assigned to
+ML model k with version x after taking an update decision
+a. We finally define an objective function to yield an average
+among all requests as solution, i.e.,
+O3(∆, a) =
+1
+KF
+K
+X
+k=1
+F
+X
+f=1
+Stk(x, a)
+(7)
+B. Problem Formulation
+We define our ML Model Versioning Problem (MMV) as a
+multi-objective optimization problem, aiming at maximizing
+the average ML model accuracy, stability of all processed
+requests while minimizing the average delay. The MMV
+problem is formulated as follows:
+max
+a∈A (−O1(∆, a), O2(∆, a), O3(∆, a), )
+subject to: Eq.(1), (2), (3)
+(8)
+Algorithm 1 RL-based Model Versioning
+1: Input: Event list; bk, Network state (Z, Q)
+2: Initialization: Q-table Qt, exploration rate ϵ, learning rate αlr, discount
+factor γ, max episodes, ϵ-decay
+3: for all events do
+4:
+if an update is possible or scaling is triggered then
+5:
+s ←(Z, Q, e, f)
+6:
+a ←UPDATEDECISION(s)
+▷chooses action agnostic of
+ϵ-greedy
+7:
+Z′, Q′, e′, f′ ←GetNextState(·)
+8:
+s′ ←(Z′, Q′, e′, f′)
+9:
+Qt ←UPDATEQTABLE(s, a, s′)
+10:
+s ←s′
+11:
+else
+12:
+pass
+13:
+end if
+14:
+if ϵ > ϵmin then
+15:
+ϵ ←ϵ · decay
+16:
+end if
+17: end for
+C. RL-Based Update Decision
+Our RL solution comprises the usual components: agent,
+state space S, action space A, reward R, and the environment.
+The agent observes metrics such as delay, security, reliability,
+accuracy, and stability for each update decision and uses a
+Q-table to track state/action pairs and the resultant rewards.
+State space is denoted by S = { s | s = (Zk, fk, Qk, e, Ω)},
+where i) Zk = {ζ1,k, . . . , ζn,k, . . . , ζN,k} captures the capacity
+status of each node n for model k (CPU, RAM, and Disk). ii)
+fk is the integer identifier for the ML model in use. iii) Qk is
+an integer variable representing the queue size for model k.
+The reward R combines delay ψ, accuracy υ, and stability
+σ, representing the disruption introduced by frequent updates:
+R(s, a) = −(1 −α)(w1 ψ + w2 σ) + αw3 υ,
+(9)
+where higher values of ϑ, η, and υ are desired, whereas
+delay ψ and destabilization σ are penalized. The weighting
+factors wi ≥0 can be tuned to emphasize different objectives,
+while α is coefficient that controls the trade-off between the
+maximization and minimization of different goals.
+Algorithm 1 illustrates our self-learning procedure for up-
+date decisions. At each event (arrival or departure), the agent
+observes the system state s, consults its Q-table to select
+an action a (balancing exploration and exploitation via ϵ-
+greedy), and computes the subsequent state s′. The Q-table is
+then updated accordingly. Over repeated episodes, the agent
+converges toward policies that balance optimal model updates
+in terms of delay, accuracy, security, reliability, and stability.
+In the early training phase, the agent executes exploratory
+actions with probability ϵ to discover a diverse set of state-
+action paths. As the agent gathers more experience, ϵ di-
+minishes until reaching a minimal exploration rate, favoring
+exploitation of learned policies. Each node n has CPU, RAM,
+and disk capacities, as well as an associated transmission
+times. For instance, higher latencies for the cloud node can
+also be integrated as part of Z, Q, and e within the RL
+environment. By applying the RL-based approach, the system
+adaptively learns whether updating at a given node config-
+uration is beneficial or whether continuing with an existing
+version is more favorable, considering performance, resource
+constraints, and stability factors.
+V. NUMERICAL EVALUATION
+We perform a numerical analysis to evaluate the efficiency
+and performance of different update agent implementations to
+decide whether to proceed with updating to the latest version
+of an ML model or to continue operating with the existing
+stable version. We employ an event-based simulator with inter-
+arrival and service times following a negative exponential
+distribution and report the results with 98% confidence level.
+A first-fit algorithm is used for resource allocation in assigning
+ML model instances to worker nodes. For scaling, we adopt
+a monitoring-based approach, commonly used in practice.
+This algorithm monitors the load on each worker: if the load
+exceeds a predefined threshold, a new replica is scheduled
+for creation. On the other hand, if a replica is idle, having
+processed all queued requests and awaiting new ones, it is
+removed. If neither condition is met, no scaling action is taken.
+In addition to the RL-based update agent, we also implement
+several baseline strategies: i) always update, ii) never update,
+iii) randomly select updates, and iv) server load-based update.
+Always update, never update, and update randomly serve as
+reference points to understand baseline behavior. The Server
+Load-based strategy operates based on the current load of
+the node hosting the replica. When deciding whether to
+update an existing replica, the algorithm computes the load
+on the corresponding node. If this load is below a predefined
+threshold, the algorithm proceeds with the update; otherwise,
+it continues execution with the current ML model version. In
+the following experiments, we assume a load threshold value
+of 0.5. When creating new replicas, the Server Load-based
+strategy selects the model version at random, as the target
+node for deployment is not yet known and an accurate load
+estimate is therefore unavailable.
+Our topology is similar to the studied architecture in Figure
+1. In the Edge Cloud we assume 2 ORAN-worker nodes,
+and 2 ML-worker nodes for ML model inference. All of the
+Edge Cloud nodes are assumed to have 32 CPU cores and
+32 GB of RAM. In the Regional Cloud, Near-Real-time RIC
+is deployed on the ORAN site and a cloud node is allocated
+for ML inference, with unlimited CPU and RAM capacities.
+Same assumptions are adopted for the Central Cloud.
+Parameter
+ML-d1
+ML-d2
+ML-x1
+ML-x2
+ML-r1
+ML-r2
+Version
+0 – 2000
+Avg service time (ms)
+2–0.5
+4–0.8
+200–100
+300–200
+1000–900
+2000–1800
+Avg inter-arrival time (ms)
+3
+4
+350
+525
+1750
+3500
+Spawn time
+3
+3
+100
+100
+1000
+1000
+CPU requirement
+1
+2
+16
+8
+32
+32
+RAM requirement
+1
+1
+32
+32
+48
+64
+Disk requirement
+0.01
+0.02
+0.1
+0.2
+1
+2
+Accuracy
+0.7–1.0
+0.7–1.0
+0.75–1.0
+0.75–1.0
+0.8–1.0
+0.8–1.0
+Stability
+1.0–0.7
+1.0–0.7
+1.0–0.7
+1.0–0.7
+1.0–0.7
+1.0–0.7
+TABLE I: ML model parameters simulated.
+We simulate six ML models that power O-RAN RIC func-
+tions (Table I). Each model is initially released as version
+0.0, followed by major u and minor upgrades (1.0, 2.0,
+..., 10.200). With each update, inference accuracy increases,
+whereas replica stability and service time gradually degrade.
+Each major release improves inference accuracy by ∼2%,
+but reduces replica stability by ∼2% and the service time
+by ∼7%. A subversion update will improve the ML model
+accuracy by ∼0.1%, to imitate a small performance up-
+date, and the stability will decrease by ∼0.1%. For the
+reward function defined in Eq. (9), the weights are set to:
+w1 = 0.025, w2 = 1, w3 = 2. For Q-table update, we set
+α = 0.01, γ = 0.99, the initial exploration probability ϵ = 1
+, this will decay with up to a minimal ϵmin = 0.001 which
+will be reached after half of the scheduled events have been
+processed. RL settings are mainly for training and have shown
+good performance during hyperparameter tuning.
+Fig. 4 shows boxplots for the delays (O1) of the entire
+ORAN RIC application flows for dApp, xApp and rApp. For
+the ORAN-dApp in Fig. 4a, the delay for the always update
+strategy is the best, as expected, because although it needs to
+spawn new replicas, whenever there is a new version available
+to update existing replicas, the new versions will have lower
+inference time. The never update strategy performs worse,
+but is comparable to the random, rl and load-based update
+strategies. All delays result around median values of 10 to
+12 milliseconds, as typical for dApp delays. For the ORAN-
+xApp in Fig. 4b, the median delay is 490 milliseconds, for the
+always update strategy is the lowest, together with the load-
+based update strategy. Both update strategies have the highest
+standard deviation, because of the added spawn time, which
+is higher in relation to the processing than in the dApp case.
+always
+never random
+rl
+load
+5
+10
+15
+Delay (in ms)
+(a) ORAN-dApp
+always
+never random
+rl
+load
+250
+500
+750
+1000
+Delay (in ms)
+(b) ORAN-xApp
+always
+never random
+rl
+load
+4100
+4150
+4200
+Delay (in ms)
+(c) ORAN-rApp
+Fig. 4: Delay for different O-RAN RIC application workflows
+dApp
+xApp
+rApp
+dApp
+xApp
+rApp
+dApp
+xApp
+rApp
+dApp
+xApp
+rApp
+dApp
+xApp
+rApp
+0.7
+0.8
+0.9
+1.0
+Accuracy (in %)
+always
+never
+random
+rl
+load
+(a) Accuracy
+dApp
+xApp
+rApp
+dApp
+xApp
+rApp
+dApp
+xApp
+rApp
+dApp
+xApp
+rApp
+dApp
+xApp
+rApp
+0.7
+0.8
+0.9
+1.0
+Stability (in %)
+always
+never
+random
+rl
+load
+(b) Stability
+Fig. 5: Performance metrics for ML Models
+For ORAN-rApp in Fig. 4c the delays result in a median of
+4.11 seconds, where the always update strategy results again
+in the lowest median, followed by the RL strategy.
+Fig. 5 shows boxplots for the average accuracy (O2) and the
+average stability (O3) for all update strategies and all O-RAN
+RIC applications. In Fig. 5a, the accuracy of the always update
+strategy is the highest for all ORAN applications and the
+lowest for the never update strategy. The load-based strategy
+achieves a better median than the random update strategy but
+the rl strategy decides to prefer the stability of the system over
+the highest accuracy, especially for the latency constrained
+ORAN-dApp. For the xApp and rApp the RL agent archives
+better accuracy values than the other two strategies. The
+stability shown in Fig. 5b is always fixed to 1 for the never
+update strategy. Always updating results in the lowest stability,
+but the rl strategy achieves very high stability values for dApp
+and comparable stability for xApp and rApp in perspective of
+random update and load-based update strategies.
+VI. CONCLUSION
+This paper tackled a critical gap on the path to AI-native 6G:
+scalable self-learning life-cycle management of the many ML
+models that will drive rApps, xApps, and dApps in O-RAN.
+We presented the first end-to-end framework that links cloud-
+side training with edge-side inference. Our solution jointly
+optimized ML model accuracy, stability, and latency across
+the O-RAN control loops. Simulation results showed that RL
+policy learns to prioritize stability for delay-sensitive dApps
+while upgrading rApps/xApps at moments that minimize la-
+tency impact, thereby increasing overall network utility and
+reducing SLA violations compared to baselines. These findings
+confirm that closed-loop, telemetry-driven model versioning
+is essential for future SMO/RIC platforms. Future work will
+focus on testbed validation and security-aware reward design.
+REFERENCES
+[1] W. Wu, C. Zhou, M. Li, H. Wu, H. Zhou, N. Zhang, X. S. Shen, and
+W. Zhuang, “Ai-native network slicing for 6g networks,” IEEE Wireless
+Communications, vol. 29, no. 1, pp. 96–103, 2022.
+[2] “O-ran
+architecture
+description
+13.0,”
+O-RAN
+Alliance,
+Tech.
+Rep. O-RAN.WG1.TS.OAD-R004-v13.00, 2025, accessed: 2025-04-24.
+[Online]. Available: https://www.o-ran.org/specifications
+[3] A. Paleyes, R.-G. Urma, and N. D. Lawrence, “Challenges in deploying
+machine learning: a survey of case studies,” ACM computing surveys,
+vol. 55, no. 6, pp. 1–29, 2022.
+[4] D.
+Angioni,
+L.
+Demetrio,
+M.
+Pintor,
+L.
+Oneto,
+D.
+Anguita,
+B. Biggio, and F. Roli, “Robustness-congruent adversarial training for
+secure machine learning model updates,” 2024. [Online]. Available:
+https://arxiv.org/abs/2402.17390
+[5] D. Kreuzberger, N. K¨uhl, and S. Hirschl, “Machine learning operations
+(mlops): Overview, definition, and architecture,” IEEE access, vol. 11,
+pp. 31 866–31 879, 2023.
+[6] F. Brito and et. al., “When and how to update ai/ml models in 6g
+resource-constrained network domains?” in 2024 Joint European Con-
+ference on Networks and Communications & 6G Summit (EuCNC/6G
+Summit), 2024, pp. 937–942.
+[7] B. Beyer, C. Jones, J. Petoff, and N. R. Murphy, Site Reliability
+Engineering: How Google Runs Production Systems, 2016. [Online].
+Available: http://landing.google.com/sre/book.html
+[8] F. Gentzen, M. Bensalem, and A. Jukan, “Effective ml model versioning
+in edge networks,” International Wireless Communications and Mobile
+Computing (IWCMC), 2025.
+[9] “dapps for real-time ran control: Use cases and requirements,”
+O-RAN next Generation Research Group, Tech. Rep. RR-2024-10,
+2024, accessed: 2025-04-24. [Online]. Available: https://www.o-ran.
+org/o-ran-resources
+[10] “O-RAN
+Cloud
+Architecture
+and
+Deployment
+Scenarios
+for
+O-
+RAN
+Virtualized
+RAN
+8.01,”
+O-RAN
+Alliance,
+Tech.
+Rep.
+O-RAN.WG6.CADS-v08.01, 2025, accessed: 2025-04-24. [Online].
+Available: https://www.o-ran.org/specifications
+[11] M. Polese, L. Bonati, S. D’Oro, S. Basagni, and T. Melodia, “Un-
+derstanding o-ran: Architecture, interfaces, algorithms, security, and re-
+search challenges,” IEEE Communications Surveys & Tutorials, vol. 25,
+no. 2, pp. 1376–1411, 2023.
+[12] “O-RAN.WG1.TS.Use-Cases-Detailed-Specification-R004-v16.00
+Technical
+Specification,”
+O-RAN
+Alliance,
+Tech.
+Rep.
+O-
+RAN.WG1.TS-R004-v16.00, 2025, accessed: 2025-04-24. [Online].
+Available: https://www.o-ran.org/specifications

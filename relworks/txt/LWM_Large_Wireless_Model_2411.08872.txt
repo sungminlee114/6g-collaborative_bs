@@ -1,0 +1,1547 @@
+1
+Large Wireless Model (LWM):
+A Foundation Model for Wireless Channels
+Sadjad Alikhani, Gouranga Charan and Ahmed Alkhateeb
+Abstract—This paper presents Large Wireless Model (LWM)—
+the world’s first foundation model for wireless channels. De-
+signed as a task-agnostic model, LWM generates universal, rich,
+contextualized channel embeddings (features) that potentially
+enhance performance across a wide range of downstream tasks
+in wireless communication and sensing systems. Towards this
+objective, LWM, which has a transformer-based architecture, was
+pre-trained in a self-supervised manner on large-scale wireless
+channel datasets. Our results show consistent improvements in
+downstream tasks when using the LWM embeddings compared
+to raw channel representations, especially in scenarios with high-
+complexity machine learning tasks and limited training datasets.
+This LWM’s ability to learn from large-scale wireless data opens
+a promising direction for intelligent systems that can efficiently
+adapt to diverse tasks with limited data, paving the way for
+addressing key challenges in wireless communication and sensing
+systems.
+Index Terms—Channel embedding, large wireless model, self-
+supervised learning, transformer
+I. INTRODUCTION
+Current and future wireless communication and sensing
+systems feature important trends that promise substantial per-
+formance gains [3], [4]. For example, these systems are rapidly
+relying on the use of large antenna arrays, the operation
+over high frequency bands in mid-band, millimeter wave
+(mmWave), and sub-terahertz, the support of massive number
+of communicating and sensing devices of various quality
+of service requirements, and the densification of network
+infrastructure nodes. Further, these wireless communication
+and sensing systems increasingly interact with each other, from
+coordination and integration to assisting each other. Achieving
+the high potential of these new trends, however, requires
+overcoming critical challenges in high-dimensional signal
+processing, complex optimization problems, massive wireless
+overhead requirements, and intricate network management
+among others. All that motivates the development of novel
+approaches for the modeling, optimizing, and operation of
+next-generation wireless communication and sensing systems.
+Traditional modeling techniques, such as statistical models
+and optimization-based approaches, struggle to address these
+challenges effectively. These methods often rely on simpli-
+fied models or scenario-specific features, failing to generalize
+across the diverse and dynamic environments of future wireless
+communication and sensing networks. For instance, they may
+not capture complex interference patterns in dense small-
+cell networks or scale poorly to high-dimensional MIMO
+The authors are with the School of ECEE, Arizona State University. Email:
+{alikhani,gcharan,alkhateeb}@asu.edu. Part of this work has been accepted
+at the IEEE ICMLCN, 2025 [1].
+systems. Deep learning has emerged as a promising alternative,
+offering data-driven (model-based or model-free) solutions
+for optimizing network performance, resource allocation, and
+signal processing [5]–[9]. However, deep learning approaches
+also face significant limitations. First, they typically require
+large labeled datasets, which are often scarce in wireless
+networks and are typically expensive and hard to collect. Sec-
+ond, traditional deep learning models like convolutional neu-
+ral networks (CNNs) and recurrent neural networks (RNNs)
+struggle with specific aspects of wireless communication and
+sensing tasks. CNNs may not capture temporal dependencies
+efficiently [10], [11], while RNNs often struggle with long-
+term dependencies and real-time computational efficiency [2],
+[12]. These limitations underscore the need for a more robust
+and adaptable framework for leveraging and deploying deep
+learning in wireless communication and sensing networks.
+To address these challenges, we propose Large Wireless
+Model (LWM), a foundation model specifically designed for
+wireless communication and sensing channels. LWM intro-
+duces a task-agnostic framework with pre-training on large-
+scale synthetic data. As a task-agnostic model, LWM serves
+as a universal feature extractor for multiple downstream
+tasks, facilitating complex problem-solving with limited
+labeled data. It leverages transformer models with multi-
+head attention mechanisms to capture complex spatial and
+temporal relationships in wireless channel data. Inspired by
+advancements in natural language processing (NLP) [2], [13]–
+[16], audio processing [17]–[19], and computer vision [20]–
+[22], LWM learns rich, context-aware embeddings that can
+be utilized for various downstream wireless tasks, such as
+channel estimation, beamforming, and interference manage-
+ment. LWM is pre-trained on extensive wireless channel
+datasets, covering a wide range of wireless scenarios. This
+approach enables the model to capture fundamental properties
+of wireless propagation and network dynamics, which can be
+transferred to real-world scenarios, even with limited task-
+specific data. Through these innovations, LWM addresses
+the key challenges of limited labeled data, complex spatial-
+temporal dependencies, and the need for generalization across
+diverse wireless environments. The key contributions can be
+summarized as follows:
+• We introduce the world’s first foundation model for wire-
+less channel embeddings, capable of extracting universal,
+rich, and context-aware features from complex wireless
+channels and in diverse environments.
+• We demonstrate the LWM’s effectiveness across multiple
+downstream tasks, showcasing its ability to generalize to
+arXiv:2411.08872v2  [cs.IT]  7 Apr 2025
+2
+LWM (Transformer Encoder)
+CLS
+P/2
+P/2 + 1 P/2 + 2
+P/2 + 3
+P
+Patch Embedding
+Positional
+Encoding
+1
+2
+3
+...
+...
+Real Part
+Imaginary Part
+Masked Channel Modeling
+Patch
+Generation
+...
+...
+LWM CLS Embedding
+LWM Channel Embedding
+LWM Pre-training
+Minimize MSE Loss 
+Downstream Task
+Downstream
+Model
+Linear Layer
+Wireless Channel
+LWM
+Architecture
+Input
+Multi-head
+Attention
+Add & Norm
+Feed-
+forward
+Add & Norm
+E
+Figure 1: This figure depicts the offline pre-training and online embedding generation process for LWM. The channel is divided into fixed-size patches, which
+are linearly embedded and combined with positional encodings before being passed through a Transformer encoder. During self-supervised pre-training, some
+embeddings are masked, and LWM leverages self-attention to extract deep features, allowing the decoder to reconstruct the masked values. For downstream
+tasks, the generated LWM embeddings enhance performance. The right block shows the LWM architecture, inspired by [2].
+various wireless scenarios with limited task-specific data.
+• We provide a comprehensive analysis of the LWM’s
+performance compared to conventional approaches that
+use raw wireless channels, highlighting its advantages in
+feature extraction and generalization.
+This work introduces a new framework for leveraging
+and deploying deep learning in wireless communication and
+sensing systems by leveraging the power of foundation models
+to address key modeling, design, and deployment challenges
+in wireless systems. The pre-trained LWM model, scripts,
+datasets, demo, and instructions are available on the Wireless
+Intelligence Lab’s Hugging Face page 1, allowing researchers
+to incorporate them into their projects.
+II. PRIOR WORK
+Foundation models have transformed artificial intelligence
+by introducing a paradigm of large-scale pre-training followed
+by task-specific fine-tuning [14]–[20]. These models, exem-
+plified by Bidirectional Encoder Representations from Trans-
+formers (BERT) [13] in NLP and Wav2Vec 2.0 [17] in audio
+processing, leverage transformer architectures with multi-head
+attention mechanisms to capture complex relationships in data.
+The pre-training phase typically involves massive datasets and
+novel learning objectives: BERT uses self-supervised methods,
+namely masked language modeling and next-sentence predic-
+tion, while Wav2Vec 2.0 employs contrastive learning and
+masked prediction tasks for audio understanding. This process
+allows the models to learn rich, contextual representations
+of their input domains. The key to their success lies in the
+attention mechanism, which enables dynamic focus on relevant
+parts of the input, and the scale of pre-training, which allows
+the model to capture a wide range of patterns and relationships.
+The resulting pre-trained model serves as a powerful feature
+extractor, capable of being fine-tuned on various downstream
+tasks with limited task-specific data. This transfer learning
+1Available on Hugging Face: https://huggingface.co/wi-lab
+capability, combined with the model’s ability to capture long-
+range dependencies and generalize across scenarios, has led
+to state-of-the-art performance across numerous applications.
+Unlike traditional models, which process sequences sequen-
+tially (like RNNs [23]) or in a restricted local context (like
+CNNs [24]), Transformers look at all parts of a sequence
+simultaneously. This parallel processing allows each element
+to relate to every other element, capturing dependencies across
+the entire input sequence. For example, in a sentence, words
+like ”bank” and ”river” might appear far apart, but self-
+attention lets the model understand their association when
+the context implies a natural setting, rather than financial.
+By calculating attention scores between each pair of words,
+Transformers allow each word to dynamically ”attend” to
+others, helping the model to understand nuanced meanings
+and relationships.
+In language models like BERT, each word token in a
+sentence is converted into a dense vector representation (em-
+bedding) and is associated with a query, key, and value. The
+attention mechanism then calculates a weighted average of
+these values for each word, where the weights are derived
+from the similarity between the queries and keys. This process
+allows the model to focus on important words and phrases
+depending on context. For instance, in the sentence, “The
+animal didn’t cross the street because it was too tired,” the
+model can determine that “it” refers to “the animal” rather
+than “the street.” This disambiguation is achieved because self-
+attention scores between “it” and “the animal” would be higher
+than between “it” and “the street.”
+Another example can be seen in GPT models [16], where the
+attention mechanism not only understands contextual nuances
+but also generates coherent text. Given a prompt, the model
+iteratively predicts the next word by attending to all previous
+words, ensuring that each generated word maintains context.
+For instance, when prompted with “Once upon a time in a
+small village,” GPT can generate a follow-up that maintains
+the narrative theme by giving more weight to probable story
+elements over unrelated concepts. This process enables the
+3
+model to construct coherent, contextually relevant text, show-
+casing the power of the self-attention mechanism to understand
+complex dependencies and generate highly fluent and context-
+aware language output.
+Moreover, in vision models, Transformers leverage the same
+self-attention mechanism to capture spatial relationships across
+pixels or image patches, providing a powerful alternative to
+convolutional neural networks (CNNs). For example, in Vision
+Transformers (ViTs) [20], an image is divided into small,
+fixed-size patches, each of which is flattened and linearly
+embedded, similar to tokens in a sentence. These embeddings
+are then processed in parallel, allowing the Transformer to
+learn relationships between distant regions of an image. This
+capability is particularly useful for tasks requiring an under-
+standing of global context, such as recognizing objects within
+complex backgrounds or interpreting spatial patterns across
+an entire scene. For instance, in a complex scene containing
+a forest with animals partially obscured by trees, CNNs [24]
+might struggle to understand the spatial relationship between
+scattered animal parts due to their limited receptive fields.
+However, a ViT can relate these distant regions by directly
+computing attention scores between patches, allowing it to
+“see” the entire animal even if parts of it are distant in
+pixel space. This method enables ViTs to recognize high-
+level patterns and achieve state-of-the-art performance in tasks
+like object detection, image segmentation, and visual question
+answering, where a global understanding of the image context
+is essential.
+The success of foundation models in other domains presents
+compelling opportunities for wireless communications and
+sensing, particularly in addressing challenges related to com-
+plex spatial-temporal dependencies and limited labeled data.
+However, adapting this paradigm to wireless systems requires
+overcoming several hurdles. Unlike text or images, wireless
+signals have unique characteristics such as complex-valued
+data, rapid temporal variations, and domain-specific noise
+patterns. The lack of large-scale, diverse datasets in wireless
+communications comparable to those in NLP or computer
+vision poses another challenge. Despite these obstacles, a
+foundation model for wireless communications and sensing
+could potentially provide a universal feature extractor for
+several tasks. By pre-training on extensive datasets (either
+synthetic datasets generated through advanced ray-tracing
+simulations or real-world data), such a model could capture
+fundamental properties of wireless propagation and network
+dynamics. This approach could enable robust performance
+across diverse wireless environments, even with limited task-
+specific data, addressing key challenges in the field and
+potentially revolutionizing the field.
+III. LWM
+Building upon the foundation model paradigm discussed
+in Section II, LWM applies these principles to the domain
+of wireless communications (and sensing). LWM is designed
+as a task-agnostic model for generalized feature extraction in
+wireless channels, addressing the unique challenges of this
+field. LWM adopts a self-supervised Transformer architecture
+with multi-head attention mechanisms and is pre-trained on
+a large dataset of wireless channels. LWM processes input
+channels in patches, enabling it to serve as a universal feature
+extractor for various wireless communication and sensing
+tasks. This approach allows LWM to capture complex patterns
+and provide rich, contextual representations of wireless envi-
+ronments, potentially improving performance across diverse
+scenarios even with limited task-specific data.
+LWM is built upon several core design principles:
+Patch-Based Processing: Wireless channels are segmented
+into patches, enabling LWM to capture both local and global
+patterns efficiently. This patch-based structure allows for
+spatial and spectral dependencies to be encoded in a way
+that mimics human perception of relevant wireless features,
+enhancing LWM’s utility as a universal feature extractor.
+Self-Supervised Pre-Training: Unlike traditional super-
+vised models that require labeled data for each task, LWM
+is trained on a large dataset of unlabeled wireless chan-
+nels using self-supervised techniques. By leveraging masked
+channel modeling and an attention mechanism, LWM learns
+to capture complex structural relationships within the data
+without relying on labeled datasets.
+Multi-Head Attention: The attention mechanism in LWM
+allows it to selectively focus on relevant patterns in wireless
+channels, dynamically assigning importance to different parts
+of the input. This is particularly beneficial for wireless ap-
+plications, where meaningful features can vary spatially and
+spectrally across environments.
+Task Flexibility and Transferability: The representations
+produced by LWM are highly versatile, making it possible to
+apply the model to numerous downstream tasks with minimal
+or no fine-tuning. As a result, LWM can generalize across
+different scenarios and geographic regions, achieving robust
+performance even when task-specific data is sparse or highly
+variable.
+In the following sections, we detail each component of
+LWM’s pipeline, from data preprocessing and embedding to
+the architecture of the Transformer encoder blocks. These sec-
+tions will demonstrate how LWM processes raw wireless chan-
+nels into enriched feature representations and embeddings, as
+illustrated in Fig. 1, and provide insight into how this model
+bridges the gap between traditional wireless communication
+techniques and advanced, general-purpose AI architectures.
+IV. DATA PREPROCESSING: MASKING AND EMBEDDING
+Given the input wireless channels, we first preprocess them
+to align with the Transformer input format and facilitate our
+self-supervised pre-training method. The steps for this are
+outlined below.
+A. Patch Generation
+Unlike RNNs [23], Transformers require the entire input
+simultaneously. To achieve this, we feed each channel in a
+patch-based format [20]. Each channel matrix H ∈CM×N is
+split into P patches by first separating the real and imaginary
+components, flattening them, and then dividing each part into
+patches. The process is as follows:
+4
+1) Separate Real and Imaginary Components: We start
+by separating H into its real and imaginary components
+Hreal = ℜ(H),
+(1a)
+Himag = ℑ(H),
+(1b)
+where Hreal, Himag ∈RM×N.
+2) Flatten Each Component: Flatten both Hreal and Himag
+into vectors using the vectorization operator, as follows
+hreal = vec
+ H⊤
+real
+
+,
+(2a)
+himag = vec
+ H⊤
+imag
+
+,
+(2b)
+resulting in hreal, himag ∈RMN.
+3) Divide into Patches: Divide each flattened component
+into P/2 patches. Let each patch have a length L =
+2MN/P. We generate patches as follows
+pi = hreal[(i −1)L + 1 : iL],
+i ∈[P/2],
+(3a)
+pi+P/2 = himag[(i −1)L + 1 : iL],
+i ∈[P/2],
+(3b)
+where each patch pi ∈RL, with i ∈[P] = {1, 2, . . . , P}.
+This patch-based approach accelerates computations, en-
+ables the model to learn both inter- and intra-patch relation-
+ships, mimics convolutional layers with self-attention, and
+increases design flexibility. For instance, with M
+= 32,
+N
+=
+32, P
+=
+128, and L
+=
+16, this configuration
+generates 128 patches of length 16. Smaller patches capture
+fine-grained details but require higher computational cost due
+to the increased number of patches, and they may limit
+the model’s ability to learn broader structural dependencies
+[25]. Larger patches emphasize long-range dependencies and
+structural patterns, reducing computational requirements but
+potentially overlooking finer details. Ultimately, selecting the
+optimal patch size depends on the task’s need for local versus
+global information and the available computational resources,
+rather than any specific threshold.
+For LWM, which is designed to serve as a universal feature
+extractor, achieving this balance is essential. By selecting
+a patch size that allows both detail and structure to be
+preserved, LWM remains adaptable, capturing features that
+are sufficiently detailed to represent nuanced variations while
+broad enough to generalize across tasks and datasets. A useful
+approach for assessing an optimal patch size is to evaluate the
+performance of the masking strategy described next.
+B. Masked Channel Modeling
+For LWM to be task-agnostic, we pre-train it in a self-
+supervised manner. Self-supervised learning enables LWM to
+capture the intrinsic structure of the data, allowing it to serve as
+a universal feature extractor adaptable to various downstream
+tasks, without reliance on labeled data. To enable this self-
+supervised pre-training, we propose a technique called Masked
+Channel Modeling (MCM).
+In MCM, we mask p% of the real part patches. This
+percentage is chosen to balance the model’s access to context
+with the challenge of reconstructing missing patches. Masking
+too many patches could lead to excessive information loss,
+making reconstruction difficult, while masking too few would
+provide limited incentive for the model to learn complex
+dependencies. Within the selected p% of patches, specific sub-
+percentages are assigned:
+• 80% are fully masked with a uniform vector m =
+[m, m, . . . , m]⊤∈RL, preventing the model from ac-
+cessing information in those locations. This requires
+LWM to leverage surrounding patches to predict the
+masked values, pushing it to learn the spatial dependen-
+cies within the channel.
+• 10% are replaced with random vectors sampled from
+a distribution (e.g., N(0, σ2)), adding noise and encour-
+aging LWM to differentiate genuine channel structures
+from anomalies.
+• 10% are left unchanged, providing partial ground truth
+to stabilize the model’s predictions and helping it recog-
+nize real patterns among masked and altered patches.
+This masking strategy is carefully applied to both the real
+and imaginary parts to prevent information leakage between
+them. Specifically, the imaginary patches selected for masking
+are the exact counterparts of the randomly selected real
+patches. This ensures that if a real part patch is masked, the
+corresponding imaginary part patch is also masked, preventing
+any indirect inference. If only the real part of a patch pi were
+masked while leaving its imaginary part pi+P/2 unmasked, the
+model could leverage the unmasked imaginary patch pi+P/2
+to predict pi. By masking both components of each selected
+patch, LWM learns each component’s structure independently,
+resulting in robust feature extraction and reducing the chance
+of unintended data leakage.
+The selected p% of patches are masked before going
+through the input embedding, positional encoding, and fi-
+nally the LWM pre-training stages. The corresponding high-
+dimensional embeddings of masked patches at the output of
+LWM then pass through a simple linear layer that maps each
+embedding back to the original patch size. The goal is to
+minimize the Mean Squared Error (MSE) between the recon-
+structed masked patches and their original values, expressed
+as
+LMCM =
+1
+|M|
+X
+i∈M
+WdeceLWM
+i
+−pi
+2 ,
+(4)
+where M represents the set of all selected (masked) patches,
+eLWM
+i
+∈RD is the high-dimensional embedding of the i-th
+masked patch at LWM’s output, Wdec ∈RL×D is the weight
+matrix of the linear layer used to map ei back to the original
+patch size, and pi is the original value of the i-th patch.
+This approach allows LWM to develop highly refined em-
+beddings that can be decoded accurately using a simple linear
+layer, underscoring the richness and expressiveness of the
+learned representations. Because the Transformer encoder does
+not know which patches will be masked or replaced by random
+patches, it is forced to maintain a contextual representation
+for every input patch, ensuring the embeddings are robust
+and contextually aware. Additionally, as random replacement
+only occurs for a small fraction of all patches (10% of the
+p% masked patches), the model’s ability to capture spatial
+and structural dependencies remains unaffected [13]. The high
+5
+performance of these linear layers in reconstructing masked
+patches highlights the quality of LWM’s output embeddings,
+which effectively capture complex spatial relationships within
+the channel, enabling efficient decoding and ensuring robust
+performance across a variety of downstream tasks.
+C. CLS Patch
+We prepend an additional patch, known as the CLS (classifi-
+cation) patch [13], to the sequence of channel patches, increas-
+ing the sequence length to P +1. The CLS patch is initialized
+as a learnable vector, denoted pCLS = [c, c, . . . , c]⊤∈RL,
+where c is set as a random value. Through its interactions
+across the Transformer layers, it aggregates and summarizes
+information from all other patches in the sequence.
+This interaction enables the CLS patch to capture a com-
+prehensive view of the entire input by attending to each
+patch in each layer, accumulating information from both local
+details and broader structures. As the sequence passes through
+multiple Transformer layers, the CLS patch’s representation is
+refined, with each layer integrating lower-level details (e.g.,
+spatial or temporal variations) and higher-level features (e.g.,
+overall channel quality or dominant paths). The resulting
+representation, eLWM
+CLS , serves as a compact, high-level summary
+of the input sequence
+eLWM
+CLS = fLWM(eCLS, {ei}P
+i=1),
+(5)
+where fLWM represents the transformations and interactions
+within LWM. Through this mechanism, the CLS patch iden-
+tifies the patches that contribute most significantly to the
+structure and dependencies within the channel, highlighting
+the segments most critical in defining the channel’s overall
+characteristics.
+Additionally, the compact size of the CLS patch makes it
+an efficient, low-dimensional encoded representation of the
+channels. This compactness is advantageous, as it serves as an
+expressive summary without requiring further model training,
+given that LWM has already been pre-trained in a task-agnostic
+manner to capture these global features.
+The attention scores assigned between the CLS patch and
+each patch pi reveal the relative importance of each patch,
+making the CLS patch a valuable interpretability tool across
+various wireless tasks. For example, in channel estimation,
+the CLS patch can highlight critical segments of the chan-
+nel, such as those representing major multipath components,
+essential for accurate channel estimation. In classification
+tasks such as line-of-sight (LoS) and non-line-of-sight (NLoS)
+classification, the CLS patch effectively summarizes the input,
+capturing the distinguishing features needed to identify LoS
+versus NLoS conditions. By attending to patches with high
+relevance to signal paths, reflection, and scattering, the CLS
+patch representation eLWM
+CLS captures a robust global context that
+is ideal for classification tasks, where understanding the overall
+channel state is crucial. Additionally, in resource allocation,
+the CLS patch’s attention scores {αCLS,i}P
+i=1 (where αCLS,i
+is the attention weight of the i-th patch with respect to the
+CLS patch) help identify channel segments that demand more
+resources. This optimization supports spectrum and power
+allocation by prioritizing the most influential patches. In
+beamforming and beam selection, the CLS patch can focus
+on patches that carry directional cues, assisting in adaptive
+beam selection by highlighting segments most indicative of
+optimal beam configurations. In semantic communications,
+the CLS patch enables efficient encoding by capturing patches
+containing the most contextually relevant information, enhanc-
+ing communication quality while reducing redundancy. These
+examples demonstrate the versatility of the CLS patch across
+wireless applications, where it serves as an adaptable focal
+point for understanding and prioritizing channel features that
+directly impact performance [26].
+D. Input Embedding
+After masking and prepending the CLS patch to the channel
+patch sequence, each patch is projected into an embedding
+space with dimension D using a linear layer, effectively
+mapping each flattened patch to a D-dimensional vector. Given
+a set of patches {pCLS, pm
+1 , pm
+2 , . . . , pm
+P }, where pm
+i
+∈RL
+represents a masked patch (with only 15% of patches masked),
+the linear layer performs the following transformation for each
+patch pm
+i
+eemb
+i
+= Wembpm
+i + b ∈RD,
+i ∈{CLS} ∪[P],
+(6)
+where Wemb
+∈RD×L is the weight matrix, and b ∈
+RD
+is the bias vector for all patches. This transfor-
+mation produces the initial patch embeddings Eemb
+=
+[eemb
+CLS, eemb
+1
+, eemb
+2
+, . . . , eemb
+P
+]⊤
+∈
+R(P +1)×D, allowing the
+Transformer to process all patches in a common high-
+dimensional feature space where relationships can be effec-
+tively captured.
+Embedding patches into a higher-dimensional space before
+feeding them into the Transformer is essential for capturing
+complex relationships, especially compared to models like
+autoencoders, which often reduce dimensionality. A higher-
+dimensional embedding provides a richer, more expressive
+feature space, enabling each patch to retain fine-grained in-
+formation about the channel data. Directly using the original
+patch size as an embedding would limit the model’s capacity
+to capture meaningful relationships. The choice of a higher
+embedding dimension D enables the Transformer to establish
+detailed contextual relationships, similar to how embeddings
+in text-based models capture the semantic relationships be-
+tween words. In language models, embeddings allow each
+token (word or subword) to represent not only its isolated
+meaning but its meaning contextualized by surrounding words.
+This context-awareness is essential for handling nuances like
+polysemy.
+Likewise, in wireless channels, high-dimensional embed-
+dings allow each patch to capture its information with re-
+spect to the entire channel, representing dependencies between
+different parts of the channel and capturing structural nu-
+ances. In wireless channels, fine-grained details such as spatial
+correlations, multipath effects, and scattering are crucial for
+accurate representation. By embedding patches into a higher
+dimension, we ensure sufficient capacity to capture these
+intricate dependencies. Lower-dimensional representations, as
+6
+in autoencoders, often sacrifice such details for compression,
+which can limit the Transformer’s capacity to understand the
+channel’s complex structure.
+Furthermore, positional encodings are added to these em-
+beddings to provide the Transformer with information about
+the order of patches, as it inherently lacks sequence aware-
+ness. To achieve this, we define a positional encoding patch
+ppos
+i
+∈RL for each patch i as follows:
+• For the CLS token, the positional encoding patch is a
+uniform vector of zeros.
+• For each subsequent patch i ∈[P], the positional en-
+coding patch is a uniform vector filled with the value i,
+providing an incremental encoding. Mathematically, this
+is expressed as
+ppos
+i
+= i · 1L,
+i ∈[P],
+(7)
+where 1L is a vector of ones in RL.
+Each positional encoding patch ppos
+i
+is then mapped into the
+embedding space using a learned embedding matrix Wpos ∈
+RD×L and a bias vector bpos ∈RD, resulting in positional
+encodings
+epos
+i
+= Wposppos
+i
++ bpos,
+i ∈{CLS} ∪[P].
+(8)
+These position embeddings are then added to the correspond-
+ing patch embeddings ei, yielding the position-encoded input
+embeddings
+einput
+i
+= eemb
+i
++ epos
+i
+,
+i ∈{CLS} ∪[P].
+(9)
+This addition forms the final set of position-encoded embed-
+dings Einput = [einput
+CLS , einput
+1
+, einput
+2
+, . . . , einput
+P
+]⊤∈R(P +1)×D,
+effectively incorporating ordered context into each patch em-
+bedding for the Transformer model.
+V. MODEL ARCHITECTURE
+We adopt the Transformer encoder architecture from [2],
+with modifications tailored to the context of wireless channels.
+The model processes input embeddings through a sequence
+of E encoder blocks, progressively refining the embeddings
+to capture increasingly complex relationships and contextual
+patterns in the data. Across the n-th encoder block, where
+n ∈[E], the input embeddings Einput
+n
+∈R(P +1)×D evolve,
+with each layer enhancing feature richness. This sequence
+culminates in the final output embeddings, denoted as ELWM ∈
+R(P +1)×D, which constitute the LWM embeddings, encapsu-
+lating a refined representation suitable for downstream tasks.
+Within each encoder block, the input embeddings go
+through the following components sequentially: multi-head
+attention, layer normalization with residual connections,
+a feed-forward network, and another layer normalization
+with residual connections. Each component refines the em-
+beddings by capturing different aspects of the data structure.
+The output from one encoder block serves as the input to
+the next block, enabling the model to progressively build
+complex representations that capture the dependencies within
+the wireless channels. The details of these model components
+at each encoder block are outlined below.
+A. Self-Attention Mechanism
+The self-attention mechanism allows each patch in the
+input sequence to assign contextually weighted importance to
+all other patches, achieved through a dot-product similarity
+measure. Given input embeddings Einput ∈R(P +1)×D, where
+P is the number of patches and D is the embedding dimension,
+each row of Einput represents an embedding vector correspond-
+ing to a patch.
+To compute self-attention, we first derive the Query (Q),
+Key (K), and Value (V) matrices using linear transformations,
+each defined by learned weights
+Q = EinputWQ,
+K = EinputWK,
+V = EinputWV ,
+(10)
+where WQ, WK, WV ∈RD×D′. Here, D′ is typically set to
+D for single-head attention but may vary to DH for multi-head
+attention, as will be discussed next.
+The core of self-attention begins by calculating the scaled
+dot-product of the query (Q) and key (K) matrices, capturing
+the similarity among patches in the input sequence. This
+similarity measure is computed as follows
+S = QK⊤
+√
+D′ ,
+(11)
+where S represents the scaled similarity scores, and the
+scaling factor
+√
+D′ prevents gradient issues like explosion or
+vanishing. These scaled similarity scores are then normalized
+by applying the softmax function
+A = softmax(S),
+(12)
+where A is the attention weight matrix, which ensures that
+the weights assigned to each patch sum to 1 for each query,
+allowing the model to focus selectively on the most relevant
+patches. Finally, the attention weights are used to compute a
+weighted sum of the value (V) matrix, producing the attention
+output
+Attention(Q, K, V) = AV.
+(13)
+This process enables the model to dynamically adjust its
+focus based on the contextual relevance of each patch in
+relation to others, effectively capturing both local and global
+relationships across the input sequence.
+The Query, Key, and Value matrices in the self-attention
+mechanism represent distinct, interrelated aspects of each input
+patch, working together to capture both local and global
+dependencies in the data. Each of these matrices has a specific
+purpose, ultimately contributing to how the model emphasizes
+certain relationships over others within the input sequence.
+Query (Q): The Query matrix encodes the intent or inter-
+est of each patch in the sequence, representing the way each
+patch seeks information relevant to itself from other patches.
+Queries help determine what aspects of the surrounding data
+are most pertinent to the current patch, as each query vector
+in Q essentially acts as a question that asks how similar or
+relevant other patches are to it.
+Key (K): The Key matrix complements the Query matrix by
+encoding characteristics of each patch that can be evaluated
+7
+by queries from other patches. While Queries seek informa-
+tion, Keys provide the attributes or features by which each
+patch can be ”queried.” For any two patches, their query and
+key vectors are compared to assess their mutual relevance,
+which is captured through the dot product QK⊤. High simi-
+larity scores indicate that certain patches carry information of
+high interest to one another.
+Value (V): The Value matrix represents the actual informa-
+tion that each patch provides to the model, contributing to the
+weighted sum in the final self-attention calculation. Once the
+model identifies relevant patches (through the similarity scores
+from the dot product of Queries and Keys), the corresponding
+Value vectors are aggregated based on their importance, de-
+fined by the computed attention weights. Thus, Values are akin
+to the content that is passed along in the attention mechanism,
+shaping the contextualized representation of each patch by
+integrating relevant details from others.
+To better understand the roles of Query, Key, and Value,
+consider the analogy of a conference setting. Imagine each
+participant has specific interests or questions (Queries) they
+want addressed, such as AI techniques or wireless advance-
+ments. Each participant also has unique expertise (Keys) they
+can offer. If someone’s interest in AI aligns with another’s data
+science expertise, a strong match occurs, enabling an exchange
+of knowledge (Values). In self-attention, this relationship is
+formalized by computing the similarity between each Query
+and all Keys. When a Query and Key pair strongly align, a
+higher attention weight is assigned, resulting in a weighted ag-
+gregation of the corresponding Value vectors. This effectively
+allows each patch to gather information most relevant to its
+context.
+Together, Queries, Keys, and Values facilitate a process
+where each patch determines which other patches to attend to,
+assigns importance to each based on their contextual relevance,
+and then updates its representation based on a weighted
+sum of the relevant information. This arrangement allows
+the Transformer model to dynamically focus on relationships
+across patches, enabling it to capture both immediate and
+extended dependencies in the data with great flexibility and
+precision.
+B. Multi-Head Attention
+Multi-head attention builds upon self-attention by enabling
+the model to learn multiple representations simultaneously,
+as depicted in Fig. 2. Instead of a single attention head, H
+independent self-attention mechanisms are applied, each with
+distinct learned weight matrices
+headh = Attention(EinputWQ
+h , EinputWK
+h , EinputWV
+h ), (14)
+where WQ
+h , WK
+h , WV
+h
+∈RD×DH are the transformation
+matrices specific to each head, and DH = ⌊D/H⌋. By pro-
+cessing across multiple heads, the model learns representations
+from various subspaces of the data, enhancing its ability to
+capture nuanced relationships. The outputs of all heads are
+concatenated and passed through a linear transformation
+MultiHead(Q, K, V) = Concat(head1, . . . , headH)WO,
+(15)
+Scaled
+Dot-Product
+Scaled
+Dot-Product
+Softmax
+Softmax
+...
+...
+...
+...
+...
+Concatenation
+...
+...
+...
+...
+...
+Attention
+Heads
+...
+...
+...
+Attention Scores
+Figure 2: Multi-head Attention Mechanism
+where WO ∈RDHH×D. This combined output from multiple
+heads enables the model to focus on diverse aspects of the
+input sequence simultaneously, enriching the feature repre-
+sentation by capturing different patches and interactions in
+parallel.
+In other words, each attention head can be thought of as
+a unique lens through which the model interprets the input
+data. In a multi-faceted problem space, these different lenses
+enable the model to pick up on varying levels of detail and
+relational structures simultaneously. To extend our analogy of
+participants in a conference: imagine that each participant not
+only has a set of questions (Queries) and expertise (Keys) but
+can also approach the conversation from multiple viewpoints
+or specializations (e.g., technical details, future trends, industry
+applications). One head might focus on broad concepts (like
+general channel structure or coarse spatial relationships), while
+another might pick up fine-grained, detailed aspects (such as
+precise timing or frequency patterns).
+C. Feed-Forward Network (FFN)
+Each encoder layer has a feed-forward network (FFN)
+that processes individual patch embeddings independently.
+Formally, the FFN applies two linear transformations separated
+by a non-linear ReLU activation
+FFN(ei) = max(0, eiW1 + b1)W2 + b2,
+(16)
+where W1 ∈RD×DFF and W2 ∈RDFF×D. The intermediate
+layer size DFF = TD expands the embedding dimension
+by a factor of T, which empirically improves the model’s
+expressiveness. The FFN enriches each embedding with more
+complex transformations, and because each embedding is
+processed separately, the FFN layer does not introduce de-
+pendencies across patches.
+D. Layer Normalization and Residual Connections
+Layer normalization stabilizes the training by ensuring that
+each layer’s output has zero mean and unit variance
+LayerNorm(ei) = ei −µi
+σi
+,
+(17)
+8
+where µi and σi denote the mean and standard deviation
+across the feature dimension of each patch embedding e. This
+normalization is essential for convergence, especially in deeper
+networks, as it reduces covariate shifts.
+Residual connections are added around each sub-layer (self-
+attention and FFN) to improve gradient flow
+Outputi = LayerNorm(ei + sub-layer(ei)).
+(18)
+The addition operation allows gradient information to flow
+more directly through the network, mitigating vanishing gra-
+dient problems and enabling efficient backpropagation.
+VI. PRE-TRAINING
+Given the data preprocessing steps and the LWM model
+architecture described in the previous two subsections, we pre-
+train this model to be then leveraged in multiple downstream
+tasks. The following subsections outline the key components
+of LWM’s pre-training process.
+A. Pre-Training Dataset
+The LWM pre-training process utilizes a vast and diverse
+dataset of over 1 million wireless channels from 15 scenarios
+within the DeepMIMO dataset [27], with 80% of the data
+dedicated to training and 20% to validation. These scenar-
+ios include O1, Boston5G, ASU Campus, New York, Los
+Angeles, Chicago, Houston, Phoenix, Philadelphia, Miami,
+Dallas, San Francisco, Austin, Columbus, and Seattle. The first
+three scenarios are significantly larger, while the remaining
+twelve city scenarios average around 1500 effective users
+each. In wireless communications and sensing, relationships
+within the data often manifest as dependencies across various
+dimensions, requiring the model to capture both local patterns
+and broader spatial structures. Transformers are most effective
+when trained on large-scale and diverse datasets [20], as these
+enable them to generalize and learn complex relationships.
+Training on this extensive dataset ensures that LWM captures
+nuanced wireless patterns, making it highly capable for a
+variety of downstream tasks.
+B. Wireless Channel Adaptation for Transformer Architecture
+The wireless channels in the adopted dataset are structured
+as (M, N) = (32, 32) matrices, where N corresponds to the
+number of subcarriers and M to the number of antennas. To
+prepare this data for Transformer processing, each channel
+matrix H ∈C32×32 is split into P = 128 patches: 64 from the
+real part and 64 from the imaginary part, as detailed in section
+(IV). Each patch contains values from L = 16 consecutive
+subcarriers out of the 32 total subcarriers, spanning each
+antenna, resulting in patches of size 16 × 1.
+For self-supervised learning, our proposed Masked Channel
+Modeling (MCM) technique is applied as described in section
+(IV). Specifically, 9 out of 64 real-part patches are randomly
+masked (approximately 15% of patches), with the correspond-
+ing imaginary-part patches masked similarly to prevent data
+leakage. Masking is conducted based on three probability-
+based actions: with probability 0.1, patches are replaced with a
+random vector; with probability 0.8, they are replaced with a
+uniform MASK array (value m = 1); and with probability
+0.1, they remain unchanged. This approach enables LWM
+to learn robust contextual relationships across both masked
+and unmasked patches, facilitating effective feature extraction
+from wireless channels. Importantly, because LWM does not
+know which patches are masked, it is compelled to understand
+all inter- and intra-patch relationships, rather than focusing
+solely on the masked patches. Although we only optimize
+the loss function based on the masked patches, this structure
+ensures that LWM captures a comprehensive representation
+across the entire input, reinforcing its ability to generalize
+effectively. The objective is to minimize the prediction loss (4)
+by selecting LWM embeddings eLWM
+i
+of the selected (masked)
+patches M and minimizing
+min
+Wdec,Θ
+X
+i∈M
+WdeceLWM
+i
+−pi
+2 ,
+(19)
+where Θ represents the parameters of the LWM model. This
+optimization encourages the model to learn mappings that
+accurately reconstruct masked patches from the embeddings,
+refining its ability to capture critical context from both masked
+and unmasked channel sections.
+After masking, a CLS patch vector pCLS, initialized with
+random values, is prepended to the start of the channel patch
+sequence. Each 16 × 1 patch vector is then projected into
+a D = 64-dimensional space via a linear layer, yielding
+embeddings eemb
+i
+∈R64 for each patch. These embeddings are
+further enriched with positional encodings to capture structural
+dependencies critical for learning within wireless channel
+data, as discussed in section (IV). The final input embedding
+matrix Einput ∈R129×64 consolidates spatial and frequency
+information from both real and imaginary components, ready
+for processing through LWM’s transformer-only encoder.
+C. Pre-Training Loss Function
+LWM uses MSE loss instead of the cross-entropy loss
+commonly found in NLP models like BERT. In language
+models, cross-entropy loss is effective for predicting discrete
+tokens from a fixed vocabulary, as in Masked Language
+Modeling (MLM), where masked tokens are classified based
+on surrounding context
+LMLM = −
+X
+i∈M
+log p(yi|eBERT
+i
+),
+(20)
+where M represents masked positions, yi is the true token,
+and p(yi|eBERT
+i
+) is the predicted probability. This approach
+works for discrete data but is unsuitable for continuous-valued
+wireless channels, which lack a fixed vocabulary. Instead,
+LWM treats masked channel modeling (MCM) as a regression
+task, using MSE loss (4) to measure the error between
+predicted and actual masked patch values. This allows LWM
+to learn spatial and temporal dependencies from surrounding
+unmasked patches, developing robust feature representations
+tailored to the continuous nature of wireless channels.
+9
+Table I: LWM Pre-training Setup Parameters
+Parameter
+Value
+Antennas at BS (N)
+32
+Antennas at UEs
+1
+Subcarriers (M)
+32
+Patch Size (L)
+16
+Embedding Size (D)
+64
+Channel Patches (P)
+128
+Attention Heads (H)
+12
+Encoder Layers (E)
+12
+FFN Hidden Size (DFF)
+256
+Head Dimension (DH)
+5
+Masking Percentage (p)
+15 (80/10/10)
+Learning Rate
+1 × 10−4
+Batch Size
+64
+Optimizer
+Adam
+Adam β1
+0.9
+Adam β2
+0.999
+Adam ϵ
+1 × 10−8
+Weight Decay
+1 × 10−5
+Dropout Rate
+0.1
+Model Parameters
+600K
+Training Set Size
+820K
+Validation Set Size
+200K
+D. Pre-Training Setup Parameters
+As shown in table I, the pre-training setup for LWM
+includes 12 attention heads, 12 encoder layers, an embedding
+size of 64, and an FFN hidden size of 256. Training begins
+with a learning rate of 1 × 10−4, decreasing by 10% every
+10 epochs to ensure smooth convergence. A batch size of 64
+is utilized, along with the Adam optimizer (β1 = 0.9, β2 =
+0.999, eps = 1 × 10−8), and a weight decay of 1 × 10−5 to
+reduce overfitting. The 12-head attention mechanism enables
+the model to capture multiple relationships within the data,
+while the depth of the encoder layers allows it to extract both
+local and global patterns in the channels. This setup ensures
+effective learning, balancing convergence and generalization
+across various wireless communication scenarios.
+By the end of pre-training, LWM is capable of producing
+rich, contextual embeddings from raw wireless channels. The
+integration of channel preprocessing, self-supervised learning,
+bidirectional attention, and multi-head attention mechanisms
+enables the model to generalize effectively across a range of
+scenarios, making it a powerful feature extractor for diverse
+downstream tasks in wireless communications and sensing
+systems.
+VII. INFERENCE
+LWM excels in generating rich, context-aware embeddings
+from raw wireless channels in real-time, with no need for addi-
+tional training for embedding generation. Pre-trained on large,
+diverse datasets using a self-supervised, Transformer-based
+approach, it allows users to immediately obtain high-quality,
+low- and high-dimensional embeddings suitable for a wide
+array of downstream tasks. The pre-trained model can be em-
+ployed as-is, leveraging these embeddings directly, or choose
+to fine-tune the model’s last layers to extract highly task-
+specific, fine-grained features. This flexibility makes LWM
+highly adaptable, enabling it to capture both local and global
+patterns and perform effectively across general and specialized
+scenarios, even in data-scarce environments.
+The inference process begins with segmenting the raw
+wireless channel data into patches, embedding them, and
+adding positional encodings, similar to the pre-training phase
+but without the need for masking or weight updates.
+This structured approach allows LWM to extract and rep-
+resent multi-scale patterns from both small and large con-
+texts within the data. The resulting embeddings, ELWM =
+[eLWM
+CLS , eLWM
+1
+, eLWM
+2
+, . . . , eLWM
+P
+]⊤=
+
+C
+ETT ∈R(P +1)×D,
+consist of the CLS embedding C ∈RD and the channel
+embeddings E ∈RP ×D, as shown in Fig. 1.
+The CLS embedding provides a holistic channel repre-
+sentation, making it ideal for general tasks like LoS/NLoS
+classification, while channel embeddings, four times larger
+than the input, capture intricate spatial and frequency de-
+pendencies for more detailed applications. This inference
+setup offers key advantages, including immediate usability,
+as pre-trained embeddings can be directly applied without
+retraining, enabling rapid deployment in resource-limited sce-
+narios. LWM also captures both local and global channel
+patterns, ensuring adaptability to tasks requiring fine-grained
+or high-level insights. Additionally, its flexibility allows users
+to either apply embeddings as-is or fine-tune the last layers
+for task-specific improvements without retraining the full
+model. Furthermore, LWM generalizes well even in data-
+scarce environments, leveraging its pre-trained representations
+to maintain high performance with minimal labeled data.
+By balancing detailed feature extraction with computational
+efficiency, LWM provides a practical and adaptable solution
+for various wireless communication tasks.
+VIII. DOWNSTREAM TASK EVALUATION
+In this section, we show that LWM CLS and channel
+embeddings outperform raw wireless channels across various
+downstream tasks. We evaluate LoS/NLoS classification and
+sub-6 GHz to mmWave beam prediction as examples, though
+many other tasks can be explored.
+A. Sub-6 to mmWave Beam Prediction
+This task aims to predict the strongest mmWave beam
+at the receiver from a predefined codebook at the base
+station, based on Sub-6 GHz channels. This is a specific
+case of channel mapping, where instead of directly predicting
+mmWave channels, the model learns the relationship between
+Sub-6 GHz channels and the best mmWave beam. Ground-
+truth optimal beams are computed for each user, generating a
+labeled dataset. The task complexity is varied by adjusting the
+codebook size, ranging from 16 to 256 beams. Performance is
+evaluated across different training data percentages to assess
+how well the model generalizes with less data. This makes the
+task highly practical for modern communication systems, as it
+reduces the overhead of full mmWave channel estimation. It
+also tests how well LWM embeddings capture the spatial and
+propagation characteristics of Sub-6 GHz channels and gener-
+alize to higher-frequency mmWave beams, making it an ideal
+10
+(a) Raw Channels Performance
+(b) LWM Embeddings Performance
+(c) Performance Difference
+(d) Percentage of Performance Gain
+Figure 3: This figure compares beam prediction F1-score performance be-
+tween raw channels and their inferred LWM embeddings, based on a total of
+10388 training raw channels, and highlights their relative effectiveness.
+benchmark for comparing the efficiency and generalizability
+of LWM embeddings against raw channels.
+Downstream Model: To ensure fair comparison, we use
+a similar downstream model complexity for both embed-
+dings and raw channels, selecting a model optimized for raw
+channels as the performance benchmark. A uniform Residual
+1D-CNN architecture with 500K parameters is employed,
+designed to capture complex patterns through residual con-
+nections and weight-sharing while avoiding overfitting. The
+model consists of an initial convolution layer followed by three
+residual blocks, each containing several convolution layers that
+extract deeper features. This is followed by global average
+pooling and fully connected layers for final classification.
+When parameters exceed 500K, the model overfits to raw
+channels, which is why we consider this architecture the
+benchmark for raw channels.
+Downstream Task Dataset: The test set comprises six
+new scenarios from the DeepMIMO dataset, which were not
+part of LWM’s pre-training: Denver, Fort Worth, Oklahoma,
+Indianapolis, Santa Clara, and San Diego, comprising a total
+of 14840 samples. For each user, the corresponding 28GHz
+channels are generated, and the optimal beams are computed
+to create a labeled dataset, where 3.5GHz channels serve as
+inputs and 28GHz beams as labels. The dataset is split into
+70% for training, 20% for validation, and 10% for testing. For
+LWM embeddings, the raw channels are first to generate LWM
+embeddings, the raw channels are processed through the pre-
+trained LWM model in real-time, with the channel embedding
+component E serving as the input for this downstream model,
+as shown in Fig. 1.
+Downstream Tasks Evaluation: Fig. 3 presents a com-
+parison of the performance between raw channels and LWM
+channel embeddings in training a model for beam prediction,
+evaluated across different codebook sizes and varying amounts
+of training data. As shown in Fig. 3a, the downstream models
+trained with raw channels require significantly more data to
+reach high performance levels, while LWM channel embed-
+dings usually achieve performance saturation with just 50%-
+70% of the available data and consistently outperform raw
+channels. Notably, LWM embeddings reach the benchmark
+performance of raw channels with only 40%-50% of the data,
+regardless of task complexity, highlighting the data efficiency
+of LWM embeddings.
+We use the F1-score for classification tasks as it accounts
+for imbalanced labels and provides a clearer evaluation of
+model performance than accuracy. The F1-score difference
+heatmap in Fig. 3c highlights where embeddings surpass raw
+channels, aiding in model optimization for complex or low-
+data tasks. Meanwhile, the F1-score gain percentage heatmap
+in Fig. 3d emphasizes the efficiency of embeddings, showing
+how they scale with fewer resources. Fig. 3c demonstrates that
+embeddings are most effective when data is limited relative to
+task complexity. The performance difference follows a concave
+trend, where an initial increase in data improves performance,
+but beyond a certain point, the difference diminishes and
+gradually decreases, though it never turns negative.
+As the task complexity increases, such as with a higher
+number of labels, larger datasets are required to fully showcase
+the advantages of embeddings over raw channels, allowing
+embeddings to reveal their full potential in capturing intricate
+patterns and dependencies.
+B. LoS/NLoS Classification
+This task serves as a great benchmark to evaluate CLS
+embeddings, which provide a highly compressed but more
+informative representation of raw channels. These embeddings
+effectively capture the critical features of a channel, making
+them ideal for various tasks that require a holistic understand-
+ing of the channel’s behavior. For instance, in applications like
+CSI feedback, the CLS embeddings can reduce the overhead
+of sending full channel data to the base station, particularly
+in multi-vendor environments. Instead of relying on infeasi-
+ble joint autoencoder training between user equipment (UE)
+and base station (BS), the LWM model functions like an
+encoder, delivering a compact yet illustrative version of the
+channel. This makes it highly suitable for tasks that need a
+comprehensive understanding of channel characteristics while
+significantly reducing transmission complexity.
+Downstream Model: The classification model serves as
+the downstream network for raw channels (2048 features),
+CLS embeddings (64 features), and channel embeddings (8192
+features), maintaining a consistent architecture across different
+input representations. It begins with a 512-unit fully connected
+layer, followed by batch normalization, ReLU activation, and
+dropout (0.1) to enhance stability and prevent overfitting. The
+pattern continues through 256 and 128-unit layers, refining the
+features hierarchically. The final linear layer maps the pro-
+cessed 128-dimensional representation to LoS/NLoS classes.
+11
+Gain of
+ﬁne-tuning 
+Gain of inference on
+pre-trained LWM
+LWM embeddings are most eﬀective
+in data-limited scenarios
+Figure 4: This figure compares F1-scores for LoS/NLoS classification using
+models trained on raw wireless channels and LWM embeddings across
+different percentages of the 6639 training samples. CLS embeddings are 32×
+smaller than raw channels, while channel embeddings are 4× larger. CLS
+embeddings inferred from noisy (imperfect) raw channels are also included
+to demonstrate LWM’s robustness to noise.
+Batch normalization accelerates convergence, while dropout
+improves generalization.
+Downstream Task Dataset: For this task, we utilized the
+densified Denver dataset, where we re-ran ray tracing on the
+existing DeepMIMO scenario, reducing the user grid spacing
+from 2.5m to 1m. This higher density resulted in a total of
+8299 samples, offering a more detailed representation of the
+wireless environment for downstream evaluations. The dataset
+is partitioned with up to 80% allocated for training (6639
+samples) and the remaining 20% for validation.
+Downstream Task Evaluation: Fig. 4 underscores LWM’s
+capabilities in data efficiency, lightweight adaptation, and
+noise robustness. The downstream model is evaluated using
+five input types: (i) CLS embeddings (first-patch representa-
+tion from frozen pre-trained LWM), (ii) channel embeddings
+(remaining patches of general-purpose embeddings), (iii) raw
+channels (unprocessed channels), (iv) CLS embeddings in-
+ferred from imperfect raw channels corrupted with complex
+Gaussian noise (SNR = 5 dB), and (v) fine-tuned CLS
+embeddings. Here, general-purpose embeddings are extracted
+from the pre-trained LWM without weight updates, while fine-
+tuned embeddings are generated by updating only the last
+three layers of LWM jointly with the downstream task. This
+setup isolates the role of pre-trained feature hierarchies versus
+task-adaptive refinement. The comparison across input types
+quantifies LWM’s ability to balance noise suppression, data
+efficiency, and task-specific discriminability—key strengths
+for deployment in resource-constrained wireless environments.
+The evaluation reveals several key findings. First, with only
+6 training samples, models trained on raw channel data per-
+form slightly better than random guessing (average F1-score
+= 0.55), whereas general-purpose embeddings improve perfor-
+mance by +0.31 F1, demonstrating strong class separation in
+the embedding space (Fig. 5). Second, fine-tuned embeddings
+enable perfect class differentiation (F1 ≈1.0) even with
+minimal data, achieved by unfreezing and updating only the
+last three layers of LWM alongside the downstream model—a
+strategy grounded in empirical evidence that earlier layers en-
+code coarse-grained patterns (e.g., syntax and morphology in
+LLMs), while deeper layers refine task-specific details (e.g.,
+signal variations) [28] (Fig. 6). Third, CLS embeddings out-
+perform channel embeddings in low-data regimes, as channel
+embeddings capture complex patterns requiring larger datasets
+for effective utilization; however, channel embeddings slightly
+surpass CLS performance as training samples grow, leveraging
+their richer information density. Fourth, CLS embeddings
+exhibit robustness to noise, aligning closely with their noisy
+counterparts, which highlights the LWM’s ability to filter
+noise via self-attention in unseen environments. Finally, the
+fine-tuning strategy—limited to deeper layers—preserves pre-
+trained knowledge of coarse signal characteristics (e.g., prop-
+agation geometry), preventing overfitting on small LoS/NLoS
+datasets, while enabling adaptation to subtle discriminative
+features. For more complex tasks, such as beam prediction,
+full-model fine-tuning becomes necessary.
+IX. DISCUSSION AND REMARKS
+In this section, we provide additional insights related to the
+LWM framework, covering points on attention mechanisms,
+masked channel modeling based pre-training, and a compar-
+ison with autoencoder embeddings. These discussions offer
+complementary perspectives to enhance understanding of the
+model’s design and functionality.
+A. Discussion on Attention
+LWM’s
+Transformer-based
+architecture
+leverages
+self-
+attention to model spatial and spectral dependencies in wire-
+less channels, offering significant advantages over conven-
+tional signal processing methods. Unlike CNNs, which rely
+on local receptive fields, self-attention enables global feature
+extraction, capturing critical relationships across frequency
+and spatial domains in a single layer. This mechanism dynam-
+ically assigns importance scores to different patches, allowing
+the model to prioritize dominant channel components while
+suppressing noise and interference, making it well-suited for
+complex and dynamic wireless environments. Additionally,
+LWM’s bidirectional attention enables each patch to attend
+to both preceding and following patches, capturing inter-
+subcarrier dependencies and spatial correlations for improved
+modeling of multipath propagation.
+A key strength of self-attention in LWM is its potential
+for interpretability and sensitivity analysis in wireless com-
+munications. Unlike traditional deep learning models, where
+feature extraction remains opaque, attention scores offer direct
+insight into how different channel components contribute to
+predictions. By analyzing these scores, wireless engineers
+can assess which subcarriers, antennas, or spatial regions
+are most influential, enabling improved resource allocation,
+interference mitigation, and adaptive beamforming strategies.
+This is particularly valuable in CSI compression, where priori-
+tizing highly informative channel components can significantly
+reduce feedback overhead without sacrificing performance.
+12
+LoS status
+Best DFT vector
+Raw channels
+CLS embeddings
+Fine-tuned CLS embeddings
+Scenario layout
+Figure 5: This figure visualizes the distribution of users in the DeepMIMO Denver scenario based on their LoS/NLoS status (top row) and strongest DFT
+beam index among 8 beams (bottom row). User channels are projected into 2D using t-SNE, comparing raw channels, task-agnostic (general-purpose) LWM
+embeddings, and fine-tuned LWM embeddings for each task. As seen in Fig. 4, CLS embeddings clearly separate LoS and NLoS channels, enabling high
+zero-shot classification and strong initialization for downstream training with minimal data. Fine-tuning further enhances downstream task performance.
+Furthermore, multi-head attention enhances interpretability
+by providing a layered perspective on wireless channels.
+Each attention head captures different propagation character-
+istics—one may focus on local variations in signal strength,
+while another identifies global trends across subcarriers. This
+allows for detailed sensitivity analysis, helping researchers
+understand how different signal components impact model pre-
+dictions under varying SNR conditions. By tracking attention
+shifts across different environments, engineers can evaluate
+robustness to channel variations, identify learning weaknesses,
+and refine architectures for real-world deployment.
+Overall, LWM’s self-attention framework transforms wire-
+less feature extraction into an interpretable and adaptive pro-
+cess. With its ability to highlight critical channel features, fa-
+cilitate sensitivity analysis, and dynamically adjust to varying
+conditions, LWM is not just a powerful inference model but
+also a valuable tool for optimizing wireless system design and
+performance.
+B. Discussion on Masked Channel Modeling
+MCM pre-trains LWM by randomly masking subsets of
+input channel patches and optimizing the model to recon-
+struct them via contextual dependencies learned through self-
+attention. Unlike conventional denoising techniques, MCM
+enforces hierarchical feature disentanglement, compelling the
+encoder to capture invariant physical-layer structures (e.g.,
+multipath delay profiles, spatial-spectral correlations) while
+discarding transient noise artifacts. By training on partial
+observations, LWM’s transformer layers develop noise-robust
+latent representations, where the CLS token aggregates global
+signal statistics to infer missing or corrupted patches. This self-
+supervised objective aligns embeddings with channel seman-
+tics rather than pixel-level fidelity, enabling joint denoising
+and feature extraction without explicit noise modeling. The
+result is a unified framework that suppresses interference
+(e.g., fading, estimation errors) while preserving discriminative
+patterns critical for downstream tasks, bridging robustness and
+adaptability in dynamic wireless environments.
+C. LWM vs. Autoencoders Embeddings
+Autoencoders (AEs) [29] and LWM share two core
+conceptual similarities despite differing in implementation:
+reconstruction-driven training objectives and compact la-
+tent representations. Both architectures employ reconstruction
+losses—AEs through pixel-level signal recovery (e.g., recon-
+structing raw CSI matrices) and LWM via MCM, which recon-
+structs masked patches by inferring contextual relationships.
+However, their objectives diverge in focus: AEs prioritize loss-
+less reconstruction fidelity, while LWM emphasizes semantic
+feature recovery (e.g., multipath structure, spatial correla-
+tions) to build universal channel understanding. Second, both
+generate compact embeddings—AEs produce low-dimensional
+latent vectors, and LWM isolates a single CLS token from
+its full embedding sequence—but their utility differs. AE
+embeddings remain tightly coupled to decoder-dependent re-
+construction, limiting their plug-and-play adaptability, whereas
+LWM’s CLS token distills global channel semantics into a
+task-agnostic representation, enabling direct compatibility with
+diverse downstream tasks (classification, regression, decision-
+making) without architectural overhauls. Thus, while both
+architectures compress inputs into compact representations,
+LWM’s embeddings prioritize versatile feature abstraction over
+pixel-perfect reconstruction, making them inherently adaptable
+to dynamic wireless decision-making workflows.
+X. CONCLUSION
+In this work, we introduced LWM, a pre-trained foundation
+model specifically designed for wireless communication and
+sensing channels. LWM draws inspiration from LLMs and
+13
+Coarse-grained details
+Fine-grained details
+Progression of encoder layers
+Heads
+Figure 6: This figure shows attention maps of patches within a channel across
+LWM layers and heads. Rows represent layers, columns represent heads, and
+axes of each attention map denote query and key patch indices. Lighter colors
+indicate higher self-attention, while darker maps in lower layers suggest a
+focus on fine details, making them ideal for task-specific fine-tuning.
+Vision Transformers. Using a masked channel modeling strat-
+egy within a self-supervised framework, LWM is pre-trained
+to predict masked portions of the input via self-attention
+features and simple linear layers. Once pre-trained, LWM can
+generate real-time embeddings for raw channels, extracting
+rich, complex patterns from the input and consistently outper-
+forming raw channels in downstream tasks. The LWM model
+is publicly available now.
+REFERENCES
+[1] S. Alikhani, G. Charan, and A. Alkhateeb, “LWM: A Pre-trained
+Wireless Foundation Model for Universal Feature Extraction,” in IEEE
+International Conference on Machine Learning for Communication and
+Networking, IEEE, 2025.
+[2] A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez,
+L. Kaiser, and I. Polosukhin, “Attention is all you need,” 2023.
+[3] T. S. Rappaport, Y. Xing, O. Kanhere, S. Ju, A. Madanayake, S. Mandal,
+A. Alkhateeb, and G. C. Trichopoulos, “Wireless communications and
+applications above 100 GHz: Opportunities and challenges for 6G and
+beyond,” IEEE access, vol. 7, pp. 78729–78757, 2019.
+[4] W. Jiang, B. Han, M. A. Habibi, and H. D. Schotten, “The road
+towards 6G: A comprehensive survey,” IEEE Open Journal of the
+Communications Society, vol. 2, pp. 334–366, 2021.
+[5] T. O’Shea and J. Hoydis, “An introduction to deep learning for the
+physical layer,” IEEE Transactions on Cognitive Communications and
+Networking, vol. 3, no. 4, pp. 563–575, 2017.
+[6] W. Yu, F. Sohrabi, and T. Jiang, “Role of deep learning in wireless
+communications,” IEEE BITS the Information Theory Magazine, vol. 2,
+no. 2, pp. 56–72, 2022.
+[7] M. Alrabeiah and A. Alkhateeb, “Deep learning for mmWave beam and
+blockage prediction using sub-6 GHz channels,” IEEE Transactions on
+Communications, vol. 68, no. 9, pp. 5504–5518, 2020.
+[8] M. Alrabeiah and A. Alkhateeb, “Deep learning for TDD and FDD
+massive MIMO: Mapping channels in space and frequency,” in 2019
+53rd asilomar conference on signals, systems, and computers, pp. 1465–
+1470, IEEE, 2019.
+[9] A. Jagannath, J. Jagannath, and T. Melodia, “Redefining wireless com-
+munication for 6G: Signal processing meets deep learning with deep
+unfolding,” IEEE Transactions on Artificial Intelligence, vol. 2, no. 6,
+pp. 528–536, 2021.
+[10] A. Diba, M. Fayyaz, V. Sharma, A. H. Karami, M. M. Arzani,
+R. Yousefzadeh, and L. Van Gool, “Temporal 3D convnets: New
+architecture and transfer learning for video classification,” arXiv preprint
+arXiv:1711.08200, 2017.
+[11] J. Donahue, L. Anne Hendricks, S. Guadarrama, M. Rohrbach, S. Venu-
+gopalan, K. Saenko, and T. Darrell, “Long-term recurrent convolutional
+networks for visual recognition and description,” in Proceedings of the
+IEEE conference on computer vision and pattern recognition, pp. 2625–
+2634, 2015.
+[12] D. Bahdanau, “Neural machine translation by jointly learning to align
+and translate,” arXiv preprint arXiv:1409.0473, 2014.
+[13] J. Devlin, M.-W. Chang, K. Lee, and K. Toutanova, “BERT: Pre-training
+of deep bidirectional transformers for language understanding,” 2019.
+[14] A. Q. Jiang, A. Sablayrolles, A. Mensch, C. Bamford, D. S. Chaplot,
+D. d. l. Casas, F. Bressand, G. Lengyel, G. Lample, L. Saulnier, et al.,
+“Mistral 7B,” arXiv preprint arXiv:2310.06825, 2023.
+[15] H. Touvron, L. Martin, K. Stone, P. Albert, A. Almahairi, Y. Babaei,
+N. Bashlykov, S. Batra, P. Bhargava, S. Bhosale, et al., “Llama
+2: Open foundation and fine-tuned chat models,” arXiv preprint
+arXiv:2307.09288, 2023.
+[16] J. Achiam, S. Adler, S. Agarwal, L. Ahmad, I. Akkaya, F. L. Aleman,
+D. Almeida, J. Altenschmidt, S. Altman, S. Anadkat, et al., “GPT-4
+technical report,” arXiv preprint arXiv:2303.08774, 2023.
+[17] A. Baevski, Y. Zhou, A. Mohamed, and M. Auli, “wav2vec 2.0:
+A framework for self-supervised learning of speech representations,”
+Advances in neural information processing systems, vol. 33, pp. 12449–
+12460, 2020.
+[18] A. Radford, J. W. Kim, T. Xu, G. Brockman, C. McLeavey, and
+I. Sutskever, “Robust speech recognition via large-scale weak super-
+vision,” in International conference on machine learning, pp. 28492–
+28518, PMLR, 2023.
+[19] W.-N. Hsu, B. Bolte, Y.-H. H. Tsai, K. Lakhotia, R. Salakhutdinov, and
+A. Mohamed, “Hubert: Self-supervised speech representation learning
+by masked prediction of hidden units,” IEEE/ACM transactions on
+audio, speech, and language processing, vol. 29, pp. 3451–3460, 2021.
+[20] A. Dosovitskiy, L. Beyer, A. Kolesnikov, D. Weissenborn, X. Zhai,
+T. Unterthiner, M. Dehghani, M. Minderer, G. Heigold, S. Gelly,
+J. Uszkoreit, and N. Houlsby, “An image is worth 16x16 words:
+Transformers for image recognition at scale,” 2021.
+[21] S. Khan, M. Naseer, M. Hayat, S. W. Zamir, F. S. Khan, and M. Shah,
+“Transformers in vision: A survey,” ACM Computing Surveys, vol. 54,
+p. 1–41, Jan. 2022.
+[22] K. Han, Y. Wang, H. Chen, X. Chen, J. Guo, Z. Liu, Y. Tang, A. Xiao,
+C. Xu, Y. Xu, et al., “A survey on vision transformer,” IEEE transactions
+on pattern analysis and machine intelligence, vol. 45, no. 1, pp. 87–110,
+2022.
+[23] S. Hochreiter and J. Schmidhuber, “Long short-term memory,” Neural
+Comput., vol. 9, p. 1735–1780, Nov. 1997.
+[24] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for image
+recognition,” 2015.
+[25] C.-F. Chen, Q. Fan, and R. Panda, “CrossViT: Cross-attention multi-
+scale vision transformer for image classification,” 2021.
+[26] L. Wu, W. Zhang, T. Jiang, W. Yang, X. Jin, and W. Zeng, “[CLS] token
+is all you need for zero-shot semantic segmentation,” 2023.
+[27] A. Alkhateeb, “DeepMIMO: A generic deep learning dataset for mil-
+limeter wave and massive MIMO applications,” in Proc. of Information
+Theory and Applications Workshop (ITA), (San Diego, CA), pp. 1–8,
+Feb 2019.
+[28] I. Tenney, P. Xia, B. Chen, A. Wang, A. Poliak, R. T. McCoy, N. Kim,
+B. V. Durme, S. R. Bowman, D. Das, and E. Pavlick, “What do you
+learn from context? probing for sentence structure in contextualized
+word representations,” 2019.
+[29] J. Guo, C.-K. Wen, S. Jin, and G. Y. Li, “Convolutional neural net-
+work based multiple-rate compressive sensing for massive MIMO CSI
+feedback: Design, simulation, and analysis,” 2019.

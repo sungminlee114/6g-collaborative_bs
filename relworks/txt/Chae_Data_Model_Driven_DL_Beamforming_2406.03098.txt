@@ -1,0 +1,2134 @@
+arXiv:2406.03098v1  [cs.IT]  5 Jun 2024
+1
+A Data and Model-Driven Deep Learning Approach
+to Robust Downlink Beamforming Optimization
+Kai Liang, Gan Zheng, Fellow, IEEE, Zan Li, Senior Member, IEEE,
+Kai-Kit Wong, Fellow, IEEE, and Chan-Byoung Chae, Fellow, IEEE
+Abstract—This paper investigates the optimization of the prob-
+abilistically robust transmit beamforming problem with chan-
+nel uncertainties in the multiuser multiple-input single-output
+(MISO) downlink transmission. This problem poses signiﬁcant
+analytical and computational challenges. Currently, the state-
+of-the-art optimization method relies on convex restrictions as
+tractable approximations to ensure robustness against Gaussian
+channel uncertainties. However, this method not only exhibits
+high computational complexity and suffers from the rank relax-
+ation issue but also yields conservative solutions. In this paper,
+we propose an unsupervised deep learning-based approach that
+incorporates the sampling of channel uncertainties in the training
+process to optimize the probabilistic system performance. We
+introduce a model-driven learning approach that deﬁnes a new
+beamforming structure with trainable parameters to account for
+channel uncertainties. Additionally, we employ a graph neural
+network to efﬁciently infer the key beamforming parameters. We
+successfully apply this approach to the minimum rate quantile
+maximization problem subject to outage and total power con-
+straints. Furthermore, we propose a bisection search method to
+address the more challenging power minimization problem with
+probabilistic rate constraints by leveraging the aforementioned
+approach. Numerical results conﬁrm that our approach achieves
+non-conservative robust performance, higher data rates, greater
+power efﬁciency, and faster execution compared to state-of-the-
+art optimization methods.
+Index Terms—Robust beamforming, deep learning, outage
+probability constraint, multiuser MISO.
+I. INTRODUCTION
+B
+EAMFORMING techniques in multi-user and multi-
+antenna systems can effectively improve the throughput
+and spectral efﬁciency of the wireless communication system,
+and have received long-term attention from both academia
+and industry [1]–[4]. Existing studies utilize beamforming
+algorithms with known channel state information (CSI) at the
+base station (BS) and perform interference cancellation and
+resource allocation among multiple users. However, perfect
+CSI in practical scenarios is difﬁcult to obtain, due to the
+presence of channel estimation errors, the quantization errors
+K. Liang, and Z. Li are with the State Key Laboratory of Integrated Service
+Networks, the School of Telecommunications Engineering, Xidian University,
+Xi’an, 710071, China (email: kliang@xidian.edu.cn, zanli@xidian. edu.cn).
+G. Zheng is with the School of Engineering, University of Warwick,
+Coventry, CV4 7AL, UK (email: gan.zheng@warwick.ac.uk).
+K.-K. Wong is with the Department of Electronic and Electrical Engi-
+neering, University College London, London, WC1E 6BT, UK (email: kai-
+kit.wong@ucl.ac.uk). He is also afﬁliated with Yonsei Frontier Lab., Yonseu
+University, Seoul, 03722, Korea.
+C.-B. Chae is with School of Integrated Technology, Yonsei University,
+Seoul, 03722, Korea (email: cbchae@yonsei.ac.kr).
+from the user side feedback, and the time-varying nature of
+wireless channels.
+Since the imperfect CSI can worsen the performance
+of multi-user multi-antenna system, this has motivated re-
+searchers to carry out the robust design of beamforming,
+i.e., the optimal beamforming design based on predeﬁned
+CSI error model to mitigate the negative impact of imperfect
+CSI. Existing works can usually be divided into three main
+categories, namely, the worst-case robust approach [5]–[7], the
+average robust approach [8], [9], and the outage-constrained
+approach [10]–[12]. The worst-case robust approach aims to
+guarantee the worst-case performance over all the potential
+channel errors which are assumed to be bounded within some
+closed sets. Since the worst-case scenario is a rarely happening
+event in a multi-antenna system, the solutions obtained by
+this approach are usually very conservative and requires high
+resource consumptions. The average robust approach aims to
+optimizing the average performance, but fails to guarantee the
+outage requirement, which is vital for delay- or reliability-
+sensitive applications in the next generation communication
+system. Thus, in this paper, we focus on the outage-constrained
+approach, because it is able to guarantee the probabilistic
+quality of service (QoS) requirements of users. This approach
+focuses on the QoS outage probability constraint based on a
+probabilistic CSI error model (such as the Gaussian model).
+Solving the outage constrained beamforming optimization
+problem appears very hard, and the key challenge is how
+to deal with the outage probability which in general does
+not have a closed-form expression. Traditionally, the outage
+constrained beamforming problem can be solved by convex
+optimization after approximating the rate outage constraints.
+In [12], the authors provided two approximation methods (i.e.,
+Bernstein-type inequality (BTI) method and large deviation
+inequality (LDI) method) together with semideﬁnite relaxation
+[13], [14] under Gaussian CSI uncertainties to solve the outage
+constrained robust beamforming problem and they are still
+known to achieve the best solution so far. These methods have
+been widely used in the studies of robust beamforming design
+with CSI uncertainties, such as intelligent reﬂecting surface
+[15], simultaneous wireless information and power transfer
+(SWIPT) [16], heterogeneous networks [17], satellite-based
+Internet of Things [18], and radar-communication systems
+[19]. Nonetheless, these methods have a high computational
+complexity and algorithmic latency caused by, for example,
+iterative algorithms and complex matrix computations. In ad-
+dition, since these methods attempt to approximate the outage
+constraint by ﬁnding the upper bound of outage probability,
+2
+they usually yield sub-optimal and conservative solutions as
+well. Finally, for multi-user multi-input single-output (MU-
+MISO) systems, these methods may obtain high-rank solutions
+due to semideﬁnite relaxation, which cannot satisfy the rank-
+1 constraint and cannot be decomposed into beamforming
+vectors. Although Gaussian randomization procedure [13] may
+deal with this problem, it further weakens the optimality of the
+solution, increases the computational and delay overhead, and
+even obtains non-feasible solutions for the outage constraint.
+In recent years, deep learning-based beamforming ap-
+proaches have been increasingly investigated. It uses deep
+neural networks (DNNs) to approximate the mapping of inputs
+and optimal solutions of traditional optimization algorithms,
+thus bypassing the tedious iterative solution process and han-
+dling non-convex optimization problems with ease. Compared
+to purely data-driven methods, the data- and model-driven
+learning method can effectively improve the training efﬁciency
+and performance of neural networks, and has a wide range of
+applications in the ﬁeld of wireless communications, such as
+transceiver design in over-the-air federated learning [20], and
+computation ofﬂoading in mobile-edge computing networks
+[21]. As for beamforming optimization, we proposed a model-
+driven learning approach for MU-MISO systems with the aid
+of a convolutional neural network (CNN) in [22], where the
+CNN’s output dimension is reduced by adopting an optimal
+beamforming structure [23]. We further used this method
+for the case of the absence of uplink and downlink channel
+reciprocity as in [24]. This approach is then widely extended
+for applications in DNN-based optimal beamforming designs
+such as universal power MISO beamforming [25], scalable
+beamforming optimization though graph neural network [26],
+and multi-user mutli-input mutli-output precoding [31]. In
+addition to optimal beamforming structures, other types of
+mathematical model-driven methods are also used in the
+design of beamforming based on perfect CSI. In [27], a deep
+unfolding network was proposed, which unfolds the weighted
+minimum mean-square error (WMMSE) algorithm [28] for
+solving problem sum rate maximization problems and learns
+beamforming matrices through neural networks. The method
+was further extended to the design of hybrid beamforming in
+millimeter-wave systems [29]. In [30], a model GNN was pro-
+posed by using ﬁrst-order Taylor’s expansion to approximate
+inverse matrices and achieve better performance. However,
+these methods are designed with perfect CSI at the trans-
+mitters, and cannot directly applied for robust beamforming
+optimization.
+Meanwhile, many works have emerged for the deep learning
+based robust beamforming optimization. The authors in [32]
+proposed a DNN-based robust beamforming approach to solve
+average sum rate maximization problem in MU-MISO system
+under Gaussian channel uncertainties. In [33], a graph neural
+network (GNN) based robust beamforming method was pro-
+posed with Gaussian channel uncertainties. Nevertheless, these
+works did not consider the outage probability performance. In
+[34], we proposed a data augmentation based DNN approach
+to obtain robust beamforming for the outage constrained power
+minimization problem, which achieves better power efﬁciency
+and the execution delay. However, this method directly learns
+beamforming vectors without dimensional reduction through
+the optimal structure, making it hard to train the neural
+network. A similar method was presented for MU-MISO
+to address the outage-constrained rate quantile maximization
+problem in [35], where beamforming vectors are recovered by
+the learned power features and the regularized zero-forcing
+(RZF) [36], [37] beamforming structure. This scheme reduces
+the dimensionality of the output and makes the neural network
+easy to train, but sacriﬁces the transmission performance due
+to the inferior performance of RZF beamforming.
+In this paper, we explore the application of data and
+model-driven deep learning as a novel approach to address
+two robust beamforming optimization problems in MU-MISO
+systems. Our proposed method exhibits improved rate and
+power performance in the presence of channel uncertainty.
+Additionally, we achieve lower output dimensions to enhance
+neural network training efﬁciency and employ a more ﬂexible
+neural network structure to accommodate universal transmit
+power. To the best of our knowledge, our work is the ﬁrst to
+surpass the performance and computational efﬁciency of the
+traditional solution presented in [12]. The contributions are
+summarized in the following:
+• We propose a data and model-driven deep learning ap-
+proach to solve the outage-constrained minimum rate
+quantile maximization problem, while adhering to the rate
+outage probability constraint and the transmit power con-
+straint, considering Gaussian channel uncertainties. We
+ﬁrst propose a modiﬁed optimal beamforming structure
+that introduces new trainable interference features arising
+from channel estimation errors. These features, along
+with the power features, enhance system performance
+while simultaneously reducing the neural network’s out-
+put dimension. Furthermore, we introduce a specialized
+GNN, as described in [26], to train interference and
+power features for improved rate performance, scalability
+and generalizability of the neural network. Unlike the
+message passing GNN [39] that can only handle homo-
+geneous graphs, this GNN realizes the bipartite message-
+passing (BMP) inference, which makes it capable of
+handling heterogeneous vertex types using different neu-
+ral networks. After implementing beamforming recovery
+using the modiﬁed optimal structure, we estimate the
+rate quantile through data augmentation and Monte Carlo
+(MC) sampling. MC sampling is unnecessary for the
+inference of robust beamforming, ensuring that it does
+not increase the execution time or complexity.
+• We further propose a bisection-based deep learning
+method to address the robust beamforming design for
+the more challenging transmit power minimization prob-
+lem with the rate outage probability constraint. Existing
+neural network methods, such as those discussed in
+[34], pose challenges in training as they require simul-
+taneous updating of the neural network parameters and
+Lagrange multipliers. To overcome this limitation, we
+modify the neural network framework designed for rate
+quantile maximization. We incorporate transmit power
+as an additional input, enabling the neural network to
+3
+feature universal transmit power. The trained universal
+neural network, in conjunction with the bisection method,
+allows us to infer the minimum transmit power that
+satisﬁes the outage probability constraints. This leverages
+the observation that the transmission rate increases with
+higher transmit power.
+• Numerical results show that our proposed robust beam-
+forming method outperforms state-of-the-art works, in-
+cluding the classical optimization method [12], the RZF-
+model based learning method [35] and the DNN-based
+learning method without assistance of model information,
+in terms of achievable robust rate, execution time, power
+consumption and feasibility.
+The rest of this paper is organized as follows. System
+model and problem formulation are described in Section II,
+after which the model-driven learning approach for the rate
+quantile maximization problem is provided in Section III.
+Then, the bisection based deep learning approach for the
+power minimization problem is given in Section IV. Numerical
+results and analysis are provided in Section V, followed by
+which we conclude this paper in Section VI.
+Notation: Bold uppercase and lowercase letters (e.g., A
+and a) represent matrices and column vectors, respectively.
+I denotes the identity matrix. The superscripts (·)T and (·)†
+stand for transpose and Hermite conjugate transpose of a
+matrix or vector, respectively. We use Rm×n and Cm×n to
+denote the real and complex space of m by n dimensions,
+respectively. Re(·) and Im(·) represent the real and imaginary
+parts of a complex variable, respectively. | · | and ∥· ∥refer to
+the absolute value operator and the Euclidean norm operator,
+respectively. ⌊·⌋and ⌈·⌉denote the ﬂoor and ceil functions (i.e.
+the downward and upward rounding operations), respectively.
+dim(a) represents the dimension of a vector a.
+II. SYSTEM MODEL AND PROBLEM FORMULATION
+We consider a MU-MISO downlink system in which a BS
+with N-antennas serves K single-antenna users. Let N =
+{1, · · · , N} and K = {1, · · · , K} denote the antenna set and
+the user set, respectively. Suppose xk is the transmit signal to
+the user k with unit power and the BS transmits with a total
+power P. The transmitted data symbol xk is mapped onto
+the antenna array elements by multiplying the beamforming
+vector wk ∈CN×1. The received signal at the user k can be
+expressed as
+yk = h†
+kwkxk +
+X
+j̸=k
+h†
+kwjxj + nk,
+(1)
+where hk = [h1k, · · · , hnk, · · · , hNk]T ∈CN×1, and hnk
+is the channel between the antenna n at the BS and the
+user k. Then, the overall channel matrix can be denoted as
+H = [h1, · · · , hK]. nk denotes the additive white Gaussian
+noise (AWGN) component with zero mean and variance σ2
+k.
+Therefore, the signal-to-interference-plus-noise ratio (SINR)
+that measures quality of the data detection at the k-th user is
+given by
+Γk =
+|h†
+kwk|2
+P
+j̸=k |h†
+kwj|2 + σ2
+k
+,
+(2)
+and the corresponding achievable rate is formulated as
+Rk = B log2(1 + Γk),
+(3)
+where B denotes the bandwidth.
+Considering that it is hard to obtain perfect CSI at the BS
+in practice, the channel error model is given as follows:
+hk = ˜hk + ek,
+(4)
+where ˜hk is the estimated CSI known at the BS, and
+ek
+=
+[e1k, · · · , enk, · · · , eNk]T
+∈
+CN×1 represents the
+channel error. The overall estimated channel matrix and chan-
+nel error matrix are denoted as ˜H = [˜h1, · · · , ˜hK] and
+E = [e1, · · · , eK], respectively. The commonly used Gaussian
+channel error is adopted to model ek, where each element of
+ek independently identically distributed follows CN(0, σ2
+e).
+We ﬁrst focus on the minimum rate quantile maximization
+problem, i.e., maximizing the corresponding quantile while
+satisfying the minimum rate outage probability constraint and
+the BS transmit power constraint. Note that the minimum rate
+(denoted as Rmin = mink∈K Rk) is the minimum achievable
+rate among all users. This problem is given as follows:
+P1:
+max
+wk,∀K r
+(5)
+s.t.
+Prob
+ Rmin ≤r
+
+≤ρ
+(6)
+Rmin ≤Rk, ∀k ∈K
+(7)
+K
+X
+k=1
+∥wk∥2 ≤P,
+(8)
+where (6) refers to the outage constraint, and ρ is the target
+outage probability which often has a low value (e.g., 5%). (8)
+denotes the power constraint at the BS and P is the maximum
+transmit power of the BS.
+Another conventional but more challenging problem consid-
+ered in this paper is the power minimization problem based
+on the minimum rate outage probability constraint, which is
+given by
+P2:
+min
+wk,∀K
+K
+X
+k=1
+∥wk∥2
+(9)
+s.t.
+Prob
+ Rmin ≤r
+
+≤ρ
+Rmin ≤Rk, ∀k ∈K.
+Obviously, the optimization problems P1 and P2 are both
+nonconvex and difﬁcult to solve. The traditional method
+solves such problems through jointly using convex restriction
+approach and semi-positive deﬁnite optimization (see [12]).
+However, it suffers from a long convergence time and high-
+rank solutions. Although the Gaussian randomization proce-
+dure [13] claims to be able to solve the high-rank matrix issue
+which is not designed for the outage constrained problem, it is
+shown in our simulations that this method can yield infeasible
+solutions to the above outage-constrained problems with a
+higher probability. Therefore, we will present the proposed
+data and model-driven deep learning approach to solve P1
+and P2, achieving faster convergence and better performance.
+4
+III. RATE QUANTILE MAXIMIZATION
+In this section, we provide a deep leaning approach for
+the rate quantile maximization problem (i.e., P1) via an
+unsupervised learning manner. Suppose there exists a function
+Ψ1(·) with its input being the estimated channel information
+and its output being an optimal robust beamforming solution
+that satisﬁes the constraints in problem P1. Then, the problem
+P1 can be rewritten as follows:
+{w1, · · · , wK} = Ψ1(˜h1, · · · , ˜hK).
+(10)
+Normally, the closed-form expression for function Ψ1(·) does
+not exist. Fortunately, the universal approximation theorem
+[38] has veriﬁed that any continuous-valued functions can be
+approximated with very small approximation error through a
+well-designed DNN. Thus, the original problem can be turned
+into a trainable problem. Assume there is a DNN Ψ1(·; Θ)
+with trainable parameter set Θ, which has the ability to
+approximate (10) as follows:
+{w1, · · · , wK} = Ψ1(˜h1, · · · , ˜hK; Θ).
+(11)
+This allows us to learn the parameter set Θ to obtain robust
+solutions for the problem P1, which is more tractable than the
+original problem.
+Different from commonly used data driven learning, we
+propose a model-based beamforming structure to deal with
+channel uncertainties, which together with data samples speeds
+up training the neural network. Then, we employ a unique
+GNN combined with MC sampling to realize a robust beam-
+forming optimization while satisfying the outage probability
+constraint and the power constraint.
+A. Model-based Beamforming Structure
+With the known CSI at the BS, we have previously proposed
+a hybrid supervised and model-based deep learning method in
+[24] with the aid of the optimal beamforming structure [23],
+which is given below
+wk = √pk
+ I + PK
+j=1
+qj
+σ2
+j hjh†
+j
+−1hk
+
+ I + PK
+j=1
+qj
+σ2
+j hjh†
+j
+−1hk
+
+,
+(12)
+where pk, qk are non-negative trainable parameters and sat-
+isfy PK
+k=1 pk = PK
+k=1 qk = P. p = [p1, · · · , pK]T
+∈
+RK×1 denotes the downlink power allocation vector, and
+q = [q1, · · · , qK]T ∈RK×1 is an auxiliary variable used to
+determine the direction of optimal beamforming.
+This practice reduces the neural network output dimension
+and thus improves the training efﬁciency and accuracy. Unfor-
+tunately, this optimal structure cannot be directly applied to
+the case of channel uncertainty due to the fact that the neural
+network needs to reconstruct the beamforming vectors based
+on the known CSI and the learned power parameters. To this
+end, we modify the optimal beamforming structure in order to
+make it suitable for the case of imperfect CSI. Speciﬁcally, we
+introduce a key feature implying the extra interference arising
+from channel estimation errors into the optimal beamforming
+structure (12). The modiﬁed robust beamforming structure is
+given as follows:
+ˆwk = √pk
+
+(1 + sk)I + PK
+j=1
+qj
+σ2
+j
+˜hj ˜h†
+j
+−1
+˜hk
+
+
+(1 + sk)I + PK
+j=1
+qj
+σ2
+j
+˜hj ˜h†
+j
+−1
+˜hk
+
+,
+(13)
+where s = [s1, · · · , sK]T ∈RK×1 can be viewed as the
+extra interference caused by the channel estimation error. It
+is very difﬁcult to rigorously prove the robust beamforming
+structure with outage probabilistic constraints, so a mathemat-
+ical interpretation of (13) is provided in the Appendix at the
+end of this paper. We denote robust beamforming matrix as
+ˆ
+W = [ ˆw1, · · · , ˆwK]T . It is worth noting that (13), although
+not rigorously mathematically derived, is able to approximate
+the value of sk through a neural network description without
+the need for its exact expression. This structure enables us to
+reconstruct the robust beamforming matrix ˆ
+W from the output
+[p, q, s] of the neural network when only the estimated CSI
+is known, and the output dimension of the neural network is
+reduced from 2NK1 to 3K.
+B. Bipartite GNN for Feature Learning
+In our previous works [22], [34], power features [p, q] can
+be learned by a fully connected neural network (FCNN) or
+CNN. Considering that GNNs can achieve state of the art
+performance, and the potential scalability as well as general-
+izability due to their permutation equivariant and permutation
+invariant properties [26], [40]–[42], this paper employs a
+special bipartite GNN (BGNN) as in [26] to realize the BMP
+inference and thus to learn the features in (13). Different with
+[26], the weights of the edges in the BGNN are estimated
+channel information ˜H rather than perfect channel information
+H. Besides, we need not only to learn the power feature [p, q]
+with a BGNN, but also to learn the interference feature s
+with another BGNN considering the effect of channel errors.
+The reason of using two BGNNs to learn the interference
+feature s and power features [p, q] separately is due to the
+difference in their ranges of values. For narrative simplicity,
+in this subsection we use the notation gk to denote the features
+of user k learned by the BGNN, which either stands for being
+sk ∈R or [pk, qk] ∈R2.
+The MU-MISO system can be represented as a weighted
+bipartite graph G = (N, K, ˜H), where the N and K respec-
+tively stand for disjoint vertex sets of antennas and users,
+and estimated channel information ˜H refers to the weight
+matrix of all edges, as shown in Fig. 1. Each antenna-user
+pair (n, k), ∀n ∈N, ∀k ∈K is connected through an edge
+with weight ˜hnk. At this point, we realize the division of the
+basic network entity for the MU-MISO system by considering
+each antenna of the BS and the user as a vertex. In this paper,
+we adopt a deep learning method based on vertices parameter
+sharing [26], [43], which facilitates the GNN to satisfy the
+desired permutation equivariance properties and is irrelevant to
+how the graph is constructed. The basic idea is that each vertex
+1Since neural network frameworks such as PyTorch or TensorFlow have
+difﬁculty dealing with complex numbers, the complex channel must be divided
+into real and imaginary parts.
+5
+l-th layer
+(l+1)-th layer
+User Message Generation
+Antenna message generation
+Feature decision
+Antenna 1
+Antenna 2
+User 1
+User 2
+Antenna 1
+Antenna 2
+User 1
+User 2
+Graph representation 
+Combination
+Aggregation
+Fig. 1. Graph representation and deep learning based BMP inference with N = 2, K = 2.
+can complete its own computation independently based on part
+of the estimated channel information, and then transfer the
+relevant statistics (named as messages) between the vertices
+to avoid the lack of overall channel information. By iterating
+the this process, the overall computation of the system can be
+formed, and ﬁnally the optimal beamforming of the MU-MISO
+system can be realized.
+The iteration process of vertex parameter sharing for beam-
+forming feature calculation can be achieved through the BMP
+inference from the literature [26], which deﬁnes three types
+of vertex operators, i.e., user message generators C(·), antenna
+message generators M(·), and feature decision makers D(·).
+We use an L-layer BGNN to realize the BMP inference, where
+each layer of the BGNN implements an iteration in the BMP
+inference, as shown in Fig. 1. In the following, we will brieﬂy
+introduce the deep learning based BMP inference, see [26] for
+more details.
+Denote the BGNN as Φ( ˜H; Θ) with the trainable parameter
+set Θ. In l + 1-th layer of the BGNN, vertex operators C(·),
+M(·), and D(·) are respectively implemented by three FCNNs
+ΦCl+1(·; ΘCl+1), ΦMl+1(·; ΘMl+1) and ΦDl+1(·; ΘDl+1) as
+follows:
+c(l+1)
+kn
+= C
+
+g(l)
+k , b(l)
+k , ˜hki
+
+= ΦCl+1
+
+g(l)
+k , b(l)
+k , ˜hkn; ΘCl+1
+
+,
+(14)
+b(l+1)
+nk
+= M
+
+m(l)
+nk, c(l+1)
+n
+, ˜hkn
+
+= ΦMl+1
+
+m(l)
+nk, c(l+1)
+n
+, ˜hkn; ΘMl+1
+
+, (15)
+g(l+1)
+k
+= D
+
+m(l+1)
+k
+
+= ΦDl+1
+
+m(l+1)
+k
+; ΘDl+1
+
+,
+(16)
+where the superscript (·)(l) represents the value of l-th layer.
+In the l + 1-th layer, each user vertex has a copy of sub
+neural networks ΦCl+1(·; ΘCl+1) and ΦDl+1(·; ΘDl+1), while
+each antenna vertex shares the same sub neural network
+ΦMl+1(·; ΘMl+1). Therefore, the trainable parameter set of
+the BGNN can be denoted as
+Θ =
+
+ΘCl, ΘMl, ΘDl, l = 1, · · · , L
+	
+.
+(17)
+b(l+1)
+k
+, m(l+1)
+nk
+, c(l+1)
+n
+, and m(l+1)
+k
+are given below
+b(l+1)
+k
+= P({b(l+1)
+nk
+, ∀n ∈N}),
+(18)
+m(l+1)
+nk
+= {b(l+1)
+nk
+, P({b(l+1)
+nj
+, ∀j ̸= k})},
+(19)
+c(l+1)
+n
+= P({c(l+1)
+kn
+, ∀n ∈K}),
+(20)
+m(l+1)
+k
+= P({m(l+1)
+nk
+, ∀n ∈N}),
+(21)
+where P(·) stands for the well-known sum pooling operator,
+which is widely used in existing works [44], [45]. Speciﬁcally,
+let µa be a variable of vertex a ∈A, and we use a simpliﬁed
+pooling operator as P({µa, ∀a ∈A}) = P
+a∈A µa.
+There are three main steps in l + 1-th layer of the BGNN,
+which are detailed as follows:
+(1) User message generation. The user message c(l+1)
+kn
+∈
+RM is generated at user vertex k by (14) and will be forwarded
+to the antenna n, where the hyperparameter M is the di-
+mension of this message. The neural network ΦCl+1(·; ΘCl+1)
+realizes a combine operation of the previous feature deci-
+sion g(l)
+k , antenna message b(l)
+k
+∈RM and ˜hkn. Input and
+output dimensions of the neural network ΦCl+1(·; ΘCl+1) are
+M + 2 + dim(g(l)
+k ) and M, where dim(g(l)
+k ) = 2 for power
+features [pk, qk] and dim(g(l)
+k ) = 1 for the interference fea-
+ture sk. Therefore, the size of neural network ΦCl+1(·; ΘCl+1)
+is decoupled with the network size N and K.
+6
+a
+S-Net
+Power-Net
+Ascending Order
+Beamforming 
+Recovery 
+Module 
+ 
+s
+[p;q]
+Testing
+Augmented data 
+error 
+sampling
+Estimate      by
+(22)
+DAQE module
+Training
+Fig. 2. The proposed overall neural network framework for Ψ1( ˆH; Θ).
+(2) Antenna message generation. After receiving user mes-
+sages {ckn, ∀k
+∈
+K}, the antenna vertex n adopts the
+aggregation operation to obtain c(l+1)
+n
+∈
+RM via (20).
+Then, it generates the antenna message b(l+1)
+nk
+∈RM by
+(15), where the neural network ΦMl+1(·; ΘMl+1) performs
+a combination operation on the previous antenna information
+m(l)
+nk ∈R2M, c(l+1)
+n
+and ˜hkn. The input and output dimen-
+sions of ΦMl+1(·; ΘMl+1) are 3M + 2 and M, respectively.
+Subsequently, the antenna vertex n updates m(l+1)
+nk
+by (19)
+and forwards b(l+1)
+nk
+as well as m(l+1)
+nk
+to the user vertex k.
+(3) Feature decision. The user k aggregates all the received
+m(l+1)
+nk
+, ∀n ∈N to obtain m(l+1)
+k
+∈R2M by (21), and then
+generates the feature decision g(l+1)
+k
+through ΦDl+1(·; ΘDl+1)
+as in (16), without considering the network size N and
+K. Besides, it updates b(l+1)
+k
+by the aggregation operation
+according to (18).
+Since each layer of the BGNN realizes one iteration of
+the BMP inference, through several times of iterations (e.g.,
+L), user vertices are able to ﬁnally obtain the converged
+gk, ∀k ∈K, which are used to recover the robust beamforming
+matrix (13).
+C. Overall Neural Network framework
+After introducing the BGNN , we provide the overall neural
+network framework to address the outage constrained rate
+quantile maximization problem P1, as shown in Fig. 2. Specif-
+ically, we provide a data augmentation method to estimate the
+rate quantile and to gain robust beamforming solutions. The
+input of the proposed network is the estimated CSI ˜H with a
+dimension of 2NK by splitting the real part Re( ˜H) and the
+imaginary part Im( ˜H), and the outputs are the key features of
+robust beamforming [s, p, q] with a dimension of 3K in total.
+These features are used to recover beamforming solutions, and
+together with MC sampling to estimate rate quantile ˆr which
+satisﬁed the constraint (6). Four main modules comprise the
+proposed network, which are detailed in the following:
+• S-Net. This network is designed to learn the interference
+component caused by the channel estimation errors, i.e.,
+s ∈RK. It can be implemented by the aforementioned
+BGNN in Section III-B and is denoted as ΦS( ˜H; ΘS)
+with the parameter set ΘS =
+
+ΘS
+Cl, ΘS
+Ml, ΘS
+Dl∀l =
+1, · · · , L
+	
+. The hyperparameter M in S-Net is denoted
+MS. The details of the adopted BGNN will be given in
+Section V.
+• Power-Net. Another BGNN is used to form the Power-
+Net, which aims to learn the power features of the
+beamforming (namely, p and q). To distinguish it from
+the S-Net, we denote Power-Net as ΦP( ˜H; ΘP) with the
+parameter set ΘP =
+
+ΘP
+Cl, ΘP
+Ml, ΘP
+Dl∀l = 1, · · · , L
+	
+.
+The hyperparameter M in P-Net is denoted MP.
+• Beamforming Recovery (BR) Module. The purpose of
+this module is to ﬁnd the robust beamforming matrix ˆ
+W
+based on (13) from the downlink and virtual uplink power
+p and q obtained in Power-Net, the interference feature
+s obtained in S-Net, and the estimated CSI ˜H. Note that
+this module does not contain parameters to be trained and
+optimized.
+• Data Augmentation based Quantile Estimation (DAQE)
+Module. This module is used to evaluate the rate quantile
+ˆr. When we calculate the output ˆ
+W in the BR module, the
+perfect channel information H is unknown, which fails
+to realize the robust design of beamforming. To this end,
+we need to calculate the outage performance to obtain the
+value of loss function and to evaluate the neural network’s
+performance, but the challenge lies in that the outage
+constraint (6) does not have a closed-form expression. A
+natural idea to solve this challenge is that we may adopt
+MC sampling to estimate the value of rate quantile, which
+has been widely used in conventional convex optimization
+methods as in [46], [47]. This inspired us to provide the
+so called data augmentation based quantile estimation
+method, as described in Algorithm 1. Speciﬁcally, we
+generate a potential channel error set {E1, · · · , EU} with
+7
+Algorithm 1 Data Augmentation based Quantile Estimation
+1: Obtain the estimated channel information ˜H and the learned
+beamforming matrix ˆ
+W.
+2: Generate
+U
+channel
+error
+samples
+{E1, · · · , EU}
+iid
+∼
+CN(0, σ2
+e).
+3: Obtain potential actual CSI set {H1, · · · , HU} by (4) and
+then calculate the corresponding rate set {Rk,u, ∀k ∈K, u =
+1, · · · , U} by (3) with learned ˆ
+W.
+4: Find the minimum rate set {Rmin,1, · · · , Rmin,U} among all
+users, and then sort them in ascending order and yield the set
+{Rmin,(1), · · · , Rmin,(U)} , where Rmin,(u) denotes the u-th
+smallest element in this set.
+5: Estimate the rate quantile ˆr by (22).
+U elements through sampling from a certain distribution,
+e.g., circularly symmetric complex Gaussian distribution
+with zero mean and variance σ2
+e. This combined with
+the estimated CSI ˜H forms a set of potential actual
+channel {H1, · · · , HU} via (4). Then we can calculate
+all the possible rate set {Rk,u, ∀k ∈K, u = 1, · · · , U}
+given beamforming matrix ˆ
+W and the potentially actual
+channel set {H1, · · · , HU} through (3). This is followed
+by a minimum operation among all users and the min-
+imum rate set {Rmin,1, · · · , Rmin,U} is obtained. After
+that, we sort them in ascending order and yield the set
+{Rmin,(1), · · · , Rmin,(U)} , where Rmin,(u) denotes the
+u-th smallest element in this set. Thus, we can estimate
+the value of rate quantile ˆr via a linear interpolation
+method. To be speciﬁc, after mapping ρ ∈(0, 1) to the
+sample indices [0, U], we can ﬁnd the location of quantile
+between two samples with indices ⌊ρU⌋and ⌈ρU⌉in the
+sorted order, and then we can obtain the rate quantile by
+ˆr = Rmin,(⌊Uρ⌋) + β(Rmin,(⌈Uρ⌉) −Rmin,(⌊Uρ⌋)), (22)
+where β is the fractional part of the computed quantile
+index ρU. In our previous studies, such methods com-
+bined with FCNNs have been applied to the beamforming
+problem with SINR probabilistic constraints [34], and
+to the beamforming problem with SINR and harvested
+energy probabilistic constraints in SWIPT systems [48].
+Now we could summarize the training and testing strategies
+to the proposed neural network. The loss function is deﬁned
+as follows:
+Loss = −ˆr = −τ
+ Ψ1( ˜H; Θ)
+
+,
+(23)
+where Θ = {ΘS, ΘP} is the overall parameter set. The
+function τ(·) deﬁnes a mapping relation from ˆ
+W to ˆr and
+represents the quantile estimation process of the DAQE mod-
+ule.
+At the t-th step of the training stage, we generate a mini-
+batch set H with the cardinality of |H| as the input of the
+neural network, which contains the estimated CSI ˜H. The S-
+Net and Power-Net are computed in parallel to get the beam-
+forming feature [s, p, q] which together with the estimated CSI
+form the robust beamforming matrix ˆ
+W. Then, the estimated
+rate quantile ˆr can be obtained through the DAQE module,
+and −ˆr is used as the loss function deﬁned in (23) to train
+the overall neural network by the back-propagation algorithm.
+The parameter set Θ can be trained by stochastic gradient
+descent (SGD) algorithm [49] or its variants, such as the Adam
+algorithm [50], which is updated as follows:
+Θ(t) = Θ(t−1) + α
+|H|
+X
+˜H∈H
+τ
+ ∇ΘΨ1
+  ˜H; Θ(t−1)
+,
+(24)
+where α represents the learning rate of the neural network.
+Next, we will brieﬂy discuss differentiability of rate quantile
+ˆr. The rate function deﬁned in (3) is differentiable with
+respect to the output of neural network [s, p, q], which is
+also differentiable with respect to the parameter Θ. The MC-
+sampling based the quantile value is a convex combination of
+the ⌊Uρ⌋-th and ⌈Uρ⌉-th smallest values of sampled min-rate
+value, which will not change the differentiability. Therefore,
+the estimated quantile is differentiable according to the chain
+rule of differentiation.
+When it comes to the testing stage, we can obtain the beam-
+forming matrix via forward propagation in the well trained
+neural network. The DAQE module will not be involved at
+this stage, which means that we do not need to perform MC
+sampling to obtain this robust beamforming matrix, reducing
+the latency of the algorithm. The computational complexity
+of neural network inference is analyzed as follows. Assume
+that the FCNN on each vertex has only one hidden layer
+with number of neurons z. The computational complexity of
+a BGNN is O(LNKzM). The computational complexity of
+beamforming recovery by (13) is dominated by the inverse
+operation, which is O(KN 3). Therefore, the total inference
+complexity for problem P1 is O(LNKz(MS +MP)+KN 3).
+IV. POWER MINIMIZATION USING BISECTION ALGORITHM
+Using deep learning method to deal with the power mini-
+mization problem with the outage-based constraint (i.e., P2) is
+more challenging, because it encounters MC sampling of many
+variables and frequent Lagrange multipliers updating, which
+increase the computational and latency overhead of training
+stage, as in our previous work [34]. Another problem need
+to be addressed is that traditional deep learning methods are
+trained for a ﬁxed transmit power, resulting in the lack of
+scalability of the neural network. In practice, a ﬁxed power
+is unrealistic, and should vary within a certain range in
+accordance with different network topologies and power opti-
+mization schemes. For instance, the heterogeneous network
+may includes macro-, micro- and pico-cells with different
+transmit power budgets [51], and a BS will adaptively adjust its
+maximum transmit power according to its access user number
+and service requirements to reduce energy consumption. To
+this end, we ﬁrst extend the above-mentioned neural network
+framework to incorporate the feature of universal power.
+Then, we propose a bisection-based approach to the power
+minimization problem.
+A. Neural Network with Universal Power
+To achieve robust beamforming optimization with universal
+power budget, an intuitive but inefﬁcient idea is that we could
+train multiple DNNs for various transmission power level. This
+practice obviously suffers from high computational complexity
+8
+S-Net
+Power-Net
+Beamforming 
+Recovery 
+Module 
+s
+[p;q]
+DAQE
+module 
+Fig. 3. Modiﬁed framework for Ψ2( ˜H, P ; Θ).
+and storage, thus hindering the implementation of these DNNs.
+To address this challenge, we take the transmit power as
+an additional input for the proposed neural network, which
+is similar as the work for beamforming design with perfect
+CSI [25]. The modiﬁed neural network can be represented as
+follows:
+{w1, · · · , wK} = Ψ2( ˜H, P; Θ),
+(25)
+where Ψ2( ˜H, P; Θ) has a similar network framework as
+Ψ1( ˜H; Θ), except that the transmit power budget is added
+as an input. The Loss function of Ψ2( ˜H, P; Θ) is Loss =
+−ˆr = −τ
+ Ψ2( ˜H; Θ)
+
+. The architecture of the modiﬁed
+neural network Ψ2( ˜H, P; Θ) is shown in Fig. 3.
+To be speciﬁc, inputs of the modiﬁed neural network include
+the estimated CSI and the transmit power, with the total
+dimension of 2NK + 1. Transmit power can be viewed as
+a random variable and is uniformly sampled from a speciﬁc
+range of power variations, namely, P
+∼Uniform(P, ¯P),
+where P and ¯P denote the potential minimum and maximum
+transmit power level, respectively. Then, [s, p, q] can be
+learned from the S-Net and Power-Net with a total output
+dimension of 3K for the universal power. Note that in order
+to satisfy the power constraint, the output of Power-Net needs
+to be normalized , i.e., PK
+k=1 pk = PK
+k=1 qk = 1, which are
+then scaled to the total transmit power P in the beamforming
+recovery module. In this way, we can evaluate the maximum
+rate quantile ˆr that stands for the maximum achievable rate
+while satisfying the outage constraint.
+B. Bisection Algorithm
+Since the sum rate of the MU-MISO system increases
+monotonically with the increasing transmission power of the
+BS, we can use the bisection method to ﬁnd the minimum
+transmit power from the potential power region. This motivates
+us to solve the power minimization problem P2 by the
+bisection method with the aid of the improved neural network
+proposed in the previous sub-section, as shown in Algorithm 2.
+Let us ﬁrst set a range of possible transmit power [P, ¯P] and
+a minimum rate target r, and use a trained universal power
+neural network to infer the maximum rate quantile ˆr. We
+utilize bisection to ﬁnd the minimum power until the iterative
+algorithm stopping condition (e.g., |ˆr −r| ≤ε) is satisﬁed,
+where ε is an arbitrarily small positive number. It is worth
+noting that in this process, the neural network does not need to
+be retrained due to its power universal property, so this method
+Algorithm 2 The bisection method based power minimization
+algorithm
+1: Initial upper and lower limits of total transmit power ¯P and P,
+target minimum rate r, the outage probability requirement ρ, and
+stopping threshold ε.
+2: while |ˆr −r| ≤ε do
+3:
+P = P + ¯
+P
+2
+;
+4:
+Obtain ˆr and ˆ
+W by the modiﬁed network (Ψ2) inference with
+input P .
+5:
+if ˆr < r then
+6:
+P = P
+7:
+else
+8:
+P = ¯P
+9:
+end if
+10: end while
+11: return W∗= ˆ
+W.
+only increases the computational overhead of the bisection
+method, which is often considered to be an efﬁcient method.
+Let us now summarize the training and testing strategies
+of the modiﬁed neural network to solve power minimization
+problem P2. During the training stage, a mini-batch set H with
+the cardinality of |H| containing numerous estimated CSI and
+transmit power is generated for learning the parameter set,
+which can be updated as follows:
+Θ(t) = Θ(t−1) + α
+|H|
+X
+{ ˜H,P }∈H
+∇Θτ
+ Ψ2
+  ˜H, P; Θ(t−1)
+.
+(26)
+Once the network Ψ2 is trained, we can use it combined with
+bisection algorithm to infer the the solution of P2. Note that
+unlike solving P1, the bisection method requires the use of
+estimated rate quantile ˆr when solving problem P2, where
+MC sampling is essential and will increase the computation
+complexity. The computation complexity of rate quantile es-
+timation and bisection algorithm are O(U log2(U)KN) and
+log2
+  ¯
+P −P
+ε
+
+, respectively. Therefore, the total complexities to
+solve problem P2 is O
+ log2
+  ¯
+P −P
+ε
+
+LNKz(MS + MP) +
+KN 3 + U log2(U)KN
+
+. However, the execution time of
+this method is still much shorter than that of traditional
+optimization algorithms, and this will be demonstrated in
+Section V.
+V. NUMERICAL RESULTS
+In this section, we provide numerical results to validate and
+evaluate the performance of the proposed deep learning-based
+robust beamforming approach. For the sake of comparison, we
+adopt the same parameter setting as [35]. Unless otherwise
+speciﬁed, we consider a MU-MISO system consisting of
+N = 4 transmit antennas and K = 4 users. Rayleigh fading
+is used to model the estimated MISO channel ˜H, where each
+single link (from an antenna to a user) follows a circularly
+symmetric complex Gaussian distribution with zero mean and
+unit variance, namely, hnk ∼CN(0, 1), ∀n ∈N, ∀k ∈K.
+The total bandwidth B = 10 MHz, the transmission power
+P = 30 dBm, and the variance of channel estimation error
+σ2
+e = 0.075. Considering path loss and inter-cell interfer-
+ence, we set the noise power spectral density (PSD) to -75
+dBm/Hz. The statistical performance requirement induced by
+9
+TABLE I
+THE ARCHITECTURE AND PARAMETERS OF FCNNS.
+ΦS
+Cl(·; ΘS
+Cl).
+Layers
+Input dimension
+Output dimension
+Dense + ReLu
+MS + 3
+200
+Dense + Tanh
+200
+MS
+ΦP
+Cl(·; ΘP
+Cl).
+Layers
+Input dimension
+Output dimension
+Dense + ReLu
+MP + 4
+200
+Dense + Tanh
+200
+MP
+ΦS
+Ml(·; ΘS) and ΦP
+Ml(·; ΘP).
+Layers
+Input dimension
+Output dimension
+Dense + ReLu
+3M + 2
+200
+Dense + Tanh
+200
+M
+Note: M = MS for ΦS
+Ml, and M = MP for ΦP
+Ml
+ΦS
+Dl(·; ΘS
+Dl).
+Layers
+Input dimension
+Output dimension
+Dense + ReLu
+2MS + 1
+200
+Dense
+200
+1
+ΦP
+Dl(·; ΘP
+Dl).
+Layers
+Input dimension
+Output dimension
+Dense + ReLu
+2MP + 1
+200
+Dense + Softmax
+200
+2
+the channel uncertainties is set as the largest outage probability
+ρ = 0.05. All simulation results are generated by using a
+computer with an Intel i7-7700 CPU and an NVIDIA Titan
+Xp GPU. Note that we also used the neural network design
+with universal power (same as the method in Section IV) for
+Ψ1( ˆH; Θ) in our simulations to allow it to adapt to different
+transmit powers. We use two BGNNs with L = 5 layers
+to respectively implement S-Net and Power-Net, where the
+FCNN is adopted to construct the DNN of all vertices. The
+architecture and parameters of neural networks are given in
+TABLE I. The hyperparameters MS and MP are set as 3
+and 5, respectively. The rectiﬁed linear unit (ReLU) function
+is used to be the activation function at all hidden layers
+of FCNNs. The activation function at the hidden layer of
+all DNNs is the rectiﬁed linear unit (ReLU) function. The
+hyperbolic tangent (Tanh) and Softmax functions are used
+to be the activation functions at the output layer of FCNNs
+accordingly. Since we take the transmit power as an additional
+input, the input dimensions of ΦS
+Dl(·; ΘS
+Dl) and ΦP
+Dl(·; ΘP
+Dl)
+are to 2MS+1 and 2MP +1, respectively. The initialization of
+messages deﬁned in Section III-B is realized by independently
+sampling from the Gaussian distribution with zero mean and
+unit variance.
+The neural network Ψ1( ˜H; Θ) for problem P1 is trained
+using over 150 epochs with early stopping according to the
+validation at the end of each epoch. The batch size is 100.
+105 training data and 2 × 103 testing data are used. To realize
+the data augmentation, U = 1000 channel errors are sampled
+from the circularly symmetric complex Gaussian distribution,
+which then form the 1000 true channels based on (4). Then,
+we can obtain the rate quantile estimation ˆr through the
+DAQE module. The P is uniformly sampled a special power
+5
+10
+15
+20
+25
+30
+Transmit Power (dBm)
+5
+6
+7
+8
+9
+10
+11
+Achievable Robust Rate (Mbps)
+Fig. 4. The achievable robust data rate against the transmit power.
+range, i.e., P ∼Uniform(P, ¯P). We set P = 0 dBm and
+¯P = 35 dBm. Adam algorithm [50] with a learning rate
+α = 10−3 is used for the training of both neural networks.
+The training of Ψ2( ˜H, P; Θ) for problem P2 is similar with
+that of Ψ1( ˜H; Θ).
+The following benchmark schemes are considered for com-
+parison:
+• The traditional optimization approach: speciﬁcally,
+we use BTI method as described in [12] to obtain the
+solution via CVX [52], which achieves the superior robust
+performance among existing methods.
+• The traditional optimization by evaluation: note that
+the obtained solution of [12] is conservative, and therefore
+the achievable rate performance evaluated by the MC
+method is usually better than the optimized solution. We
+use ‘by Evaluation’ to denote the actual achievable rate
+performance.
+• The DNN with power optimization only approach
+[35]: it adopts RZF beamforming structure to reduce the
+output dimension of neural network. The rate quantile is
+also obtained by MC sampling.
+• The DNN method: the neural network directly learns
+the
+ˆ
+W rather than the features of any beamforming
+structure, which is a purely data-driven method and
+requires frequent updating the Lagrange multipliers.
+• The proposed solution with sk
+=
+0: to evaluate
+the impact of the interference features in (13) on the
+communication performance, we set sk, ∀k ∈K to 0 in
+S-Net of the proposed method.
+A. Results of Rate Quantile Maximization Problem P1
+Fig. 4 shows that the achievable robust data rate increases
+with the increasing transmit power. The proposed method
+achieves the highest robust data rate among all considered
+methods. For instance, when the transmit power equals 30
+dBm, the robust rate of the proposed method reaches about
+10.9 Mbps, around 14% higher than the traditional optimiza-
+tion method. The reason for this result is that the traditional
+optimization methods use convex approximations such as
+convex restrictions and semideﬁnite programming, which loses
+10
+5
+10
+15
+20
+25
+30
+Transmit Power (dBm)
+100
+101
+102
+103
+104
+105
+Time required (ms)
+Traditional Optimization
+Proposed Solution
+Fig. 5.
+Comparison of execution time of different rate maximization algo-
+rithms.
+the global optimality. Interestingly, the traditional optimization
+algorithm actually computes a conservative solution which
+actually performs better. We adopt the MC method to evaluate
+the traditional optimization method and found that it achieves
+about 0.7 Mbps higher data rate than the traditional optimiza-
+tion method, but still lower than the proposed method. The
+proposed method with sk = 0 obtains a lower robust rate
+performance, which implies that learning interference features
+(i.e., sk, ∀K) can indeed achieve performance improvement.
+The rate of the DNN method is much lower than above four
+methods because it only use data driven learning and thus
+is hard to improve the performance of the neural network.
+The DNN with power optimization only method recovers the
+beamforming matrix via the learned power features and RZF
+beamforming model. Since the RZF beamforming only focuses
+on interference cancellation and ignores the impact of noise.
+In contrast, other methods use either the optimal structure or
+the rate-oriented optimization, and thus the DNN with power
+optimization only method obtains the lowest robust data rate.
+Fig. 5 depicts the comparison between the traditional op-
+timization method and our proposed method in terms of
+execution time under various transmit power. Our proposed
+method has a fairly low execution latency of about 10 to
+15 ms, which is about 1000 times lower than the traditional
+optimization method. The reasons for this phenomenon lie in
+multiple folds. Our proposed method only needs to use the
+learned network to infer the optimal solution. In contrast, the
+traditional optimization method involves many iterations to
+obtain the solution, and loads of matrix operations (such as
+ﬁnding the relaxation matrices for convex restriction) in each
+iteration. Once it obtains the rank-1 solution, the beamforming
+vectors for each user is obtained via matrix factorization due
+to the limits of semideﬁnite programming. If the solution
+suffers from high-rank, the Gaussian randomization procedure
+is required to obtain approximate beamforming vectors, which
+further deteriorates the rate performance, the algorithm’s exe-
+cution time and even feasibility of the solution. Table II shows
+the probability of getting high-rank solutions for the rate quan-
+tile maximization problem, and we found that this probability
+rises with increasing transmit power. When P = 30 dBm,
+0
+5
+10
+15
+20
+25
+Achievable Rate (Mbps)
+0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1
+CDF of Achievable Rate
+Proposed Solution
+Traditinal Optimization by Evaluation
+5% outage
+Fig. 6.
+CDF of the achievable robust data rate for the rate maximization
+solution.
+TABLE II
+THE PROBABILITY OF HIGH-RANK SOLUTION FOR THE RATE
+MAXIMIZATION PROBLEM.
+Power
+5
+10
+15
+30
+Probability
+0.2520
+0.6375
+0.8060
+0.8965
+obtaining a high-rank solution is a high probability event, i.e.
+89.65%. This is in line with our previous observations in Fig.
+4 and Fig. 5 about the deterioration of data rate performance
+and algorithm execution latency due to high-rank solutions for
+traditional optimization methods. In these cases, we choose
+the beamforming directions as the principal eigenvectors of
+the high-rank solution, and then optimize the power only.
+Fig. 6 compares the cumulative distribution function (CDF)
+of achievable robust rate between the proposed solution and
+the traditional optimization approach by evaluation. Since the
+traditional optimization approach may suffer from the high-
+rank solutions, for comparative fairness, we choose a channel
+realization that the traditional approach gives a rank-1 solution.
+Then, to evaluate the robust rate, we generate 2000 channel
+error samples to estimate the robust rate at outage probability
+of 5%. The result shows that given the 5% outage constraint,
+the achievable rate of the proposed solution reaches 10 Mbps,
+about 2 Mbps higher than that of the traditional optimization
+approach by evaluation. From another point of view, if a 10
+Mbps achievable robust rate is desired, the outage probability
+of traditional method is as high as about 40%, where such
+solutions cannot be applied in a practical system. In contrary,
+the proposed solution can satisfy the outage requirement 5%.
+It is worth emphasizing that the comparison environment we
+set up is very favorable to traditional optimization methods,
+which avoid the high-rank challenge, as well as using MC
+estimation instead of the original algorithmic results employed
+in the comparison of most works. Despite this, our proposed
+method still achieves better performance.
+In the above simulations, the path loss and inter-cell in-
+terference are combined to PSD (i.e., -75 dBm), where a
+similar approach is used in [12] and [35]. Fig. 7 shows the
+achievable robust data rate with the increasing transmit power
+11
+10
+15
+20
+25
+30
+Transmit Power (dBm)
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+Achievable Robust Rate (Mbps)
+Large scale fading
+Traditional Optimization
+Traditional Optimization by Evaluation
+Proposed Solution
+Fig. 7. The achievable robust data rate against the transmit power with large
+scale fading.
+6
+7
+8
+9
+Number of antennas
+80%
+85%
+90%
+95%
+100%
+105%
+Achievable Robust Rate Percentage
+Traditional Optimization
+Traditional Optimization by Evaluation
+Proposed Solution
+Generalized from Proposed Solution
+Fig. 8. The scalability and generalizability of the proposed method.
+under large-scale fading. Speciﬁcally, the path loss is modeled
+as 128.1 + 37.6 log10(d) where d is the distance in kilometer
+between the BS and a user. Users are uniformly located in an
+area between 100 and 500 meters from the BS. The small-scale
+fading follows the Rayleigh distribution with zero mean and
+unit variance. Simulation results again show that our proposed
+method is able to achieve better robust rate performance.
+Fig. 8 depicts the scalability and generalizability of the
+proposed method for a 4-user system, where the number of
+transmit antennas is varied from 6 to 9. MS = 3 and MP = 8
+are chosen as hyperparameters for the neural network. The
+robust rates of all methods are normalized by the rate of the
+traditional optimization by evaluation method for the same
+system parameters, and the corresponding ratios are expressed
+as percentages. Our proposed method consistently outper-
+forms traditional optimization (and by evaluation) methods
+in terms of robust rate performance under different sizes of
+communication systems, demonstrating excellent scalability.
+In order to describe the generalizability of the proposed
+method, we ﬁrst train the neural network for the system size
+of N = 6, K = 4, and use the trained network for a larger
+number of transmit antennas at the BS, where systems with
+N ∈[7, 9] were not trained by the neural network. The curve
+5
+6
+7
+8
+9
+10
+11
+12
+Rate Target (Mbps)
+2
+4
+6
+8
+10
+12
+14
+16
+Transmit power (dBm)
+Traditional Optimization
+Proposed Solution
+Fig. 9. The minimum transmit power against the data rate requirements.
+marked with “generalized from proposed solution” describes
+the generalizability performance of the above simulation. It
+can be seen that the robust beamforming rate of the generalized
+from proposed solution outperforms traditional optimization
+(and by evaluation) methods at N = 7 and 8. At N = 9, it
+achieves only slightly worse performance than the traditional
+optimization by evaluation method, but still outperforms the
+traditional optimization method.
+B. Results of Power Minimization Problem P2
+Fig. 9 shows the transmit power versus required robust rate
+requirements. With the increasing rate requirements, larger
+transmit power is needed. The proposed method saves more
+power compared with the traditional optimization method. For
+instance, when rate target is equal to 10 Mbps, the power
+consumption of the proposed method is around 11 dBm, 2.2
+dBm lower than the traditional optimization method. In many
+cases, there is no feasible solution for given rate and outage
+constraints, so the power shown is only averaged over those
+feasible solutions.
+Fig. 10 depicts the probability of obtaining feasible solu-
+tions which satisfy the outage constraint in P2. The feasi-
+bility of both methods decreases with the increasing target
+rate, because higher rate targets will cause more outage.
+The robust beamforming solutions of our proposed approach
+have much higher feasibility probabilities than the traditional
+optimization approach. For instance, when the rate target is
+equal to 10 Mbps, the proposed approach can get robust
+solutions with about 60% feasibility, 30% higher than the
+traditional optimization method. This is because the solution
+obtained by the traditional optimization method using convex
+restriction and semideﬁnite relaxation is conservative and
+thus this method restricts the solution space and reduces the
+chance of obtaining feasible solutions. In addition, when high-
+rank solutions are obtained by semideﬁnite relaxation, it is
+in general difﬁcult to ﬁnd a feasible beamforming solution
+that satisﬁes the outage probability constraints. In contrast,
+our method utilizes neural networks to optimize the robust
+beamforming, which can explore a much larger solution space
+12
+5
+6
+7
+8
+9
+10
+11
+12
+Rate Target (Mbps)
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1
+Feasibility with Probablistic Rate constraints
+Traditional Optimization
+Proposed Solution
+Fig. 10. Feasibility probability of the solutions versus rate target.
+5
+6
+7
+8
+9
+10
+11
+12
+Rate Target (Mbps)
+200
+300
+400
+500
+600
+700
+800
+Time required (ms)
+Traditional Optimization
+Proposed Solution
+Fig. 11.
+Comparison of execution time of different power minimization
+algorithms.
+and produce less conservative solutions, thus making it easier
+to ensuring feasibility.
+Fig. 11 shows the comparison of execution time between the
+proposed method and the traditional optimization method for
+the power minimization problem under different rate targets.
+The proposed solution spends much more time on the power
+minimization problems than the rate maximization problem
+because it uses bisection search and in each iteration, and
+it requires MC method to evaluate the rate quantile value.
+However, it still spends much less time than the traditional
+optimization method. For instance, when the rate target is
+equal to 10 Mbps, the execution time of the proposed method
+is about 500 ms less than that of the traditional optimization
+method. Besides, the execution time of the proposed method
+decreases with the increasing target rates, because the bisection
+method can identify the infeasible solution early to avoid
+unnecessary iterations. Table III depicts the probability of
+high-rank solutions of the traditional optimization method for
+the power minimization problems.
+In Fig. 12, again we choose a channel for which the
+traditional optimization gives a rank-1 solution and compare
+the CDF and the power consumption. The rate requirement
+is 10 Mbps. The results are interesting: ﬁrst, veriﬁes that
+0
+5
+10
+15
+20
+25
+30
+35
+Achievable Rate (Mbps)
+0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1
+CDF of Achievable Rate
+Proposed Solution. Required power 3.57 dBm.
+Traditinal Optimization by Evaluation. Required power 9.41 dBm
+5% outage
+Fig. 12. CDF of the achievable robust data rate for the power minimization
+solution.
+TABLE III
+THE PROBABILITY OF HIGH-RANK SOLUTION FOR THE POWER
+MINIMIZATION PROBLEM.
+Rate (Mbps)
+5.86
+7.06
+10
+11.76
+Probability
+0.1149
+0.1577
+0.1573
+0.1479
+the traditional is conservative which means it achieves higher
+than 10 Mbps at outage of 5% while our proposed solution
+can achieve exactly 10 Mbps, avoiding waste of resources;
+second, our solution also uses nearly 6 dBm less power, which
+conﬁrms its efﬁciency in using limited resources to achieve
+better and more robust solutions.
+VI. CONCLUSIONS
+This paper proposed a data and model-driven learning
+approach to address robust beamforming optimization for
+the MU-MISO system, considering Gaussian channel uncer-
+tainties. The paper investigated two optimization problems
+with the outage probability constraint: the rate quantile max-
+imization problem and the power minimum problem. For the
+rate quantile maximization problem, we proposed a model-
+driven learning approach combined with data augmentation
+to handle the challenging outage constraint. The modiﬁed
+robust beamforming structure is employed to reduce the neural
+network’s output dimension from 2NK to 3K. For the power
+minimum problem, we introduced a bisection-based learning
+method by incorporating the transmit power budget into the
+input of the proposed neural network, achieving the feature
+of universal transmit power. Numerical results demonstrated
+that the proposed approach outperforms state-of-the-art coun-
+terparts in terms of rate improvement, power reduction, and
+execution time.
+APPENDIX
+MATHEMATICAL INTERPRETATION OF (13)
+The overall neural network framework illustrated in Fig. 2
+of the manuscript solves the robust beamforming design based
+on outage constraints in the following two steps.
+13
+• Neural networks (including S-Net and Power-Net) to-
+gether with beamforming recovery model obtain optimal
+beamforming for generalized problems, where the outage
+probability constraint and the minimum rate are not
+involved here. Denote Γk as the SINR at user k, and
+the generalized problems corresponding to P1 and P2
+are respectively given as follows:
+E1: max
+wk,∀K f(Γ1, · · · , ΓK)
+s.t.
+K
+X
+k=1
+∥wk∥2 ≤P, (27)
+E2: min
+wk,∀K
+K
+X
+k=1
+∥wk∥2
+s.t.
+Rk ≥r,
+(28)
+where f(·) stands for an arbitrary utility function that is
+strictly increasing in each user’s SINR as deﬁned in [23].
+• The DAQE module estimates the quantile of the minimum
+rate among users ˆr which satisﬁes the outage constraint.
+By using −ˆr as the loss function, the neural network
+gradually learns to output beamforming that can satisfy
+the outage probability constraints during training until
+convergence.
+We then explore expressions for the optimal solution struc-
+ture for E1 and E2 taking into account the channel error.
+According to [23], [53], the optimal beamforming solution for
+E2 is also the optimal solution for E1, so we use E2 to deduce
+the robust optimal beamforming structure. The constraints of
+E2 can be recast as:
+Γk =
+|h†
+kwk|2
+P
+j̸=k |h†
+kwj|2 + σ2
+k
+≥2r/B −1 ≜γ (29)
+⇔
+1
+γσ2
+k
+|h†
+kwk|2 ≥
+X
+j̸=k
+1
+σ2
+k
+|h†
+kwj|2 + 1.
+(30)
+Obviously, the strong duality and Karush-Kuhn-Tucker (KKT)
+conditions are held for problem E2 [54], so we consider the
+Lagrangian function as
+L(w1, · · · , wK, q1, · · · , qk)
+=
+K
+X
+k=1
+∥wk∥2 +
+K
+X
+k=1
+qk
+ X
+j̸=k
+1
+σ2
+k
+|h†
+kwj|2 + 1
+−1
+γσ2
+k
+|h†
+kwk|2
+
+,
+(31)
+where qk, ∀K is the Lagrange multiplier. Based on KKT
+conditions, the optimal solution will satisfy
+∂L
+∂wk = 0. Then
+we have
+wk +
+X
+j̸=k
+qj
+σ2
+j
+hjh†
+jwk −qk
+γσ2
+k
+hkh†
+kwk = 0
+(a)
+⇔
+w†
+k +
+X
+j̸=k
+qj
+σ2
+j
+w†
+kh†
+jhj −qk
+γσ2
+k
+w†
+kh†
+khk = 0T (32)
+where (a) holds because the conjugate transpose is taken
+simultaneously for both sides of (32). Consider hj = ˜hj +ej,
+we have
+h†
+jhj = ˜h†
+j ˜hj + 2Re
+ ˜h†
+jej
+
++ e†
+jej
+|
+{z
+}
+denote as βj∈R
+.
+(33)
+Substituting (33) into (32), we obtain
+w†
+k +
+X
+j̸=k
+qj
+σ2
+j
+w†
+k(˜h†
+j ˜hj + βj) −qk
+γσ2
+k
+w†
+k(˜h†
+k˜hk + βk)
+= 0T
+(34)
+(a)
+⇔
+w†
+k
+
+I +
+K
+X
+j=1
+qj
+σ2
+j
+˜h†
+j ˜hj +
+ K
+X
+j=1
+qj
+σ2
+j
+βj −qk
+σ2
+k
+
+1 + 1
+γ
+
+βk
+
+|
+{z
+}
+denote as sk∈R
+I
+
+= qk
+σ2
+k
+
+1 + 1
+γ
+
+w†
+k˜h†
+k˜hk
+(35)
+(b)
+⇔
+wk =
+ 1 + sk
+
+I +
+K
+X
+j=1
+qj
+σ2
+j
+˜hj ˜h†
+j
+−1
+˜hk
+× qk
+σ2
+k
+
+1 + 1
+γ
+
+˜h†
+kwk
+|
+{z
+}
+=scalar
+,
+(36)
+where (a) is held by adding term
+qk
+σ2
+k w†
+k˜h†
+k˜hk to both side
+of (34), and (b) is established by taking conjugate trans-
+pose of (35) and left multiplying the inverse matrix of
+ 1 + sk
+
+I + PK
+j=1
+qj
+σ2
+j
+˜hj ˜h†
+j. Note that
+qk
+σ2
+k
+
+1 + 1
+γ
+
+˜h†
+kwk is
+a scalar, so the optimal wk must be parallel to
+ 1 + sk
+
+I +
+PK
+j=1
+qj
+σ2
+j
+˜hj ˜h†
+j
+−1
+˜hk. In view of this, the optimal robust
+beamforming vectors have the following structures:
+˜wk = √pk
+
+(1 + sk)I + PK
+j=1
+qj
+σ2
+j
+˜hj ˜h†
+j
+−1
+˜hk
+
+
+(1 + sk)I + PK
+j=1
+qj
+σ2
+j
+˜hj ˜h†
+j
+−1
+˜hk
+
+,
+(37)
+where pk is the beamforming power for user k.
+REFERENCES
+[1] G. Zheng, K. -K. Wong and T. -S. Ng, “Throughput Maximization in
+Linear Multiuser MIMO-OFDM Downlink Systems,” IEEE Trans. Veh.
+Technol., vol. 57, no. 3, pp. 1993-1998, May 2008.
+[2] D. Gesbert, M. Kountrious, C.-B. Chae, R. W. Heath, Jr., and T. Salzer,
+“Shifting the MIMO Paradigm," IEEE Signal Processing Mag., vol. 24,
+no. 5, pp. 36-46, Sep. 2007
+[3] Y. Zhang and C. Tepedelenlioglu, “Transmit Beamforming with Power
+Adaptation in Downlink Multi-User Systems,” IEEE Trans. Wireless
+Commun., vol. 9, no. 8, pp. 2424-2429, Aug. 2010.
+[4] Q. Shi, M. Razaviyayn, M. Hong and Z. -Q. Luo, “SINR Constrained
+Beamforming for a MIMO Multi-User Downlink System: Algorithms
+and Convergence Analysis,” IEEE Trans. Signal Process, vol. 64, no.
+11, pp. 2920-2933, Jun. 2016.
+[5] S. -J. Kim, A. Magnani, A. Mutapcic, S. P. Boyd and Z. -Q. Luo, “Robust
+Beamforming via Worst-Case SINR Maximization,” IEEE Trans. Signal
+Process, vol. 56, no. 4, pp. 1539-1547, Apr. 2008.
+[6] Z. L. Yu, W. Ser, M. H. Er, Z. Gu and Y. Li, “Robust Adaptive
+Beamformers Based on Worst-Case Optimization and Constraints on
+Magnitude Response,” IEEE Trans. Signal Process, vol. 57, no. 7, pp.
+2615-2628, Jul. 2009.
+[7] C. Li, C. He, L. Jiang and F. Liu, “Robust Beamforming Design for
+Max–Min SINR in MIMO Interference Channels,”
+IEEE Commun.
+Lett., vol. 20, no. 4, pp. 724-727, Apr. 2016.
+14
+[8] B. Zhang, Z. He, K. Niu and L. Zhang, “Robust Linear Beamforming
+for MIMO Relay Broadcast Channel With Limited Feedback,”
+IEEE
+Signal Process Lett., vol. 17, no. 2, pp. 209-212, Feb. 2010.
+[9] M. Medra, Y. Huang and T. N. Davidson, “Offset-Based Beamforming:
+A New Approach to Robust Downlink Transmission,” IEEE Trans.
+Signal Process, vol. 67, no. 1, pp. 70-82, 1 Jan. 2019.
+[10] C. Lin, C. -J. Lu and W. -H. Chen, “Outage-Constrained Coor-
+dinated Beamforming With Opportunistic Interference Cancellation,”
+IEEE Trans. Signal Process, vol. 62, no. 16, pp. 4311-4326, Aug. 2014.
+[11] W. -C. Li, T. -H. Chang, C. Lin and C. -Y. Chi, “Coordinated Beam-
+forming for Multiuser MISO Interference Channel Under Rate Outage
+Constraints,” IEEE Trans. Signal Process, vol. 61, no. 5, pp. 1087-1103,
+Mar. 2013.
+[12] K. -Y. Wang, A. M. -C. So, T. -H. Chang, W. -K. Ma and C. -Y. Chi,
+“Outage Constrained Robust Transmit Optimization for Multiuser MISO
+Downlinks: Tractable Approximations by Conic Optimization,” IEEE
+Trans. Signal Process, vol. 62, no. 21, pp. 5690-5705, Nov. 2014.
+[13] Z. -Q. Luo, W. -K. Ma, A. M. -C. So, Y. Ye and S. Zhang, “Semideﬁnite
+Relaxation of Quadratic Optimization Problems,” IEEE Signal Process
+Mag., vol. 27, no. 3, pp. 20-34, May 2010.
+[14] S. H. Low, “Convex Relaxation of Optimal Power Flow—Part I:
+Formulations and Equivalence,” IEEE Trans. Control Netw. Syst., vol.
+1, no. 1, pp. 15-27, Mar. 2014.
+[15] Y. Sun, K. An, J. Luo, Y. Zhu, G. Zheng and S. Chatzinotas, “Outage
+Constrained Robust Beamforming Optimization for Multiuser IRS-
+Assisted Anti-Jamming Communications With Incomplete Information,”
+IEEE Internet Things J., vol. 9, no. 15, pp. 13298-13314, Aug. 2022.
+[16] B. Su, Q. Ni and W. Yu, “Robust Transmit Beamforming for SWIPT-
+Enabled Cooperative NOMA With Channel Uncertainties,” IEEE Trans.
+Commun., vol. 67, no. 6, pp. 4381-4392, Jun. 2019.
+[17] K. -Y. Wang, N. Jacklin, Z. Ding and C. -Y. Chi, “Robust MISO
+Transmit Optimization under Outage-Based QoS Constraints in Two-
+Tier Heterogeneous Networks,” IEEE Trans. Wireless Commun., vol.
+12, no. 4, pp. 1883-1897, Apr. 2013.
+[18] Y. Yan, K. An, B. Zhang, W. -P. Zhu, G. Ding and D. Guo, “Outage-
+Constrained Robust Multigroup Multicast Beamforming for Satellite-
+Based Internet of Things Coexisting With Terrestrial Networks,” IEEE
+Internet Things J., vol. 8, no. 10, pp. 8159-8172, May 2021.
+[19] A. Bazzi and M. Chaﬁi, “On Outage-Based Beamforming Design
+for Dual-Functional Radar-Communication 6G Systems,” IEEE Trans.
+Wireless Commun., vol. 22, no. 8, pp. 5598-5612, Aug. 2023.
+[20] Y. Zou, Z. Wang, X. Chen, H. Zhou and Y. Zhou, “Knowledge-Guided
+Learning for Transceiver Design in Over-the-Air Federated Learning,"
+IEEE Trans. Wireless Commun., vol. 22, no. 1, pp. 270-285, Jan. 2023.
+[21] S. Bi, L. Huang, H. Wang and Y. -J. A. Zhang, "Lyapunov-Guided Deep
+Reinforcement Learning for Stable Online Computation Ofﬂoading in
+Mobile-Edge Computing Networks," IEEE Trans. Wireless Commun.,
+vol. 20, no. 11, pp. 7519-7537, Nov. 2021.
+[22] W. Xia, G. Zheng, Y. Zhu, J. Zhang, J. Wang and A. P. Petropulu,
+“A Deep Learning Framework for Optimization of MISO Downlink
+Beamforming,” IEEE Trans. Commun., vol. 68, no. 3, pp. 1866-1880,
+Mar. 2020.
+[23] E. Björnson, M. Bengtsson, and B. Ottersten, “Optimal multiuser trans-
+mit beamforming: A difﬁcult problem with a simple solution structure,”
+IEEE Signal Process Mag., vol. 31, no. 4, pp. 142-148, Jul. 2014.
+[24] J. Zhang, M. You, G. Zheng, I. Krikidis and L. Zhao, “Model-Driven
+Learning for Generic MIMO Downlink Beamforming With Uplink
+Channel Information,” IEEE Trans. Wireless Commun., vol. 21, no. 4,
+pp. 2368-2382, Apr. 2022.
+[25] J. Kim, H. Lee, S. -E. Hong and S. -H. Park, “Deep Learning Methods
+for Universal MISO Beamforming," IEEE Wireless Commun. Lett., vol.
+9, no. 11, pp. 1894-1898, Nov. 2020.
+[26] J. Kim, H. Lee, S. -E. Hong and S. -H. Park, “A Bipartite Graph
+Neural Network Approach for Scalable Beamforming Optimization,”
+IEEE Trans. Wireless Commun., vol. 22, no. 1, pp. 333-347, Jan. 2023.
+[27] Q. Hu, Y. Cai, Q. Shi, K. Xu, G. Yu and Z. Ding, “Iterative Algorithm
+Induced Deep-Unfolding Neural Networks: Precoding Design for Mul-
+tiuser MIMO Systems," IEEE Trans. Wireless Commun., vol. 20, no. 2,
+pp. 1394-1410, Feb. 2021.
+[28] Q. Shi, M. Razaviyayn, Z. Luo, and C. He, “An iteratively weighted
+MMSE approach to distributed sum-utility maximization for a MIMO
+interfering broadcast channel," IEEE Trans. Signal Process., vol. 59, no.
+9, Sept. 2011.
+[29] W. Jin, J. Zhang, C. -K. Wen and S. Jin, “Model-Driven Deep Learning
+for Hybrid Precoding in Millimeter Wave MU-MIMO System," IEEE
+Trans. Commun., vol. 71, no. 10, pp. 5862-5876, Oct. 2023.
+[30] J. Guo and C. Yang, “A Model-based GNN for Learning Precoding,"
+IEEE Trans. Wireless Commun., doi: 10.1109/TWC.2023.3336911.
+[31] M. Zhang, J. Gao and C. Zhong, “A Deep Learning-Based Framework
+for Low Complexity Multiuser MIMO Precoding Design,” IEEE Trans.
+Wireless Commun., vol. 21, no. 12, pp. 11193-11206, Dec. 2022.
+[32] J. Kim, H. Lee and S. -H. Park, “Learning Robust Beamforming for
+MISO Downlink Systems,” IEEE Commun. Lett., vol. 25, no. 6, pp.
+1916-1920, Jun. 2021.
+[33] Z. Zhang, M. Tao and Y. -F. Liu, “Learning to Beamform in Joint
+Multicast and Unicast Transmission With Imperfect CSI,” IEEE Trans.
+Commun., vol. 71, no. 5, pp. 2711-2723, May 2023.
+[34] M. You, G. Zheng and H. Sun, “A Data Augmentation based DNN
+Approach for Outage-Constrained Robust Beamforming,” IEEE Int.
+Conf. Commun., pp. 1-5, 2021.
+[35] W. Cui and W. Yu, “Uncertainty Injection: A Deep Learning Method
+for Robust Optimization,” IEEE Trans. Wireless Commun., vol. 22, no.
+11, pp. 7201-7213, Nov. 2023.
+[36] C. B. Peel, B. M. Hochwald, and A. L. Swindlehurst, “A Vector-
+perturbation
+Technique
+for
+Near-capacity
+Multiantenna
+Multiuser
+Communication-part I: Channel Inversion and Regularization,” IEEE
+Trans. Commun., vol. 53, no. 1, pp. 195–202, Jan. 2005.
+[37] C.-B. Chae, D. Mazzarese, N. Jindal, and R. W. Heath, Jr., “Coordinated
+Beamforming with Limited Feedback in the MIMO Broadcast Channel,"
+IEEE J. Sel. Areas Commun., vol. 26, no. 8, pp. 1505-1515, Oct. 2008.
+[38] K. Hornik, M. Stinchcombe, and H. White, “Multilayer feedforward
+networks are universal approximators,” Neural Netw., vol. 2, no. 5, pp.
+359–366, Jul. 1989.
+[39] Y. Shen, Y. Shi, J. Zhang, and K. B. Letaief, “Graph neural networks for
+scalable radio resource management: Architecture design and theoretical
+analysis,” IEEE J. Sel. Areas Commun., vol. 39, no. 1, pp. 101–115, Jan.
+2021.
+[40] K. Xu, W. Hu, J. Leskovec, and S. Jegelka, “How Powerful are Graph
+Neural Networks?” Proc. Int. Conf. Learn. Representation, May 2019.
+[41] Z. Wu, S. Pan, F. Chen, G. Long, C. Zhang and P. S. Yu, “A
+Comprehensive Survey on Graph Neural Networks,” IEEE Trans. Neural
+Netw. Learn. Syst., vol. 32, no. 1, pp. 4-24, Jan. 2021.
+[42] Y. Shen, Y. Shi, J. Zhang, and K. B. Letaief, “Graph Neural Networks
+for Scalable Radio Resource Management: Architecture Design and
+Theoretical Analysis,” IEEE J. Sel. Areas Commun., vol. 39, no. 1, pp.
+101–115, Jan. 2021.
+[43] J. Guo and C. Yang, “Learning Power Allocation for Multi-Cell-Multi-
+User Systems With Heterogeneous Graph Neural Networks,” IEEE
+Trans. Wireless Commun., vol. 21, no. 2, pp. 884-897, Feb. 2022.
+[44] H. Lee, S. H. Lee, and T. Q. S. Quek, “Learning Autonomy in
+Management of Wireless Random Networks,” IEEE Trans. Wireless
+Commun., vol. 20, no. 12, pp. 8039–8053, Dec. 2021.
+[45] A. Chowdhury, G. Verma, C. Rao, A. Swami, and S. Segarra, “Unfolding
+WMMSE Using Graph Neural Networks for Efﬁcient Power Allocation,”
+IEEE Trans. Wireless Commun., vol. 20, no. 9, pp. 6004–6017, Sep.
+2021.
+[46] B. Dai, Y.-F. Liu, and W. Yu, “Optimized Base-Station Cache Allocation
+for Cloud Radio Access Network With Multicast Backhaul,” IEEE J. Sel.
+Areas Commun., vol. 36, no. 8, pp. 1737–1750, Aug. 2018.
+[47] Y. Shi, J. Zhang, and K. B. Letaief, “Optimal Stochastic Coordinated
+Beamforming for Wireless Cooperative Networks With CSI Uncer-
+tainty,” IEEE Trans. Signal Process., vol. 63, no. 4, pp. 960–973, Feb.
+2015.
+[48] C. Psomas, M. You, K. Liang, G. Zheng and I. Krikidis, “Design and
+Analysis of SWIPT With Safety Constraints," Proceedings of the IEEE,
+vol. 110, no. 1, pp. 107-126, Jan. 2022.
+[49] I. Sutskever, J. Martens, G. Dahl, and G. Hinton, “On the importance of
+initialization and momentum in deep learning,” Int. Conf. Mach. Learn.,
+pp. 1139-1147, May 2013.
+[50] D. Kingma and J. Ba, “Adam: A method for stochastic optimization,”
+Proc. Int. Conf. Learn. Represent. (ICLR), pp. 1–15, 2015.
+[51] A. Damnjanovic et al., “A survey on 3GPP heterogeneous networks,”
+IEEE Wireless Commun., vol. 18, no. 3, pp. 10-21, Jun. 2011.
+[52] Michael Grant and Stephen Boyd, “CVX: Matlab software for disci-
+plined convex programming, version 2.0 beta.” http://cvxr.com/cvx, Sep.
+2013.
+[53] Emil Björnson and Eduard Jorswieck, “Optimal resource allocation in
+coordinated multi-cell systems,” Foundations and Trends in Communi-
+cations and Information Theory, vol. 9, no. 2-3, pp. 113-381, 2013.
+[54] W. Yu and T. Lan, “Transmitter optimization for the multi-antenna
+downlink with per-antenna power constraints,” IEEE Trans. Signal
+Processing, vol. 55, no. 6, pp. 2646-2660, 2007.

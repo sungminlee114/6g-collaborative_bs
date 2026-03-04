@@ -1,0 +1,2367 @@
+1
+Energy-Efficient Edge Inference in Integrated
+Sensing, Communication, and
+Computation Networks
+Jiacheng Yao, Graduate Student Member, IEEE, Wei Xu, Fellow, IEEE, Guangxu Zhu, Member, IEEE,
+Kaibin Huang, Fellow, IEEE, and Shuguang Cui, Fellow, IEEE
+Abstract—Task-oriented integrated sensing, communication,
+and computation (ISCC) is a key technology for achieving low-
+latency edge inference and enabling efficient implementation of
+artificial intelligence (AI) in industrial cyber-physical systems
+(ICPS). However, the constrained energy supply at edge devices
+has emerged as a critical bottleneck. In this paper, we propose
+a novel energy-efficient ISCC framework for AI inference at
+resource-constrained edge devices, where adjustable split in-
+ference, model pruning, and feature quantization are jointly
+designed to adapt to diverse task requirements. A joint resource
+allocation design problem for the proposed ISCC framework is
+formulated to minimize the energy consumption under stringent
+inference accuracy and latency constraints. To address the
+challenge of characterizing inference accuracy, we derive an
+explicit approximation for it by analyzing the impact of sensing,
+communication, and computation processes on the inference
+performance. Building upon the analytical results, we propose an
+iterative algorithm employing alternating optimization to solve
+the resource allocation problem. In each subproblem, the optimal
+solutions are available by respectively applying a golden section
+search method and checking the Karush-Kuhn-Tucker (KKT)
+conditions, thereby ensuring the convergence to a local optimum
+of the original problem. Numerical results demonstrate the
+effectiveness of the proposed ISCC design, showing a significant
+reduction in energy consumption of up to 40% compared to
+existing methods, particularly in low-latency scenarios.
+Index Terms—Edge inference, edge artificial intelligence (AI),
+industrial cyber-physical systems (ICPS), integrated sensing,
+communication and computation (ISCC).
+I. INTRODUCTION
+T
+HE rapid advancement of industrial cyber-physical sys-
+tems (ICPS) has ushered in an era where the seamless
+integration of sensing, communication, and computation is
+paramount [1]–[3]. These systems form the backbone of mod-
+ern smart industries, enabling real-time monitoring, control,
+and automation of industrial processes. However, the esca-
+lating complexity and stringent performance requirements of
+ICPS necessitate a paradigm shift in their design and imple-
+mentation. There exists a fundamental conflict between limited
+J. Yao and W. Xu are with the National Mobile Communications Research
+Laboratory, Southeast University, Nanjing 210096, China, and are also with
+the Purple Mountain Laboratories, Nanjing 211111, China (e-mail: {jcyao,
+wxu}@seu.edu.cn).
+G. Zhu is with Shenzhen Research Institute of Big Data, Shenzhen, China
+(e-mail: gxzhu@sribd.cn).
+K. Huang is with the Department of Electrical and Electronic Engi-
+neering, The University of Hong Kong, Hong Kong SAR, China (e-mail:
+huangkb@hku.hk).
+S. Cui is with the School of Science and Engineering, The Chinese Uni-
+versity of Hong Kong, Shenzhen, China (e-mail: shuguangcui@cuhk.edu.cn).
+processing capabilities and the increasing volume of real-time
+sensing data. Hence, artificial intelligence (AI) technology,
+renowned for its transformative capabilities, is expected to play
+a pivotal role in enhancing the capabilities of ICPS by enabling
+sophisticated data analysis [4], predictive maintenance [5],
+anomaly detection [6], and autonomous decision-making [7].
+Traditionally, deploying AI in ICPS has relied on powerful
+computational resources of centralized cloud servers. This
+approach involves transmitting vast amounts of raw data to the
+cloud for processing and analysis. While effective in leverag-
+ing advanced AI models, this method has inherent drawbacks,
+including high latency, significant bandwidth consumption,
+and potential privacy concerns. The need to transmit large
+volumes of data to central servers makes it difficult to meet the
+real-time and privacy requirements of industrial applications.
+To address these limitations, a new paradigm known as edge
+intelligence has emerged, which focuses on utilizing local
+data and computational resources at the edge of the network
+[8]–[11]. Edge intelligence aims to perform AI training and
+inference closer to the site where data is generated, thereby
+reducing latency, conserving bandwidth, and enhancing data
+privacy [12]–[15]. In particular, edge inference, a key area in
+edge intelligence, concerns real-time inference and decision-
+making using a well-trained edge-deployed AI model, provid-
+ing a platform for intelligent control in ICPS [16].
+In the earliest edge inference architectures, edge devices
+typically serve a single role in either communication or
+computation. Inference tasks are performed either locally on
+edge devices or at central servers with preprocessed data from
+edge nodes. However, both approaches struggle to meet the
+demand for low-latency decision making in ICPS. Limited
+computing power on edge devices hampers fast inference
+of large-scale models, while constrained wireless resources
+restrict rapid data uploading to the server. These challenges are
+driving the emergence of split inference and further the joint
+design of communication and computation at the edge devices
+[17]. Specifically, large-scale AI models are split into two sub-
+models before being deployed respectively on edge devices
+and the servers. The sub-model at the edge extracts low-
+dimensional features from high-dimensional raw data, which
+can be transmitted to the server with limited bandwidth for
+completion of inference tasks. Within the framework of split
+inference, the communication and computation processes are
+tightly coupled, jointly determining the inference performance.
+Therefore, a joint design coordinated for both aspects becomes
+arXiv:2503.00298v1  [cs.IT]  1 Mar 2025
+2
+essential. To achieve the optimal trade-off between communi-
+cation and computation, recent works have focused on various
+techniques, including adaptive splitting point selection [18],
+[19], model compression [17], and setting early exiting [20],
+[21]. Furthermore, taking into account the bottleneck of lim-
+ited communication resource, advanced techniques, like joint
+source-channel coding [22] and progressive feature transmis-
+sion [23], are exploited to minimize communication overhead.
+However, the aforementioned edge inference designs over-
+look the data collection process, despite that the quality of col-
+lected samples plays a cruial role in the resulting inference per-
+formance. In ICPS, seamless integration of sensing, commu-
+nication, and computation collectively determines the efficacy
+of intelligent control. Therefore, conducting a joint design for
+integrated sensing, communication, and computation (ISCC)
+becomes imperative [24]. Benefiting from emerging technolo-
+gies like integrated sensing and communication (ISAC), edge
+devices equipped with dual-functional hardware systems have
+ability to simultaneously sense, communicate, and compute
+[25], [26], which provides an essential foundation for the
+ISCC design. However, in ISAC, sensing and communication
+coexist as parallel tasks. In contrast, under ISCC, sensing,
+communication, and computation are integral procedures of
+inference tasks, not only coexisting functionally but also being
+interdependent in achieving the same task objective. Moreover,
+the absence of explicit objective expressions in inference
+tasks complicates the joint design of ISCC, making it more
+challenging than that in ISAC.
+Recently, there have been a few works considering the
+ISCC design for edge inference tasks [27]–[30]. For an action
+recognition task, the authors in [27] proposed a novel ISCC
+framework with sensing at the base station (BS) and AI
+inference at the edge server, and maximized the sensing per-
+formance with quality-of-service (QoS) requirements of tasks.
+For general classification tasks, the authors in [28] proposed
+a joint resource allocation scheme for ISCC directly targeting
+the inference accuracy measured by discriminant gain. This
+metric allows tractable derivation of the inference accuracy
+as a function of sensing, communication, and computation
+(SCC) resources, thus unveiling the impact of SCC resources
+on the inference performance. Furthermore, to fully exploit
+the multi-view features from multiple devices, over-the-air
+computation (AirComp) was employed for efficient feature
+fusion in [29] and [30], where joint resource allocation and
+beamforming design were further optimized in terms of the
+derived discriminant gain. From a theoretical perspective,
+the authors in [31] proposed an analytical framework for
+quantifying the fundamental performance gains brought by
+over-the-air aggregation of multi-view features. Moreover,
+within the extracted feature vector, the importance of each
+feature element was theoretically characterized in [32], which
+allows for more fine-grained resource allocation optimization
+adapting to element-wise feature importance.
+Existing research primarily concentrates on enhancing in-
+ference performance through ISCC design under practical
+constraints like latency. However, it is essential to note that in
+real-world ICPS, battery-powered edge devices, e.g., internet-
+of-things (IoT) sensors or actuators, also encounter the chal-
+lenging bottleneck of limited energy supply. In addition, in
+recent years, AI models have recently experienced exponential
+growth in size, significantly increasing the demand for data
+acquisition, model computation, and information exchange
+[33]. This has exacerbated the dilemma of limited energy for
+edge devices, as they must manage not only the computational
+complexity of larger models but also growing requirements
+of communication and sensing. Hence, minimizing energy
+consumption at resource-limited edge devices under QoS
+requirements of inference tasks, e.g., accuracy and latency
+constraints, is a pressing need for the success of edge inference
+in practical ICPS.
+As pointed out in [33], energy consumption in edge AI
+inference tasks is primarily determined by three key com-
+ponents: sensing, communication, and computation energy.
+Unfortunately, existing research on energy-efficient edge infer-
+ence design often considered these components partially and
+separately, resulting in suboptimal performance. For instance,
+the authors in [34] focused on resource allocation of sensing
+and communication for saving energy, while [35] addressed
+the joint design of communication and computation. This
+partial or separated design strategy overlooks the coupling
+relationship between sensing, communication, and computing.
+While it may achieve optimality at a single layer, it results
+in energy inefficiency from a holistic perspective. Therefore,
+joint design for sensing, communication, and computation is
+the key to improving energy efficiency, which is challenged by
+the following difficulties. Firstly, the performance of sensing,
+communication, and computation jointly determines inference
+accuracy, but the nonlinear and implicit coupling between
+these factors remains unexplored. In addition, the underlying
+mechanisms by which sensing, communication, and computa-
+tion individually affect inference accuracy remain unclear. The
+lack of explicit characterization of these dimensions hinders
+the joint design and efficient resource allocation in ISCC
+systems, often resulting in reliance on empirical or heuristic
+approaches. To the best of our knowledge, little effort has
+been made to elucidate the intrinsic mechanisms by which the
+three functional components affect inference accuracy, nor has
+a joint design approach been proposed to address the energy
+concerns for edge inference in ISCC networks.
+Against this background, in this paper, we propose an
+energy-efficient ISCC framework as well as a corresponding
+resource allocation method for common classification tasks.
+The main contributions of our work are listed as follows.
+• Energy-efficient ISCC framework: A flexible ISCC
+framework is established for energy-efficient edge infer-
+ence. In concrete, we adopt the split inference method
+with flexible splitting points to meet the latency require-
+ment and balance the communication and computational
+costs at the edge device. Depending on varying sensing
+qualities, we first propose to prune the device-side sub-
+model and employ stochastic quantization of features
+before transmission. Adjustable pruning ratio and quanti-
+zation precision allow adaptive tuning of computation and
+communication capabilities to meet the requirement of in-
+ference accuracy and reduce redundant energy consump-
+tion. Considering the QoS constraints, we formulate an
+3
+energy consumption minimization problem for resource
+allocation design within the proposed ISCC framework,
+which jointly optimizes the power allocation, selection
+of splitting point, pruning ratio, and the quantization
+precision.
+• Explicit inference accuracy characterization: For the
+challenging task of characterizing inference accuracy in
+the formulated problem, taking classification tasks as
+examples, we derive a strict lower bound of the inference
+accuracy by analyzing the sufficient condition for a
+received feature sample can be correctly classified. To
+allow tractable optimization and insight extraction, we
+further derive an explicit and effective approximation of
+the derived bound of classification accuracy. It is revealed
+that sensing quality determines the achievable classifi-
+cation accuracy. On the other hand, the impacts from
+adaptive model pruning and stochastic feature quantiza-
+tion can be equivalently viewed as introducing additional
+additive noise on extracted features, thereby incurring
+performance loss.
+• Low-complexity resource allocation: Building upon
+these analytical results, we propose an iterative algo-
+rithm for the ISCC resource allocation optimization. The
+original problem is divided into two subproblems, i.e.,
+an accuracy-related subprobblem and a latency-related
+subproblem. For the first subproblem, we apply the typ-
+ical golden section search method, which guarantees the
+global optimal solution. As for the second subproblem,
+we succeed to find the optimal solutions by checking
+the Karush-Kuhn-Tucker (KKT) conditions. Further by
+alternating iterations between the two subproblems, we
+rigorously ensure the convergence to at least a local
+optimum of the original problem.
+• Experiments: We conduct extensive experiments to ver-
+ify the performance analysis regarding classification accu-
+racy and evaluate our proposed framework and resource
+allocation algorithm based on a typical human motion
+recognition task. Compared with existing baselines, the
+energy consumption obtained from the proposed method
+is greatly reduced, especially with stringent low-latency
+constraints. Moreover, it is shown that improving sensing
+qualities is of great importance to pursue high classifica-
+tion accuracy.
+The rest of this paper is organized as follows. In Sec-
+tion II, we offer the details of the proposed energy-efficient
+ISCC framework, and formulate the joint resource allocation
+optimization problem for energy consumption minimization.
+Section III characterizes the inference accuracy under the
+ISCC framework. In Section IV, we simplify the resource
+allocation problem and propose a low complexity algorithm.
+Simulation results and conclusions are given in Sections V
+and VI, respectively.
+Throughout the paper, numbers, vectors, and matrices are
+represented by lower-case, boldface lower-case, and bold-
+face uppercase letters, respectively. The set [N] is equal to
+{1, 2, · · · , N}. The operators | · | and ∥·∥take the norm of
+a complex number and a vector, respectively. Moreover, the
+Sensing target
+Sensing
+Communication
+Edge device
+Server
+Echo
+signal
+Sensing 
+processing
+Wireless 
+transmission
+Inference
+computing
+Edge device
+Server
+Split AI models
+Joint ISCC design 
+1: ℓ
+ℓ+ 1 : 𝐿
+Computing
+Fig. 1. Model of ISCC based edge inference system.
+operator |·| returns the number of elements when the input is a
+set. The operator ∥·∥F denotes the Frobenius norm of a matrix.
+Let R, C, and Z+ denote the set of real numbers, complex
+numbers, and positive integers, respectively. The superscripts
+(·)T and (·)H stand for the transpose and conjugate-transpose
+operations, respectively. We use E[·] to denote the expectation
+of a random variable (RV). The operator Exp(λ) is the
+exponential distribution with rate parameter λ.
+II. SYSTEM MODEL
+As shown in Fig. 1, we consider an edge inference system
+consisting of an ISCC edge device and a server. The edge
+device with limited resources aims at performing AI inference
+on real-time sensory data for classification tasks under the
+assistance of the server. The ISCC models and the proposed
+energy-efficient ISCC design are described in the following
+subsections.
+A. Sensing Model
+1) Sensing signal and processing: We adopt the widely
+used frequency-modulated continuous wave (FMCW) signals
+with M up-ramp chirps of duration T0 for sensing. With the
+normalized FMCW signal x(t) [28], we write the echo signal
+as
+y(t)=
+p
+PSh0(t)x(t−τ0)+
+p
+PS
+J
+X
+j=1
+hj(t)x(t−τj)+n(t), (1)
+where √PS is the transmit power for sensing, h0(t) denotes
+direct attenuation of the target round-trip, τ0 is the round-trip
+delay, hj(t) and τj, j ∈[J], denote the reflection coefficient
+and signal delay of the j-th indirect path, respectively, and
+n(t) is the Gaussian noise.
+With the received echo signals, the edge device performs the
+following sensing processing to facilitate the subsequent AI in-
+ference. To begin with, the raw signal y(t) is sampled with rate
+fs, and then the sampled discrete sequence is reconstructed
+into a two-dimensional sensing data matrix Y ∈CfsT0×M.
+It is worth noting that the column dimension of Y is the
+fast-time dimension, while the row dimension is the slow-
+time dimension containing the feature in the Doppler spectrum
+shift. Then, according to [28], [36], we apply a singular value
+4
+decomposition (SVD)-based filter for Y to mitigate the clutter.
+Specifically, the filtered sensing data matrix is expressed as
+¯Y =
+r2
+X
+i=r1
+ςiuivH
+i ,
+(2)
+where ςi, ui, and vi represent the i-th singular value, the
+i-th left-singular vector, and the i-th right-singular vector
+of Y, respectively, and r1 ≤r2 are empirical parameters
+determined by experiments. Considering that only the slow-
+time dimension of ¯Y is useful for inference task, we convert
+it into a vector ¯y by summing up the data along the column
+dimension. Finally, short-time Fourier transform (STFT) is
+applied to generate a spectrogram x, which serves as the input
+of AI model for inference task. To unify and standardize the
+learning and inference processes, all spectrograms x have been
+normalized to satisfy ∥x∥= 1.
+During the sensing procedure, the total latency and energy
+consumption are calculated as Tsen = T0M and Esen = PSTsen,
+respectively. Without loss of generality, we ignore the latency
+and energy consumption associated with the signal processing.
+2) Sensing metrics: According to (1), the desired signal is
+interfered by higher-order scattering and noise. Consequently,
+the quality of the obtained spectrograms monotonically im-
+proves with the increase in transmit power PS until the
+noise becomes negligible. The experimental results in [36]
+confirmed this conclusion by using the structural similarity
+(SSIM) index as the metric. Moreover, discriminant gain,
+derived from the well-established Kullback-Leibler (KL) di-
+vergence, is widely used as a substitute metric for inference
+accuracy [23], [28]. Direct inspection of the discriminant gain
+in Eq. (17) of [28] reveals that it monotonically increases
+with sensing power, thereby establishing a positive relationship
+between the inference performance and sensing power.
+B. Split Inference Model
+Consider a pre-trained deep neural network (DNN) with
+L layers for the AI inference. Due to limited computing re-
+sources and energy of the edge device, it is usually challenging
+to meet low latency requirements for the DNN calculations at
+the edge device. Additionally, it is often overloaded to support
+the direct upload of high-dimensional data sample to the server
+with limited wireless resources. To address these issues, we
+split the large-scale DNN at layer ℓ∈L, which is known as
+splitting point and L denotes its feasible set, and deploy the
+sub-models separately on the edge device and the server, as
+illustrated in Fig. 1. Note that by selecting different splitting
+points, all possible situations are covered with this general
+splitting model. For example, when ℓ= L, it represents the
+case that the AI inference is performed completely at the edge
+device.
+To further reduce the computational burden on edge devices,
+in practice, the well-trained sub-models are usually pruned
+before deploying at the edge device via the existing model
+pruning methods [37]–[39]. Let ρ ∈(0, 1] denote the pruning
+ratio for the input sub-model at the edge, which represents the
+proportion of remaining nodes to the total number of nodes.
+Based on sensing quality and communication capability, we
+aim to adaptively adjust the inference ability of DNN by
+selecting a proper value of ρ, thereby achieving full utilization
+of the resources. We denote the number of floating point
+operations (FLOPs) required for computing the l-th layer by
+λ(l, ρ). According to [18], it follows
+λ(l, ρ)=
+
+
+
+ 2γl−1ψ2
+l ρ−1
+
+αlβlγl,
+Conv,
+αlβlγlψ2
+l ,
+MP,
+(2nl−1ρ −1) nl,
+FC,
+(3)
+where Conv, MP, and FC denote the convolutional, max-
+pooling, and fully-connected layers, respectively, αl, βl, γl,
+and ψl denote the height, width, channels of the output feature
+map, and the filter size of the l-th layer, respectively, and
+nl denotes the number of neurons at the l-th layer. Then,
+the computation latency at the edge device and the server is
+respectively expressed as
+Tcomp,e =
+Pℓ
+l=1 λ(l, ρ)
+νe
+,
+Tcomp,s =
+PL
+l=ℓ+1 λ(l, 1)
+νs
+,
+(4)
+where νe and νs denote the computation capacity of the edge
+device and server, respectively. They represent the number of
+FLOPs per second. According to Lemma 1 in [40], the energy
+consumption for computation at the edge device equals
+Ecomp = κ
+ℓ
+X
+l=1
+λ(l, ρ)ν2
+e ,
+(5)
+where κ represents the effective switched capacitance depend-
+ing on the chip architecture. In the considered edge inference
+system, the primary concern is the limited energy available at
+the edge device, while the central server typically has ample
+resources. Hence, the energy consumption at the server is not
+the focus of our study, and it is neglected for simplicity. Also,
+we assume a maximum CPU frequency for computation at
+the server to minimize computation latency and assist edge
+inference.
+C. Communication Model
+Let f ∈RNℓdenote the output feature of the sub-model at
+the edge device with size Nℓ. In the communication procedure,
+the edge device uploads it to the server via a wireless link.
+Firstly, we adopt the typical stochastic quantization method
+[41], [42] to quantize the continuous feature elements into
+discrete ones for the convenience of transmission. Without loss
+of generality, we assume that |fi| ∈[fmin, fmax], ∀i ∈[Nℓ].
+With Q quantization bits, we divide the interval [fmin, fmax]
+evenly into 2Q−1 −1 quantization intervals and the i-th knob
+is denoted by τi = fmin+ fmax−fmin
+2Q−1−1 i for i = 0, · · · , 2Q−1−1.
+Next, we define the quantization function as
+Q(x) =
+(
+sign(x)τi
+w.p.
+τi+1−|x|
+τi+1−τi ,
+sign(x)τi+1
+w.p.
+|x|−τi
+τi+1−τi ,
+(6)
+where |x| ∈[τi, τi+1) and sign(·) represents the signum
+function. Based on the quantization in (6), we obtain a
+quantized version of f
+for transmission, i.e., Q (f)
+≜
+5
+Ideal result
+Feature extractor
+𝐱∈ℝ𝐷
+𝐟∈ℝ𝑁ℓ
+Classifier 
+Spectrogram
+Ideal feature
+𝐟+ 𝐞1
+𝒬(⋅)
+መ𝐟= 𝐟+ 𝐞1 + 𝐞2
+Extracted feature
+Ideal case without imperfection
+Pruning
+Received  feature
+Quantizer
+Actual case
+Actual result
+𝐞1: model pruning error
+𝐞2: quantization error
+Classifier 
+𝐘
+Sensing data
+Fig. 2. Comparison between the classification results obtained from the proposed approach and the ideal case.
+[Q (f1) , · · · , Q (fNℓ)]T . Moreover, the total number of bits
+needed for transmission equals NℓQ.
+After the quantization, the edge device transmits Q (f) to
+the server via a wireless channel. We express the achievable
+rate as
+r = B log2
+
+1 + gPC
+BN0
+
+,
+(7)
+where B is the available bandwidth, g represents the channel
+gain between the edge device and server, PC is the transmit
+power, and N0 denotes the noise power density. In order
+to guarantee lossless recovery of Q (f) at the receiver, the
+minimum transmission latency must be
+Tcomm = NℓQ
+r
+=
+NℓQ
+B log2
+
+1 + gPC
+BN0
+.
+(8)
+Moreover, the energy consumption during the communication
+procedure amounts to
+Ecomm = PCTcomm =
+NℓQPC
+B log2
+
+1 + gPC
+BN0
+.
+(9)
+D. Problem Formulation
+With the considered edge inference task, sensing, commu-
+nication, and computation are entirely coupled and the ISCC
+jointly determines the achievable performance. To meet the
+urgent demand of high-accuracy and low-latency edge infer-
+ence, it is of great significance to explore an efficient resource
+management method at the resource-limited edge device and
+seek the optimal trade-offs among sensing, communication,
+and computation. The problem of resource allocation problem
+for the considered ISCC is formulated as follows:
+minimize
+ℓ,ρ,PS,PC,νe,Q Esen + Ecomp + Ecomm
+subject to C1 : Rp ≥Rt,
+C2 : Tsen + Tcomp,e + Tcomp,s + Tcomm ≤Tmax,
+C3 : ℓ∈L,
+C4 : ρ ∈(0, 1],
+C5 : PS, PC ≤Pmax,
+C6 : νe ≤νmax,
+C7 : Q ∈Z+,
+(10)
+where Rp denotes the inference accuracy, Rt is a hyper-
+parameter and denotes the target inference accuracy, Tmax
+is the maximum permitted latency, and Pmax and νmax de-
+note the maximum transmit power and computation capacity
+of the edge device, respectively. The maximum permitted
+latency Tmax is defined as the target latency minus other
+potential delays, such as queuing delay. It serves as the upper
+bound for the total latency of the sensing, communication,
+and computation processes. The problem in (10) aims at
+minimizing the energy consumption required to achieve the
+inference accuracy and latency requirements under constraints
+C1 and C2, through the joint optimization of splitting point,
+pruning ratio, power allocation, and the number of quantization
+bits. The remaining constraints, i.e., C2 −C7, correspond to
+realistic constraints on these optimization variables. Moreover,
+in the considered single-user scenario, the entire bandwidth is
+allocated to the edge device for data upload. This allocation
+improves communication capability by increasing the available
+bandwidth, thereby enhancing inference performance without
+incurring additional energy consumption.
+Through the formulated optimization problem in (10), we
+aim to achieve the optimal trade-offs from the following two
+perspectives.
+Latency trade-off: Given the assumption of fixed sensing
+time, we primarily consider the trade-off between communica-
+tion and computation from the perspective of latency. For edge
+devices with limited resource, we optimize the splitting point
+to adaptively adjust the computational and communication
+burdens on the device, thus achieving the optimal latency.
+Capability trade-off: To achieve the desired inference accu-
+racy, we strive to balance communication, sensing, and com-
+putation capabilities at the edge device, thereby minimizing
+the total energy consumption. Specifically, the sensing ability
+is adjusted through the sensing power, PS. Computational
+capability, which refers to the AI model’s ability to distinguish
+the input data samples, can be altered by adjusting the pruning
+rate ρ, with a larger ρ indicating a stronger model capability.
+Additionally, communication capability is measured by the
+number of quantization bits, Q, with higher quantization
+accuracy leading to more precise data transmission.
+6
+TABLE I
+SUMMARY OF MAIN NOTATIONS IN SECTION III
+Notation
+Definition
+f
+Ideal feature vector without error
+ˆf
+Received feature vector at the server
+e1
+Feature extraction error induced by model pruning
+e2
+Feature quantization error
+Wl
+Weight matrix associated with the l-th layer
+ˆ
+Wl
+Pruned version of Wl
+Nl
+Size of the output feature in the l-th layer
+Ml
+Number of parameters in Wl
+δ(PS, ℓ)
+Classification margin under sensing power PS and
+splitting point ℓ
+R0(PS)
+Ideal classification accuracy with error-free feature
+and sensing power PS
+s
+Lower bound for the minimum score of the obtained
+data samples
+III. INFERENCE ACCURACY CHARACTERIZATION
+To pave the way for solving the problem in (10), it is
+a prerequisite to provide an effective characterization of the
+inference accuracy with respect to the optimization variables
+in (10). For the ease of exposition, we take classification tasks
+as an example in the subsequent analysis, by examining the
+essential sources of inference errors, we derive a strict lower
+bound on classification accuracy, as well as a closed-form
+approximation of the bound. The main notations functions
+used in this section are listed in Table I.
+To begin with, we revisit the proposed approach in Fig. 2.
+Based on the split inference, we name the sub-models at
+the transmitter and receiver as feature extractor and classifier,
+respectively, according to their functions. Compared with the
+ideal case without model pruning and quantized transmission,
+the proposed approach suffers from two sources of errors,
+i.e., feature extraction error from the pruned model and
+quantization error. We respectively denote them as e1 and e2
+and then denote the received feature vector at the receiver as
+ˆf ≜f + e1 + e2, where f is the extracted feature in the ideal
+case.
+Next, we explore the theoretical impact of the errors in
+the received features on classification accuracy from the per-
+spective of the classifier. For effective characterization, we
+first introduce the concept of classification margin [43]. As
+depicted in Fig. 3, the classification margin represents the
+infimum of the distance from an arbitrary feature vector, f,
+to the classification boundary, which is related to the sensing
+quality and the learnt classifier. According to the definition
+of classification margin, a sufficient condition that the actual
+received feature ˆf remains to be correctly classified is
+∥f −ˆf∥2 ≤δ(PS, ℓ),
+(11)
+where δ(PS, ℓ) denotes the classification margin under sensing
+power PS and splitting point ℓ. Then, we are ready to derive an
+lower bound of the classification accuracy Rp in the following
+lemma.
+Class 1
+Classification boundary 
+of classifier 1
+Classification margin 𝛿
+Class 2
+Centroid
+Classification boundary 
+of classifier 2
+Discriminant gain
+Feature vector 𝐟
+Fig. 3. Geometry of classification margin under a classification problem.
+Lemma 1: The classification accuracy is lower bounded by
+Rp ≥R0(PS)
+ 
+1 −E
+
+∥e1∥2
++ E
+
+∥e2∥2
+δ2(PS, ℓ)
+!
+,
+(12)
+where R0(PS) denotes the ideal classification accuracy with
+sensing power PS, the expectation of ∥e1∥2 is taken over
+random input data samples, and the expectation of ∥e2∥2 is
+performed over the stochastic quantization error.
+Proof: According to the sufficient condition in (11), we
+have
+Rp ≥R0(PS) Pr
+n
+∥f −ˆf∥≤δ(PS, ℓ)
+o
+(a)
+≥R0(PS)
+ 
+1 −E
+
+∥e1 + e2∥2
+δ2(PS, ℓ)
+!
+(b)= R0(PS)
+ 
+1 −E
+
+∥e1∥2
++ E
+
+∥e2∥2
+δ2(PS, ℓ)
+!
+,
+(13)
+where the inequality in (a) comes from the Markov’s inequal-
+ity, and (b) is due to the independence between e1 and e2 and
+the fact that E[e2] = 0 [41]. This completes the proof.
+□
+Remark 1: Eq. (12) reveals the fundamental mechanism by
+which the communication, computation, and sensing processes
+affect the classification accuracy. Imperfections in computation
+and communication can be represented as additive noise,
+primarily impacting the accuracy of features extracted from
+data samples. In contrast, sensing quality determines the
+achievable classification accuracy and the robustness against
+additional errors. Therefore, the core of the joint resource
+allocation problem in (10) is to coordinate the sensing quality,
+computational error e1, and communication quantization error
+e2 under strict delay constraints to achieve desired accuracy.
+To proceeding, we need to further characterize the following
+terms, i.e., R0(PS), δ(PS, ℓ), E
+
+∥e1∥2
+and E
+
+∥e2∥2
+in
+Lemma 1. The details of these terms are elaborated in the
+sequel.
+1) R0(PS): Considering the lack of solid theory on the
+relationship between sensing quality and classification accu-
+racy, existing works mostly resort to qualitative analysis [28],
+[29]. In this paper, we therefore conduct qualitative analysis
+on R0(PS) and determine the functional relationship through
+simulation testing.
+7
+-20
+-10
+0
+10
+20
+30
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1
+Classification accuracy
+Fig. 4. Classification accuracy versus PS.
+In specific, higher sensing power allows key task-related
+features to be more accurately represented in the data x,
+thus improving inference accuracy. Conversely, under limited
+sensing power, the required echo signal becomes overwhelmed
+by noise, making it difficult for AI models to extract effective
+features for inference. Therefore, there is a positive correlation
+between the sensing power and classification accuracy. To
+further characterize this implicit relationship, we used an em-
+pirical function as an alternative. Fig. 4 depicts the relationship
+between the actual classification accuracy and the sensing
+power, PS. It is observed that the actual classification accuracy
+is well approximated by R0(PS) = a · arctan (bPS), where
+a > 0 and b > 0 are parameters to be fitted.
+2) δ(PS, ℓ): We rely on the lower bound in [44, Eq. (36)],
+i.e.,
+δ(PS, ℓ) ≥minx{s(x)}
+Q
+i∈C ∥Wi∥F
+≜
+s
+w(ℓ),
+(14)
+where s(x) represents the score of a data sample x, C ≜
+{ℓ+ 1, · · · , L}, and Wi is the weight matrix associated with
+the i-th layer. For data sample with label y, s(x) is defined by
+s(x) ≜min
+j̸=y
+√
+2(δy −δj)T f(x),
+(15)
+where f : RM →RN denotes the trained neural network and
+δj is the Kronecker delta vector with [δj]j = 1. The numerator
+in (14) represents the minimum score of the obtained data
+samples, which is lower bounded by a constant, denoted by
+s. Although the minimum score of the obtained data samples
+is closely related to the value of PS, for simplicity, we have
+adopted a universal lower bound as a substitute.
+3) Expected squared norm of e1: Given the unknown distri-
+bution characteristics, we cannot directly calculate E
+
+∥e1∥2
+.
+Hence, we resort to find its upper bound in the following
+lemma as an alternative.
+Lemma 2: The square norm of error vector e1 is upper
+bounded by
+∥e1∥2 ≤
+ℓ
+X
+l=1
+
+
+Wl−ˆ
+Wl
+
+2
+F
+ℓ
+Y
+l′=1,l′̸=l
+∥Wl′∥2
+F
+
+,
+(16)
+where ˆ
+Wl denotes the pruned version of Wl.
+Proof: Please refer to Appendix A.
+□
+By exploiting Lemma 2, we can straightforwardly derive
+a strict upper bound on E
+
+∥e1∥2
+under a given pruning
+strategy. Note that this bound is a constant given the weights
+in the DNN, and it corresponding to the magnitude ∥e1∥2 in
+the worst-case scenario. However, the functional relationship
+between the pruning ratio ρ and ∥e1∥2 is still perplexing
+and lacks a direct and concise form. This makes subsequent
+analysis and optimization challenging. To tackle this, we adopt
+a typical model pruning method as a representative, i.e.,
+weight magnitude based pruning. In concrete, all parameters
+are sorted by their absolute value, and the parameters with the
+smallest 1−ρ fraction are set to 0. Given the specific pruning
+strategy, we derive a proper approximation in the following
+proposition.
+Proposition 1: Under the weight magnitude based pruning,
+the upper bound in (16) can be approximated by a function of
+the pruning ratio, ρ, i.e.,
+∥e1∥2 ≲C(ℓ)
+ 2 −ρ −ρ(log ρ −1)2
+|
+{z
+}
+≜u(ρ)
+,
+(17)
+where C(ℓ) is defined by
+C(ℓ) ≜
+ℓ
+X
+l=1
+
+Ml
+λ2
+l
+ℓ
+Y
+l′̸=l
+∥Wl′∥2
+F
+
+,
+(18)
+Ml is the number of parameters in Wl, and λl is a constant
+introduced in Appendix B.
+Proof: Please refer to Appendix B.
+□
+4) Expected squared norm of e2: According to [41], with
+the stochastic quantization method, the expected squared norm
+of e2 is bounded by
+E
+
+∥e2∥2
+≤
+∆(ℓ)
+(2Q−1 −1)2 ≜∆(ℓ)v(Q),
+(19)
+where ∆(ℓ) is
+∆(ℓ)≜
+
+1
+4Nℓ+1(fmax−fmin)2
+if (ℓ+ 1)-th layer is MP,
+1
+4Nℓ(fmax−fmin)2
+otherwise.
+(20)
+It is important to note that if the layer following the splitting
+point is a maxpooling layer, the effective feature dimension
+impacting classification performance reduces. Consequently,
+∆(ℓ) depends on this actual feature dimension. In addition,
+due to the normalization operation in DNNs, the output
+features of each layer exhibit similar statistical characteristics.
+Therefore, it is reasonable to assume that (fmax −fmin)2
+remains consistent across different layers, allowing us to
+establish a universal upper bound through, e.g., simulation
+tests.
+Now, based on the obtained expressions in (12), (14), (16),
+and (19), we are ready to establish a strict lower bound, as
+well as an explicit and more tractable approximation, for the
+classification accuracy to optimize.
+8
+Enumerate ℓ
+Enumerate 𝑄
+Optimize 𝜌, 𝑃S
+Optimize 𝑃C, 𝜈e
+Inner iteration
+Converge?
+Y
+N
+Output solution
+Fig. 5. Logical diagram of the proposed algorithm for solving problem (22).
+IV. RESOURCE ALLOCATION OPTIMIZATION FOR ISCC
+In this section, we propose an iterative algorithm with
+low complexity to solve the energy minimization problem,
+which is highly nonconvex. To begin with, building upon the
+derived expressions in Section III, we explicitly rewrite the
+classification accuracy constraint as
+C1: R0(PS)
+
+1−w(ℓ)
+s
+(C(ℓ)u(ρ)+∆(ℓ)v(Q))
+
+≥Rt. (21)
+Then, the original problem in (10) is reformulated as
+minimize
+ℓ,ρ,PS,PC,νe,Q Esen + Ecomp + Ecomm
+subject to C1, C2 −C7.
+(22)
+Considering the challenge of tackling with the discrete con-
+straints of splitting point, ℓ, and the number of quantization
+bits, Q, we separate them from the optimization of other
+variables. For ℓ, it represents the feasible split points in the
+DNN model. The depth of DNN models is typically limited,
+and not every layer is a feasible cut layer, so the optimization
+of ℓonly requires traversing a finite set L. Similarly, for Q,
+we can set an upper limit Qmax. When Q ≥Qmax, it is
+safe to assume asymptotically error-free without quantization.
+Consequently, we only need to perform a finite search over the
+set {1, 2, · · · , Qmax} to determine the optimal Q. Therefore,
+a simple exhaustive search strategy suffices as an optimization
+approach for discrete variables ℓand Q, which does not
+introduce a significant increase in complexity1. This process is
+independent of the optimization of other variables and serves
+as the outer enumeration loop.
+For the remaining coupled continuous variables, i.e.,
+(ρ, PS, PC, νe), we optimize them using the alternating iter-
+ation method, which forms the inner iteration process shown
+in Fig. 5. Given that the variables (ρ, PS) are coupled in the
+classification accuracy constraint, C1, in (21), we provide a
+joint optimization for (ρ, PS) in Sec. IV-A. Moreover, (PC, νe)
+are irrelevant to the constraint of classification accuracy and
+hence their optimizations are naturally separated in Sec. IV-B.
+These two subproblems are alternately optimized to achieve a
+suboptimal solution for variables (ρ, PS, PC, νe). The detailed
+algorithmic process is illustrated in Fig. 5.
+1For larger DNN models, more advanced enumeration methods, such as the
+branch-and-bound technique [45], must be explored to reduce computational
+complexity.
+A. Optimization over (ρ, PS)
+Given (ℓ, Q) and (PC, νe), the problem in (22) reduces to
+minimize
+ρ,PS
+PSTsen + κν2
+e
+ℓ
+X
+l=1
+λ(l, ρ)
+subject to C2 :
+Pℓ
+l=1 λ(l, ρ)
+νe
+≤T1,
+C1, C4, C5,
+(23)
+where T1 ≜Tmax −Tsen −Tcomp,s −Tcomm. Now, we are able
+to get the optimal PS in the following lemma.
+Lemma 3: If problem (23) is feasible, the optimal solution,
+denoted by P ∗
+S , is
+P ∗
+S = r(u(ρ))
+(24)
+where
+r(·)
+represents
+the
+inverse
+function
+of
+s
+w(ℓ)C(ℓ)
+
+1 −
+Rt
+R0(PS)
+
+−∆(ℓ)v(Q)
+C(ℓ)
+with respect to PS.
+Proof: Since the classification accuracy monotonically im-
+proves with growing PS, the constraint C1 can be reformulated
+as PS ≥r(u(ρ)). Moreover, the objective function linearly
+increases with PS. Hence, the objective is minimized with the
+minimum feasible sensing power. The proof completes.
+□
+Substituting P ∗
+S in (24) into problem (23) and simplifying
+constraint C2, we have the problem equivalent to:
+minimize
+ρ
+Tsenr(u(ρ)) + κν2
+e
+ℓ
+X
+l=1
+λ(l, ρ)
+subject to 0 < ρ ≤ρmax,
+(25)
+where ρmax is the unique solution to equation
+Pℓ
+l=1 λ(l,ρ)
+νe
+=
+T1. Due to the implicit form of function r(·), the problem
+in (25) can not be directly solved via traditional gradient-
+based methods. To this end, we make the following assumption
+according to the sensing quality analysis in [36], which is
+further validated via the empirical analysis in Fig. 4.
+Assumption: The derivative of r(·) is monotonically non-
+decreasing.
+As PS increases, the quality of the generated spectrograms
+gradually saturates, leading to a diminishing improvement
+in the classification accuracy. This observation confirms the
+validity of this assumption. Now, we derive the following
+property of the objective function in problem (25).
+Theorem 1: The objective function in problem (25) is a
+unimodal function.
+Proof: By taking the derivative of the objective function
+and combining the Assumption, it is straightforward to verify
+that it is monotonically increasing. Therefore, the derivative of
+the objective in (25) has at most one zero point in the feasible
+domain, which completes the proof.
+□
+Then, we adopt the golden section optimization method for
+solving (25) due to its gradient-free characteristic. Also, for
+unimodal functions, it is well-known that the golden section
+search method always converges to the global optimal solution
+[46]. Hence, by applying the golden section search method,
+9
+Algorithm 1 Optimal solution to problem (23)
+Input: (ℓ, Q, PC, νe), Tsen, T1, Rt, {Wl}L
+l=1, κ, s, fmax, fmin,
+and R0(·)
+Ouput: (ρ∗, P ∗
+S )
+1: Initialize lb = ρmin, ub = 1, ϖ = −1+
+√
+5
+2
+and conver-
+gence accuracy ϵ.
+2: Update τ1 = lb+(1−ϖ)(ub−lb) and τ2 = lb+ϖ(ub−lb).
+3: while |τ1 −τ2| > ϵ do
+4:
+if h(τ1) < h(τ2) then
+5:
+Update ub = τ2.
+6:
+else
+7:
+Update lb = τ1.
+8:
+end if
+9:
+Update τ1 = lb + (1 −ϖ)ub and τ2 = ub + (1 −ϖ)lb.
+10: end while
+11: Obtain ρ∗= (lb+ub)/2 and update P ∗
+S according to (24).
+12: return (ρ∗, P ∗
+S )
+we can obtain the optimal ρ to problem (25). Detailed steps
+are summarized in Algorithm 1, where h(·) ≜Tsenr(u(·)) +
+κν2
+e
+Pℓ
+l=1 λ(l, ·).
+B. Optimization over (PC, νe)
+Given (ℓ, Q) and (ρ, PS), we formulate the optimization
+with respect to (PC, νe) as
+minimize
+PC,νe
+A1PC
+log2
+
+1 + gPC
+BN0
+ + κA2ν2
+e
+subject to
+A1
+log2
+
+1 + gPC
+BN0
+ + A2
+νe
+≤T2,
+C5, C6,
+(26)
+where A1
+≜
+NℓQ/B, A2
+≜
+Pℓ
+l=1 λ(l, ρ), and T2
+≜
+Tmax −Tcomp,s −Tsen are constants. Despite the nonconvexity
+of problem (26), we are fortunately able to derive the optimal
+solution in closed form in the following lemma.
+Lemma 4: The optimal solution (P ∗
+C, ν∗
+e ) of the problem in
+(26) satisfies
+P ∗
+C = BN0
+g
+
+2
+1
+t∗−1
+
+,
+ν∗
+e = min
+
+νmax,
+µ1
+2κ
+1/3
+,
+(27)
+where t∗is equal to
+t∗= max
+
+
+
+ln2
+W
+
+A1
+e
+
+µ1 −BN0
+g
+
++ 1
+, tmin
+
+
+,
+(28)
+µ1 is the solution to
+A1t∗+ A2
+ν∗e
+= T2,
+(29)
+tmin is a constant defined in Appendix C, and W(·) is the
+Lambert-W function. The exact value of µ1 is obtained via a
+bisection search.
+Proof: Please refer to Appendix C.
+□
+Algorithm 2 Proposed iterative algorithm for solving (22)
+Input: Tsen, Tmax, Rt, {Wl}L
+l=1, B, g, N0, κ, νs, s, fmax,
+fmin, and R0(·)
+Ouput: (ℓ, ρ, PS, PC, νe, Q)
+1: for ℓ∈L do
+2:
+for Q = 1 : Qmax do
+3:
+Initialize iteration number i = 0 and a sufficiently
+large P (0)
+C
+and ν(0)
+e
+to avoid infeasibility.
+4:
+repeat
+5:
+Update
+
+ρ(i+1), P (i+1)
+S
+
+by solving problem (23).
+6:
+Update (P (i+1)
+C
+, ν(i+1)
+e
+) according to Lemma 4.
+7:
+Set i = i + 1.
+8:
+until objective value in (22) converges.
+9:
+end for
+10: end for
+11: return
+the solution (ℓ, ρ, PS, PC, νe, Q) with the mini-
+mum energy consumption.
+TABLE II
+SIMULATION PARAMETERS
+Notation
+Interpretation
+Value
+Rt
+Target classification accuracy
+0.85
+Tmax
+Maximum permitted latency
+0.8 s
+νmax
+Maximum CPU frequency of edge device
+8e6 FLOP/s
+νs
+CPU frequency of the server
+1e11 FLOP/s
+κ
+The effective switched capacitance
+1e-21
+T0
+Chirp duration
+10 µs
+fs
+Sampling rate
+10 MHz
+Tsen
+Unit sensing time
+0.5 s
+Pmax
+Maximum transmit power of edge device
+1 W
+B
+Available bandwidth for communication
+0.1 MHz
+g
+BN0
+SNR for communication
+20 dB
+C. Complexity and Convergence Analysis
+In summary, we conclude the main steps of solving problem
+(22) in Algorithm 2. We first analyze its computational com-
+plexity. For the first subproblem in (23), the major complexity
+lies in the golden section search method, those complexity
+equals O (log2(1/ϵ)). Besides, for the second subproblem in
+(26), the complexity depends on the bisection method with
+complexity O (log2(1/ϵ)). Thus, the total complexity of Al-
+gorithm 2 is O (|L|QmaxIitr log2(1/ϵ)), where Iitr denotes the
+required number of iterations for the alternative optimization.
+As for the convergence, we note that the optimal solutions
+to the problems in (23) and (26) are attainable by the proposed
+algorithms, which yield to nonincreasing energy consumption
+in each step. Moreover, the total energy consumption is always
+lower bounded by a finite value, e.g., zero. Hence, we conclude
+that the proposed algorithm for optimizing (ρ, PS, PC, νe)
+always converges to a local optimum.
+V. EXPERIMENTAL RESULTS
+In this section, numerical simulations are presented to vali-
+date the analytical results and the proposed resource allocation
+scheme. We consider a typical human motion recognition task
+via ISCC at the edge device. Specifically, this task aims at
+10
+𝐱
+Conv layer
+BN layer
+ReLU layer
+MP layer
+Flatten layer
+FC layer
+Softmax
+Result
+Fig. 6. Details of the adopted network.
+distinguishing five human motions, i.e., standing, adult pacing,
+adult walking, child pacing, and child walking. We exploit the
+typical wireless sensing simulator in [47] to generate datasets
+for the DNN pre-training and data samples for edge inference.
+The differences in the five human motions primarily lie in
+height and movement speed. In particular, the heights of adults
+and children are uniformly distributed in the ranges [1.6m,
+1.9m] and [0.9m, 1.2m], respectively. Additionally, the speeds
+for standing, walking, and pacing are set at 0 m/s, 0.5H m/s,
+and 0.25H m/s, respectively, where H denotes the height. The
+heading of the moving human is uniformly distributed in the
+range [−π, π].
+The adopted AI model for inference task is a DNN with two
+5×5 convolution layers, three fully-connected layer with 120,
+60, and 5 units, respectively, and a softmax output layer. Max
+pooling operation is conducted following each convolutional
+layer and the activation function is ReLU. The details of
+the adopted DNN is shown in Fig. 6. The model is trained
+based on a training dataset with 12,000 data samples with no
+noise corruption and a testing dataset with 3,000 data samples.
+Unless otherwise specified, the other parameters are listed in
+Table II.
+For comparison, we consider the following baselines regard-
+ing the ISCC design and the corresponding resource allocation
+method.
+• On-server inference: The edge device upload all raw
+sensory data to the server and the inference task is fully
+accomplished at the server.
+• Advanced on-device inference: The inference task is fully
+computed at the edge device and no communication
+procedure is involved. Also, model pruning strategy is
+conducted to improve energy efficiency.
+• w/o pruning: Except for the no feature extractor pruning,
+everything else is consistent with the proposed method.
+• Typical ISCC framework [28], [29]: Principal component
+analysis (PCA) is adopted at the edge device for feature
+extraction and fixed classifier is deployed at the server.
+• Joint Communication and Computation (JC&C) design
+[35], [48]: This scheme focuses solely on the joint opti-
+mization of communication and computation processes,
+including model splitting, model pruning, and adaptive
+feature quantization. The sensing process is not consid-
+ered and is treated as a fixed input.
+Among them, the first and second baselines serve as ablation
+experiments for the splitting selection in the proposed method,
+while the third baseline is an ablation experiment for model
+-1
+-0.5
+0
+0.5
+1
+Weight
+0
+0.2
+0.4
+0.6
+0.8
+1
+CDF
+Conv 1
+Approx. Conv 1
+Conv 2
+Approx. Conv 2
+FC 1
+Approx. FC 1
+FC 2
+Approx. FC 2
+Fig. 7. Laplacian approximation for pre-trained model parameters.
+0
+0.5
+1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+Classification accuracy
+Monte-carlo result
+Lower bound from (37)
+Approximation in (17)
+(a)
+2
+3
+4
+5
+6
+0.79
+0.8
+0.81
+0.82
+0.83
+0.84
+0.85
+0.86
+Classification accuracy
+Monte-carlo result
+Lower bound in (19)
+(b)
+Fig. 8. Classification accuracy versus (a) the pruning ratio, ρ, and (b) the
+number of quantization bits, Q.
+pruning. Additionally, by comparing with the typical ISCC
+framework, we aim to highlight the significance of optimiza-
+tion design for computational processes, such as adaptive
+model splitting and pruning. Meanwhile, compared to existing
+frameworks that focus solely on computation and communi-
+cation, the importance of sensing design is emphasized.
+A. Classification Accuracy Approximation Performance
+We validate the approximations in Proposition 1 in Fig. 7
+and Fig. 8. Initially, we present the cumulative distribution
+function (CDF) of the model parameters across various layers.
+It is observed that the Laplace distribution employed in this
+study effectively approximates the parameter distribution in
+different layers of the pre-trained DNN, particularly in layers
+with a significant number of parameters, such as the second
+Conv layer and the first FC layer. This precise approximation
+of the weight distribution establishes a solid foundation for
+that subsequent theoretical analyses. Then, we verify the
+analysis regarding the pruning ratio, ρ. It is noteworthy that
+the lower bound we provide can effectively characterize the
+impact mechanism of various optimization variables on the
+classification accuracy and discern their trends. However,
+excessive scaling may lead to the final lower bound being
+much lower than the actual classification accuracy. To address
+11
+0.6
+0.7
+0.8
+0.9
+1
+1.1
+1.2
+Target latency (s)
+0.02
+0.04
+0.06
+0.08
+0.1
+Energy consumption (J)
+Proposed method
+Advanced on-device inference
+On-server inference
+w/o prunning
+Typical ISCC framework
+JC&C design
+Fig. 9. Energy consumption versus the target latency, Tmax.
+this, we introduce a compensation constant for scaling the
+classification margin and it is determined numerically. As de-
+picted in Fig. 8(a), the derived approximation with scaling also
+aligns well with the actual curve obtained from Monte Carlo
+verification. It is evident that the parameters of the pre-trained
+DNN exhibit a degree of redundancy, allowing for pruning up
+to 50% without significant performance loss in classification.
+This observation supports the pruning of DNNs to strike a
+balance between computational complexity and classification
+accuracy. Finally, we validate the analysis of the impact of
+quantization bits, Q, on classification in Fig. 8(b). It can be
+observed that the performance loss caused by quantization
+errors is negligible, especially compared to that by model
+pruning. Therefore, we are suggested to perform low-precision
+quantization on the extracted features to greatly reduce the
+communication overhead with marginal performance loss,
+thereby facilitating the energy-efficient ISCC design.
+B. Energy Consumption Performance
+Fig. 9 depicts the total energy consumption versus the
+maximum tolerant latency, Tmax. It is observed that the
+proposed resource allocation method achieves the least energy
+consumption under diverse latency requirements. When faced
+with extremely low latency requirements, such as Tmax = 0.6
+s, some baseline methods fail to complete inference tasks
+within the deadline. This is mainly due to the lack of adaptive
+adjustments for communication and computation overheads. In
+such cases, optimizing only the communication and computa-
+tion processes in JC&C scheme approaches the performance
+of the proposed method. This is because the proposed method
+does not optimize sensing time, necessitating an improvement
+in sensing quality to mitigate performance loss caused by
+incomplete communication and computation. Fixing a high
+sensing power is an energy-efficient choice in this case. Con-
+versely, under more lenient latency constraint, executing the
+inference task locally is preferred. This is attributed to latency
+no longer being the primary limiting factor, thereby obviating
+the necessity for the server’s powerful computing capabilities
+and avoiding the additional power consumption associated
+with the communication process. Notably, the JC&C method
+0.8
+0.82
+0.84
+0.86
+0.88
+0.9
+0.92
+0.94
+Classification accuracy
+0.02
+0.04
+0.06
+0.08
+0.1
+0.12
+Energy consumption (J)
+Proposed method
+Advanced on-device inference
+On server inference
+w/o pruning
+Typical ISCC framework
+JC&C design
+Fig. 10. Energy consumption versus the target classification accuracy, Rt.
+8
+9
+10
+11
+12
+13
+14
+15
+16
+SNR (dB)
+0.02
+0.03
+0.04
+0.05
+0.06
+0.07
+0.08
+0.09
+0.1
+0.11
+Energy consumption (J)
+Proposed method
+Advanced on-device inference
+On-server inference
+w/o pruning
+Typical ISCC framework
+JC&C design
+Fig. 11. Energy consumption versus SNR.
+exhibits the highest energy consumption in this scenario due
+to its lack of the consideration for sensing process. The sim-
+ulation results emphasize the necessity of jointly optimizing
+sensing, communication, and computation for energy-efficient
+inference. They further highlight the proposed scheme’s ad-
+vantages in adaptively adjusting resource allocation strategies
+based on task requirements
+In Fig. 10, we show the comparison of energy consump-
+tion with target classification accuracy Rt. It is evident that
+achieving more accurate classification results in higher energy
+consumption. Meanwhile, our proposed algorithm also out-
+performs the other baselines. Besides, as the target accuracy
+increases, it becomes apparent that performing complete infer-
+ence tasks at the edge device consumes the most energy. This
+is due to the fact that, compared to limited quantization errors,
+model pruning has a more pronounced effect on classification
+accuracy. To attain the desired classification accuracy, more
+resources must be allocated to compensate for the performance
+degradation caused by pruning errors. In addition, it is ob-
+served that under a high accuracy target, performing inference
+tasks at the server results in nearly the minimal energy
+consumption. This is because low-precision quantization can
+effectively reduce transmission latency without substantially
+compromising classification performance. Therefore, in sce-
+12
+TABLE III
+COMPARISON OF OPTIMAL PARAMETER SETTINGS UNDER DIFFERENT SCENARIOS.
+Scenarios
+Optimal parameter settings
+ℓ
+Q
+ρ
+PS (W)
+PC (W)
+νe (1e6 FLOP/s)
+Latency-constrained
+5
+5
+0.3425
+0.0189
+0.0907
+7.2871
+Accuracy-constrained
+9
+3
+0.7409
+0.0623
+0.0169
+2.6703
+SNR-constrained
+11
+2
+0.6741
+0.0145
+0.1527
+2.5698
+narios with a strict latency constraint and high classification
+accuracy requirements, the optimal strategy typically involves
+allocating resources for sensing and communication processes.
+Fig. 11 shows the impact of SNR on energy consump-
+tion, which further reflects the impact of communication
+capability. The strategy of completing all computation on
+the edge device does not involve communication process, so
+the energy consumption in this scenario remains invariant.
+Additionally, a higher SNR leads to a significant decrease in
+energy consumption for the other schemes. The substantial
+improvement in communication capability and efficiency due
+to increased SNR prompts the optimal strategy to upload
+more data to the server for further computation. This explains
+the asymptotic optimal performance of server-based inference
+under high SNR conditions. Additionally, it is worth noting
+that the typical ISCC framework in [28], [29] can be seen
+as a special case of the on-server inference method, where
+additional dimensionality reduction is achieved through PCA.
+Hence, we observe that this method shows certain performance
+gains compared to the on-server inference approach, yet it
+still maintains a similar trend of change. By comparing with
+it, we further emphasize the necessity of optimizing for the
+computational process in the proposed method, especially in
+communication-constrained scenarios.
+To further reveal the fundamental trade-offs, we show
+the optimal parameter settings obtained via the proposed
+resource allocation method under different scenarios in Ta-
+ble III. In particular, we consider three typical scenarios,
+i.e., latency-constrained (Rt, Tmax, SNR) = (0.8, 0.6, 100),
+accuracy-constrained (Rt, Tmax, SNR) = (0.94, 1.2, 100), and
+SNR-constrained (Rt, Tmax, SNR) = (0.8, 1.2, 1) scenarios.
+To achieve low-latency requirements, extensive reduction of
+redundant parameters is crucial as it significantly enhances
+computational speed. In scenarios requiring high classification
+accuracy, augmenting sensing capabilities and improving the
+quality of data samples become paramount. This is because
+the quality of sensing sets the upper limit for achievable
+classification accuracy. In scenarios constrained by communi-
+cation resources, maximizing computation at the edge device
+is essential to achieve data uploads minimization. Moreover,
+as the split point moves further along the network, the
+required quantization accuracy decreases. This is because,
+after multiple layers of computation, the extracted features
+become increasingly distinct and robust to quantization errors,
+resulting in minimal loss in inference accuracy even with lower
+quantization precision.
+VI. CONCLUSION
+In this paper, we considered the energy-efficient ISCC
+design for edge inference. A joint resource allocation problem,
+including the optimization of power allocation, splitting de-
+sign, pruning ratio and quantization precision, was formulated
+to minimize the energy consumption at the edge device with
+classification accuracy and latency requirements. The simula-
+tion results verified the effectiveness of the proposed ISCC
+design and confirmed its superiority over baseline approaches,
+especially with stringent latency constraint. Moreover, it is
+suggested that improving sensing qualities is preferred to en-
+hance classification accuracy. Further, extending the proposed
+approach to multi-device collaborative inference scenarios is
+a promising direction for future work.
+APPENDIX A
+PROOF OF LEMMA 2
+As a preparation, we first represent the trained feature
+extractor as follows
+fe(x) = Wℓσ (Wℓ−1σ (· · · W2σ (W1x)))
+(30)
+where σ denotes the ReLU activation. Moreover, we can also
+represent the pruned feature extractor in a similar form
+ˆfe(x) = ˆ
+Wℓσ
+
+ˆ
+Wℓ−1σ
+
+· · · ˆ
+W2σ
+
+ˆ
+W1x
+
+.
+(31)
+Now, we can reformulate the square norm of e1 in (32)
+on the top of this page, where (a) is due to the triangle
+inequality and the Cauchy-Schwarz inequality, (b) is due to the
+1-Lipschitzness of ReLU activation with respect to ℓ2 norm.
+For the first term on the right hand side (RHS) of (32), by
+exploiting the fact that ∥Wx∥≤∥W∥F ∥x∥, we have
+Wℓ−ˆ
+Wℓ
+
+2
+F ∥Wℓ−1σ (· · · W2σ (W1x))∥2
+≤
+Wℓ−ˆ
+Wℓ
+
+2
+F
+ ℓ−1
+Y
+l=1
+∥Wl∥2
+F
+!
+∥x∥2.
+(33)
+Then, following the same procedures in (32) and (33), ∥e1∥2
+is bounded by (34) on the top of the next page, where (a) is
+due to the fact that ∥ˆ
+Wl∥2 ≤∥Wl∥2. The proof completes.
+APPENDIX B
+PROOF OF PROPOSITION 1
+Since ρ only affects the first term of the upper bound in
+(16),
+Wl−ˆ
+Wl
+
+2
+F , and it does not impact the second term,
+we retain the second term while approximating only the first
+13
+∥e1∥2 = ∥fe(x) −ˆfe(x)∥2 =
+Wℓσ (Wℓ−1σ (· · · W2σ (W1x))) −ˆ
+Wℓσ
+
+ˆ
+Wℓ−1σ
+
+· · · ˆ
+W2σ
+
+ˆ
+W1x
+
+2
+=
+Wℓσ (Wℓ−1σ (· · · W2σ (W1x))) −ˆ
+Wℓσ (Wℓ−1σ (· · · W2σ (W1x)))
++ ˆ
+Wℓσ (Wℓ−1σ (· · · W2σ (W1x))) −ˆ
+Wℓσ
+
+ˆ
+Wℓ−1σ
+
+· · · ˆ
+W2σ
+
+ˆ
+W1x
+
+2
+(a)
+≤
+Wℓ−ˆ
+Wℓ
+
+2
+F ∥σ (Wℓ−1σ (· · · W2σ (W1x)))∥2
++ ∥ˆ
+Wℓ∥2
+F
+σ (Wℓ−1σ (· · · W2σ (W1x)))−σ
+
+ˆ
+Wℓ−1σ
+
+· · · ˆ
+W2σ
+
+ˆ
+W1x
+
+2
+(b)
+≤
+Wℓ−ˆ
+Wℓ
+
+2
+F ∥Wℓ−1σ (· · · W2σ (W1x))∥2+∥ˆ
+Wℓ∥2
+F
+Wℓ−1σ (· · · W2σ (W1x))−ˆ
+Wℓ−1σ
+
+· · · ˆ
+W2σ
+
+ˆ
+W1x
+
+2
+.
+(32)
+∥e1∥2 (a)
+≤
+Wℓ−ˆ
+Wℓ
+
+2
+F
+ ℓ−1
+Y
+l=1
+∥Wl∥2
+F
+!
+∥x∥2+∥Wℓ∥2
+F
+Wℓ−1σ (· · · W2σ (W1x))−ˆ
+Wℓ−1σ
+
+· · · ˆ
+W2σ
+
+ˆ
+W1x
+
+2
+≤
+ℓ
+X
+l=1
+Wl−ˆ
+Wl
+
+2
+F
+
+Y
+l′̸=l
+∥Wl∥2
+F
+
+∥x∥2
+(34)
+term for improved precision. By defining dl =
+Wl −ˆ
+Wl
+
+2
+F
+and combining the adopted pruning strategy, we have
+E [dl] = E
+
+
+⌊(1−ρ)Ml⌋
+X
+k=1
+w2
+(k)
+
+=
+⌊(1−ρ)Ml⌋
+X
+k=1
+E
+h
+x2
+(k)
+i
+,
+(35)
+where the expectation is taken over the DNN weights, w(k)
+represents the element with the k-th smallest absolute value
+in matrix Wl and x(k) ≜|w(k)|. Before calculating the
+expectations in (35), we need a probability distribution that
+fits the weights in Wl. According to [39], the Laplacian
+distribution with zero mean can be a good fit for pretrained
+network weights. Hence, any wk in matrix Wl is assumed
+Laplacian distributed with its absolute value xk
+= |wk|
+follows the exponential distribution with parameter λl, i.e.,
+xk ∼Exp(λl). Moreover, based on the definition of x(k),
+the sequence {x(k)}Ml
+k=1 is an ordered version of {xk}Ml
+k=1.
+Building upon the theory of order statistics in [49], we rewrite
+x(k) into the statistically equivalent form
+x(k) = 1
+λl
+k
+X
+j=1
+zj
+Ml −k + 1,
+(36)
+where zj are independent and identically distributed standard
+exponential random variable. Then, we have
+E
+h
+x2
+(k)
+i
+= E
+
+
+
+1
+λl
+k
+X
+j=1
+zj
+Ml −k + 1
+
+
+2
+
+= 2
+λ2
+l
+k
+X
+j=1
+1
+(Ml −j + 1)2
++ 1
+λ2
+l
+k
+X
+j=1
+k
+X
+j′̸=j
+1
+(Ml −j + 1)(Ml −j′ + 1). (37)
+Plugging (37) into (35), we arrive at the exact value of E [dl].
+However, it still exhibits a complicated form and hinders
+further design. Note that E [dl] is only related to the pruning
+ratio ρ. Hence, we define the following function
+f(ρ)≜
+⌊(1−ρ)Ml⌋
+X
+k=1
+
+
+
+k
+X
+j=1
+1
+(Ml−j+1)2 +
+
+
+k
+X
+j=1
+1
+Ml−j+1
+
+
+2
+
+,
+(38)
+and E [dl] =
+1
+λ2
+l f(ρ). Then, our goal is to find an accurate
+approximation with a concise form for f(ρ).
+Defining ∆ρ ≜
+1
+Ml , we have
+f(ρ + ∆ρ) −f(ρ) = −
+⌊(1−ρ)Ml⌋
+X
+j=1
+1
+(Ml −j + 1)2
+−
+
+
+⌊(1−ρ)Ml⌋
+X
+j=1
+1
+Ml −j + 1
+
+
+2
+.
+(39)
+For the first term on RHS of (39), we have
+⌊(1−ρ)Ml⌋
+X
+j=1
+1
+(Ml −j + 1)2 ≤
+⌊(1−ρ)Ml⌋
+X
+j=1
+1
+(Ml −j + 1)(Ml −j)
+=
+⌊(1−ρ)Ml⌋
+X
+j=1
+1
+Ml −j −
+1
+Ml −j + 1
+=
+1
+⌈ρMl⌉−1
+Ml
+.
+(40)
+As for the second term on RHS of (39), we adopt the
+approximation in Eq. (0.131) of [50] and get
+
+
+⌊(1−ρ)Ml⌋
+X
+j=1
+1
+Ml −j + 1
+
+
+2
+≈
+
+log
+
+Ml
+ρMl + 1
+2
+.
+(41)
+14
+Now, according to the above results and by definition, we can
+calculate the derivative of f(ρ) with respect to ρ as
+f ′(ρ) = lim
+∆ρ→0
+f(ρ + ∆ρ) −f(ρ)
+∆ρ
+=
+lim
+Ml→∞
+f(ρ + ∆ρ) −f(ρ)
+∆ρ
+≈
+lim
+Ml→∞−
+Ml
+⌈ρMl⌉−Ml
+
+log
+
+Ml
+ρMl + 1
+2
++ 1
+= ρ −1
+ρ
+−Ml log2 ρ.
+(42)
+Moreover, noting that f(1) = 0 and by performing indefinite
+integration, we have
+f(ρ) ≈−2Mlρ−Mlρ log2 ρ+2Mlρ log ρ+ρ−log ρ+2Ml−1
+≈Ml
+ 2 −ρ −ρ(log ρ −1)2
+,
+(43)
+where the second approximation holds when Ml ≫1. Then,
+using its expectation, we can approximate dl by
+dl ≈Ml
+λ2
+
+2 −ρ −ρ (log ρ −1)2
+.
+(44)
+Due to the law of large numbers, as the number of parameters
+increases, the error in this approximation gradually decreases,
+leading to a more accurate approximation. Substituting (44)
+into (16), we obtain (17) and complete the proof.
+APPENDIX C
+PROOF OF LEMMA 4
+To tackle with the nonconvex objective, we introduce a new
+variable t to replace PC and it follows t =
+1
+log2
+
+1+
+gPC
+BN0
+.
+Furthermore, we express PC as a function with respect to t, i.e.,
+PC = BN0
+g
+
+2
+1
+t −1
+
+, and the problem in (26) is equivalently
+reformulated as
+minimize
+t,νe
+A1BN0
+g
+
+2
+1
+t −1
+
+t + κA2ν2
+e
+subject to A1t + A2
+νe
+≤T2,
+t ≥tmin, C6,
+(45)
+where tmin ≜
+1
+log2
+
+1+ gPmax
+BN0
+. Now, the problem in (45)
+exhibits a convex form and can be optimally solved by
+checking the KKT conditions. To this end, we express the
+Lagrangian function of (45) as
+L(t, νe) =A1BN0
+g
+
+2
+1
+t −1
+
+t+κA2ν2
+e +µ1
+
+A1t+ A2
+νe
+−T2
+
++ µ2(tmin −t) + µ3(νe −νmax),
+(46)
+where µ1, µ2, and µ3 are Lagrange multipliers associated with
+the constraints in (45), respectively. The KKT conditions can
+be listed as follows
+∂L(t, νe)
+∂t
+= A1BN0
+g
+ 
+2
+1
+t −ln22
+1
+t
+t −1
+!
++ µ1A1 −µ2 =0,
+(47)
+∂L(t, νe)
+∂νe
+= 2κA2νe −µ1A2
+ν2e
++ µ3 = 0,
+(48)
+µ1
+
+A1t+ A2
+νe
+−T2
+
+= 0,
+(49)
+µ2(tmin −t) = 0,
+(50)
+µ3(νe −νmax) = 0,
+(51)
+µ1, µ2, µ3 ≥0.
+(52)
+We start with the equality in (51). If µ2 > 0, we have t = tmin.
+On the other hand, if µ2 = 0, the value of t can be determined
+by equality (48), which µ1 is an unknown constant. Combining
+the two cases, we arrive at the general expression in (28).
+Similar to the above steps, by checking the equations in (49)
+and (52), we can express the optimal ν∗
+e in (27). To further
+determine the value of µ1, we substitute the optimal t∗and ν∗
+e
+into equation (50). Since the RHS of (50) is monotonic, we
+can find the unique µ1 via the bisection method. The proof
+completes.
+REFERENCES
+[1] J. Jin, K. Yu, J. Kua, N. Zhang, Z. Pang, and Q.-L. Han, “Cloud-
+fog automation: Vision, enabling technologies, and future research
+directions,” IEEE Trans. Ind. Informat., vol. 20, no. 2, pp. 1039–1054,
+Feb. 2024.
+[2] C. Lu et al., “Real-time wireless sensor-actuator networks for industrial
+cyber-physical systems,” Proc. IEEE, vol. 104, no. 5, pp. 1013–1024,
+May 2016.
+[3] K. Zhang et al., “Advancements in industrial cyber-physical systems: An
+overview and perspectives,” IEEE Trans. Ind. Informat., vol. 19, no. 1,
+pp. 716–729, Jan. 2023.
+[4] W. Xu et al., “Edge learning for B5G networks with distributed signal
+processing: Semantic communication, edge computing, and wireless
+sensing,” IEEE J. Sel. Topics Signal Process., vol. 17, no. 1, pp. 9–
+39, Jan. 2023.
+[5] T. Zonta et al., “Predictive maintenance in the industry 4.0: A systematic
+literature review,” Comput. & Ind. Eng., vol. 150, p. 106889, Dec. 2020.
+[6] L. Lyu, J. Jin, S. Rajasegarar, X. He, and M. Palaniswami, “Fog-
+empowered anomaly detection in IoT using hyperellipsoidal clustering,”
+IEEE Internet Things J., vol. 4, no. 5, pp. 1174–1184, Oct. 2017.
+[7] A. Bousdekis, K. Lepenioti, D. Apostolou, and G. Mentzas, “A review
+of data-driven decision-making methods for industry 4.0 maintenance
+applications,” Electronics, vol. 10, no. 7, p. 828, 2021.
+[8] G. Zhu et al., “Pushing AI to wireless network edge: An overview on
+integrated sensing, communication, and computation towards 6G,” Sci.
+China Inf. Sci., vol. 66, no. 3, pp. 1–19, Feb. 2023.
+[9] W. Shi, W. Xu, X. You, C. Zhao, and K. Wei, “Intelligent reflection
+enabling technologies for integrated and green Internet-of-Everything
+beyond 5G: Communication, sensing, and security,” IEEE Wireless
+Commun., vol. 30, no. 2, pp. 147–154, Apr. 2023.
+[10] G. Zhu, D. Liu, Y. Du, C. You, J. Zhang, and K. Huang, “Toward
+an intelligent edge: Wireless communication meets machine learning,”
+IEEE Commun. Mag., vol. 58, no. 1, pp. 19–25, Jan. 2020.
+[11] W. Xu, Y. Huang, W. Wang, F. Zhu, and X. Ji, “Toward ubiquitous and
+intelligent 6G networks: From architecture to technology,” Sci. China
+Inf. Sci., vol. 66, no. 3, p. 130300, Feb. 2023.
+[12] Z. Yang, M. Chen, W. Saad, C. S. Hong, and M. Shikh-Bahaei, “Energy
+efficient federated learning over wireless communication networks,”
+IEEE Trans. Wireless Commun., vol. 20, no. 3, pp. 1935–1949, Mar.
+2021.
+[13] J. Yao, Z. Yang, W. Xu, M. Chen, and D. Niyato, “GoMORE: Global
+model reuse for resource-constrained wireless federated learning,” IEEE
+Wireless Commun. Lett., vol. 12, no. 9, pp. 1543–1547, Sept. 2023.
+[14] J. Yao, Z. Yang, W. Xu, D. Niyato, and X. You, “Imperfect CSI: A key
+factor of uncertainty to over-the-air federated learning,” IEEE Wireless
+Commun. Lett., vol. 12, no. 12, pp. 2273–2277, Dec. 2023.
+[15] W. Shi, J. Yao, J. Xu, W. Xu, L. Xu, and C. Zhao, “Empowering over-
+the-air personalized federated learning via RIS,” Sci. China Inf. Sci.,
+2024.
+[16] F. Foukalas and A. Tziouvaras, “Edge artificial intelligence for industrial
+internet of things applications: An industrial edge intelligence solution,”
+IEEE Ind. Electron. Mag., vol. 15, no. 2, pp. 28–36, Jun. 2021.
+[17] J. Shao and J. Zhang, “Communication-computation trade-off in
+resource-constrained edge inference,” IEEE Commun. Mag., vol. 58,
+no. 12, pp. 20–26, Dec. 2020.
+15
+[18] J. Lee, H. Lee, and W. Choi, “Wireless channel adaptive DNN split
+inference for resource-constrained edge devices,” IEEE Commun. Lett.,
+vol. 27, no. 6, pp. 1520–1524, Jun. 2023.
+[19] J. Yan, S. Bi, and Y.-J. A. Zhang, “Optimal model placement and online
+model splitting for device-edge co-inference,” IEEE Trans. Wireless
+Commun., vol. 21, no. 10, pp. 8354–8367, Oct. 2022.
+[20] E. Li, L. Zeng, Z. Zhou, and X. Chen, “Edge AI: On-demand acceler-
+ating deep neural network inference via edge computing,” IEEE Trans.
+Wireless Commun., vol. 19, no. 1, pp. 447–457, Jan. 2020.
+[21] Z. Liu, Q. Lan, and K. Huang, “Resource allocation for multiuser edge
+inference with batching and early exiting,” IEEE J. Sel. Areas Commun.,
+vol. 41, no. 4, pp. 1186–1200, Apr. 2023.
+[22] J. Shao, Y. Mao, and J. Zhang, “Task-oriented communication for mul-
+tidevice cooperative edge inference,” IEEE Trans. Wireless Commun.,
+vol. 22, no. 1, pp. 73–87, Jan. 2023.
+[23] Q. Lan, Q. Zeng, P. Popovski, D. G¨und¨uz, and K. Huang, “Progressive
+feature transmission for split classification at the wireless edge,” IEEE
+Trans. Wireless Commun., vol. 22, no. 6, pp. 3837–3852, Jun. 2023.
+[24] D. Wen, X. Li, Y. Zhou, Y. Shi, S. Wu, and C. Jiang, “Integrated sensing-
+communication-computation for edge artificial intelligence,” IEEE Inter-
+net Things Mag., vol. 7, no. 4, pp. 14–20, Jul. 2024.
+[25] F. Liu et al., “Integrated sensing and communications: Toward dual-
+functional wireless networks for 6G and beyond,” IEEE J. Sel. Areas
+Commun., vol. 40, no. 6, pp. 1728–1767, Jun. 2022.
+[26] Z. He et al., “Full-duplex communication for ISAC: Joint beamforming
+and power optimization,” IEEE J. Sel. Areas Commun., vol. 41, no. 9,
+pp. 2920–2936, Sept. 2023.
+[27] Y. He, G. Yu, Y. Cai, and H. Luo, “Integrated sensing, computation,
+and communication: System framework and performance optimization,”
+IEEE Tran. Wireless Commun., vol. 23, no. 2, pp. 1114–1128, Feb. 2024.
+[28] D. Wen, P. Liu, G. Zhu, Y. Shi, J. Xu, Y. C. Eldar, and S. Cui, “Task-
+oriented sensing, computation, and communication integration for multi-
+device edge AI,” IEEE Trans. Wireless Commun., vol. 23, no. 3, pp.
+2486–2502, Mar. 2024.
+[29] D. Wen, X. Jiao, P. Liu, G. Zhu, Y. Shi, and K. Huang, “Task-oriented
+over-the-air computation for multi-device edge AI,” IEEE Trans. Wire-
+less Commun., vol. 23, no. 3, pp. 2039–2053, Mar. 2024.
+[30] Z. Zhuang, D. Wen, Y. Shi, G. Zhu, S. Wu, and D. Niyato, “Integrated
+sensing-communication-computation for over-the-air edge AI inference,”
+IEEE Trans. Wireless Commun., vol. 23, no. 4, pp. 3205–3220, Apr.
+2024.
+[31] X. Chen, K. B. Letaief, and K. Huang, “On the view-and-channel
+aggregation gain in integrated sensing and edge AI,” IEEE J. Sel. Areas
+Commun., vol. 42, no. 9, pp. 2292–2305, Sept. 2024.
+[32] X. Jiao, D. Wen, G. Zhu, W. Jiang, W. Luo, and Y. Shi, “Task-oriented
+over-the-air computation for edge-device co-inference with balanced
+classification accuracy,” IEEE Trans. Veh. Techn., vol. 73, no. 11, pp.
+17 818–17 823, Nov. 2024.
+[33] Y. Mao, X. Yu, K. Huang, Y.-J. Angela Zhang, and J. Zhang, “Green
+edge AI: A contemporary survey,” Proc. IEEE, vol. 112, no. 7, pp. 880–
+911, Jul. 2024.
+[34] S. Liu, D. Wen, D. Li, Q. Chen, G. Zhu, and Y. Shi, “Energy-efficient
+optimal mode selection for edge AI inference via integrated sensing-
+communication-computation,” IEEE Trans. Mobile Comput., vol. 23,
+no. 12, pp. 14 248–14 262, Dec. 2024.
+[35] M. Krouka, A. Elgabli, C. B. Issaid, and M. Bennis, “Energy-efficient
+model compression and splitting for collaborative inference over time-
+varying channels,” in Proc. IEEE Annu. Int. Symp. Pers., Indoor Mobile
+Radio Commun. (PIMRC), 2021, pp. 1173–1178.
+[36] P. Liu, G. Zhu, S. Wang, W. Jiang, W. Luo, H. V. Poor, and S. Cui, “To-
+ward ambient intelligence: Federated edge learning with task-oriented
+sensing, computation, and communication integration,” IEEE J. Sel.
+Topics Signal Process., vol. 17, no. 1, pp. 158–172, Feb. 2023.
+[37] P. Molchanov, A. Mallya, S. Tyree, I. Frosio, and J. Kautz, “Importance
+estimation for neural network pruning,” in Proc. IEEE/CVF Conf.
+Comput. Vis. Pattern Recog. (CVPR), 2019, pp. 11 256–11 264.
+[38] H. Li, A. Kadav, I. Durdanovic, H. Samet, and H. P. Graf, “Pruning
+filters for efficient convnets,” arXiv preprint arXiv:1608.08710, 2016.
+[39] B. Isik, T. Weissman, and A. No, “An information-theoretic justification
+for model pruning,” in Proc. Int. Conf. Artif. Intell. Statist., 2022, pp.
+3821–3846.
+[40] Y. Mao, J. Zhang, and K. B. Letaief, “Dynamic computation offloading
+for mobile-edge computing with energy harvesting devices,” IEEE J.
+Sel. Areas Commun., vol. 34, no. 12, pp. 3590–3605, Dec. 2016.
+[41] Y. Wang, Y. Xu, Q. Shi, and T.-H. Chang, “Quantized federated learning
+under transmission delay and outage constraints,” IEEE J. Sel. Areas
+Commun., vol. 40, no. 1, pp. 323–341, Jan. 2022.
+[42] J. Yao, W. Xu, Z. Yang, X. You, M. Bennis, and H. V. Poor, “Wireless
+federated learning over resource-constrained networks: Digital versus
+analog transmissions,” IEEE Trans. Wireless Commun., vol. 23, no. 10,
+pp. 14 020–14 036, Oct. 2024.
+[43] Z. Liu, Q. Lan, A. E. Kalør, P. Popovski, and K. Huang, “Over-the-
+air multi-view pooling for distributed sensing,” IEEE Trans. Wireless
+Commun., vol. 23, no. 7, pp. 7652–7667, Jul. 2024.
+[44] J. Sokoli´c, R. Giryes, G. Sapiro, and M. R. D. Rodrigues, “Robust large
+margin deep neural networks,” IEEE Trans. Signal Process., vol. 65,
+no. 16, pp. 4265–4280, Aug. 2017.
+[45] D. R. Morrison, S. H. Jacobson, J. J. Sauppe, and E. C. Sewell, “Branch-
+and-bound algorithms: A survey of recent advances in searching, branch-
+ing, and pruning,” Discrete Optimization, vol. 19, pp. 79–102, 2016.
+[46] Z. Xie, Z. Lin, and W. Chen, “Power and rate adaptive pushing over
+fading channels,” IEEE Trans. Wireless Commun., vol. 20, no. 10, pp.
+6436–6450, Oct. 2021.
+[47] G. Li, S. Wang, J. Li, R. Wang, X. Peng, and T. X. Han, “Wireless
+sensing with deep spectrogram network and primitive based autoregres-
+sive hybrid channel model,” in Proc. IEEE Int Workshop Signal Process.
+Adv. Wireless Commun. (SPAWC), 2021, pp. 481–485.
+[48] X. Ye, Y. Sun, D. Wen, G. Pan, and S. Zhang, “End-to-end delay
+minimization based on joint optimization of DNN partitioning and
+resource allocation for cooperative edge inference,” in Proc. IEEE Veh.
+Techn. Conf. (VTC2023-Fall), 2023, pp. 1–7.
+[49] A. R´enyi, “On the theory of order statistics,” Acta Math. Acad. Sci.
+Hung, vol. 4, no. 2, pp. 48–89, 1953.
+[50] I. S. Gradshteyn and I. M. Ryzhik, Table of Integrals, Series, and
+Products.
+Academic press, 2014.

@@ -1,0 +1,876 @@
+1
+Beyond Connectivity: An Open Architecture for
+AI-RAN Convergence in 6G
+Michele Polese, Niloofar Mohamadi, Salvatore D’Oro, Leonardo Bonati, Tommaso Melodia
+Abstract—Data-intensive Artificial Intelligence (AI) ap-
+plications at the network edge demand a fundamental
+shift in Radio Access Network (RAN) design, from merely
+consuming AI for network optimization, to actively en-
+abling distributed AI workloads. This presents a significant
+opportunity for network operators to monetize AI while
+leveraging existing infrastructure. To realize this vision,
+this article presents a novel converged O-RAN and AI-
+RAN architecture for unified orchestration and manage-
+ment of telecommunications and AI workloads on shared
+infrastructure.
+The proposed architecture extends the Open RAN prin-
+ciples of modularity, disaggregation, and cloud-nativeness
+to support heterogeneous AI deployments. We introduce
+two key architectural innovations: (i) the AI-RAN Orches-
+trator, which extends the O-RAN Service Management and
+Orchestration (SMO) to enable integrated resource and
+allocation across RAN and AI workloads; and (ii) AI-RAN
+sites that provide distributed edge AI platforms with real-
+time processing capabilities. The proposed architecture
+enables flexible orchestration, meeting requirements for
+managing heterogeneous workloads at different time scales
+while maintaining open, standardized interfaces and multi-
+vendor interoperability.
+This paper has been submitted to IEEE for publication. Copyright may be transferred without notice.
+I. INTRODUCTION
+5G-Advanced and 6G networks are reshaping the
+role of the RAN, from a traditional communication
+substrate to a programmable, intelligent, “sentient”, and
+compute-capable platform. With emerging data-intensive
+and latency-sensitive use cases such as Extended Reality
+(XR), Integrated Sensing and Communications (ISAC),
+and generative AI, there is an opportunity to rethink
+M. Polese, L. Bonati, and T. Melodia are with the Institute for the
+Wireless Internet of Things, Northeastern University, Boston, MA,
+USA. E-mail: {m.polese, l.bonati, melodia}@northeastern.edu. N.
+Mohamadi and S. D’Oro are with zTouch Networks, Inc. E-mail:
+{niloofar.mohamadi, salvo}@ztouchnet.com
+This article is based upon work partially supported by the NTIA
+PWSCIF under Award No. 25-60-IF054, the U.S. NSF under award
+CNS-2112471, and by OUSD(R&E) through Army Research Labora-
+tory Cooperative Agreement Number W911NF-24-2-0065. The views
+and conclusions contained in this document are those of the authors
+and should not be interpreted as representing the official policies,
+either expressed or implied, of the Army Research Laboratory or the
+U.S. Government. The U.S. Government is authorized to reproduce
+and distribute reprints for Government purposes notwithstanding any
+copyright notation herein.
+RAN architecture not only as a consumer of AI for in-
+ternal optimization, but also as a distributed platform for
+hosting AI workloads [1]. This transformation demands
+architectural innovation that supports the convergence of
+communication and AI computing within the network
+itself—simultaneously delivering connectivity and sup-
+porting distributed AI inference and training demands.
+This dual capability is a foundational principle of the
+AI-RAN Alliance, a new telecom industry initiative
+dedicated to transforming networks through pervasive AI
+integration [2].
+In this paper, we design network resource orchestra-
+tion and deployment workflows to enable infrastructure
+support for AI solutions (i) for the RAN, i.e., tasked with
+improving efficiency and operations; or (ii) on the RAN,
+i.e., leveraging the distributed compute infrastructure for
+inference, sensing, or training at the edge. The network
+infrastructure and orchestration abstraction layer sup-
+ports flexibility, scalability, and interoperability to enable
+innovative AI-native next-generation wireless systems.
+At the same time, to enable innovation, this network
+abstraction and the underlying infrastructure need to em-
+brace openness, standardized interfaces, disaggregated
+components and support for multi-vendor deployments.
+In this area, the prior work focused on edge AI, open
+architectures, and early results on AI and RAN orches-
+tration. Preliminary efforts in edge AI deployment [3]
+did not lead to a cohesive architectural framework that
+can effectively manage the complex interplay between
+AI workloads and RAN operations at scale. The O-
+RAN ALLIANCE introduced intelligent control loops
+to optimize RAN performance [4]. However, its archi-
+tecture, with open, interoperable interfaces, a SMO and
+the RAN Intelligent Controllers (RICs), does not support
+generic AI workloads on a shared RAN infrastructure. As
+discussed above, this is instead a focus area for the AI-
+RAN Alliance. Recent literature has also addressed AI
+and RAN orchestration [1, 5–8]. Specifically, [5] and [6]
+discuss AI operations in the cloud, edge, and also RAN,
+but do not propose an architecture for orchestration. [7]
+proposes a converged AI-and-O-RAN architecture but
+the end-to-end orchestrator only interacts with the Near-
+RT RIC programmable logic units (xApps), thus limiting
+the scope of services that can be managed and deployed.
+[8] discusses AI-RAN AI operational workflows for AI-
+arXiv:2507.06911v2  [cs.NI]  2 Dec 2025
+Example 
+Use Case
+Near-RT RIC
+Distributed AI-O-Cloud Infrastructure
+E2
+Near-RT RIC
+AI-RAN Site
+Compute
+RU
+CU-UP
+CU-CP
+DU
+dApp
+Container Orchestration
+AI/ML  Container
+AI/ML  Container
+AI/ML  Container
+AI-on-RAN
+AI-for-RAN
+AI-RAN Site
+AI-RAN Site
+AI-RAN Site
+AI-RAN Site
+Infrastructure
+Network 
+Functions
+Orchestration
+AI-SMO
+AI Workload Interface 
+Operator Policy 
+Interface
+RAN Workload Interface
+Allocate Infrastructure Resources
+Non-RT RIC
+AI-RAN Orchestrator
+RAN 
+Workload 
+Automation
+Select Services
+RAN
+AI-for-RAN
+AI-on-RAN
+AI Workload 
+Automation
+Legend
+• AI: XR video processing
+• RAN: AI slicing
+• 60/40 split
+• Deploy in site 1
+AI Devs
+Deploy XR AI video 
+processing at the edge
+RAN Devs
+Update RAN AI-based 
+slicing model
+Operator
+Prioritize low-latency
+RAN with spare compute for XR AI
+Example
+Fig. 1: Architecture enabling AI and RAN coexistence, integrated within the proposed extension of the O-RAN framework. The figure also
+includes an example of use case for AI-and-RAN coexistence. An application developer submits an AI-on-RAN workload to enable XR
+processing at the edge. In the meantime, a RAN vendor provides an updated AI-for-RAN slicing solution. The operator defines the policy
+that the infrastructure should follow to enable both services. The AI-RAN orchestrator translates the policy into resource allocation, and
+coordinates with the automation workflows to deploy the services in the AI-RAN sites.
+RAN, but does not consider architectural elements. [1]
+presents an infrastructure design that jointly supports
+RAN and AI workloads, without considering AI-RAN
+orchestration. Therefore, a comprehensive, end-to-end,
+and generalized architecture enabling AI and RAN coex-
+istence following O-RAN management and orchestration
+principles is still missing.
+Contributions. This paper takes a decisive step in this
+direction by proposing a converged O-RAN and AI-RAN
+architecture, where the O-RAN framework is extended
+to support the orchestration and management of AI
+workloads, as shown in Fig. 1. By building upon the
+foundational principles of modularity, disaggregation,
+and cloud-nativeness of the existing O-RAN architec-
+ture, this work demonstrates how AI integration can be
+achieved with minimal disruption and without increas-
+ing system complexity. The proposed design extends
+the RAN compute infrastructure to the AI datacenter
+domain, introducing new monetization opportunities for
+public and private operators. Specifically, we make the
+following key contributions:
+• Gap Analysis. We review AI-RAN activities and dis-
+cuss the technical and operational challenges to achieve
+seamless AI-RAN and O-RAN integration.
+• Unified Architecture Design. We present a new com-
+prehensive architecture that enables AI and RAN work-
+loads to share infrastructure while maintaining perfor-
+mance isolation and service quality, shown in Fig. 1. We
+also identify and address the orchestration requirements
+for managing heterogeneous AI and RAN workloads
+at different time scales. Specifically, we identify and
+propose two key architectural components. (i) The AI-
+RAN Orchestrator (Fig. 1, top) extends the O-RAN
+SMO framework for unified resource allocation, policy
+management, and workload coordination across AI and
+RAN services. (ii) The AI-RAN Sites augment the O-
+RAN O-Cloud concept to further support AI within a
+common RAN infrastructure, enabling a distributed edge
+AI platform with real-time processing capabilities.
+• Flexible Orchestration. We define comprehensive
+procedures for deploying AI workloads on shared RAN
+infrastructure, introducing two distinct workflows for
+non-real-time batch and latency-critical deployments.
+This work establishes an architectural blueprint for
+next generation intelligent radio access networks that go
+beyond traditional connectivity boundaries, enabling si-
+multaneous delivery of telecommunications services and
+distributed edge AI capabilities on shared infrastructure.
+II. TOWARD AI-RAN
+This section reviews the key elements of each AI-RAN
+Alliance working group (AI-for-RAN, AI-on-RAN, AI-
+and-RAN) and the O-RAN ALLIANCE architecture.
+2
+A. AI-RAN Principles
+AI-for-RAN. The first pillar, AI-for-RAN, applies AI
+to enhance network automation, efficiency, and adapt-
+ability [6]. AI-for-RAN enhances RAN management
+through data-driven decision-making and Digital Signal
+Processing (DSP), improving performance, reliability,
+and cost efficiency [2]. This enables intelligence and self-
+optimization in existing RAN functions [2, 4].
+AI-on-RAN. Conversely, AI-on-RAN enables AI and
+generative AI applications to execute on the RAN in-
+frastructure. These applications may or may not be
+related to cellular systems, but leverage spare compute
+capacity and the geographically distributed nature of
+the RAN. RAN deployments are over-provisioned for
+peak loads, therefore, by leveraging AI during low RAN
+activity periods, operators can maximize infrastructure
+efficiency without compromising connectivity [5]. By
+embedding AI workloads within the RAN, AI-on-RAN
+brings AI close to end-users and thus reduces the latency
+and bandwidth overhead for transmission to centralized
+data centers. This makes AI-on-RAN ideal for latency-
+sensitive applications that require real-time inference and
+decision making. It also helps distributing workloads
+from large data centers to the edge. Examples of AI-
+on-RAN workloads can include distributed AI training
+(e.g., federated learning), video processing and computer
+vision applications, or edge generative AI solutions (e.g.,
+a low-latency edge instance of a Large Language Model
+(LLM), chatbots, AI agents), among others.
+AI-and-RAN. To enable infrastructure sharing across
+AI applications and RAN workloads, AI-and-RAN fo-
+cuses on the coexistence of heterogeneous workloads.
+Indeed, AI and RAN workloads differ in terms of reli-
+ability, availability, and performance requirements. The
+RAN DSP represents a non-elastic workload, where tasks
+need to be executed within specific timing constraints
+to ensure intended functionality of the protocol stack
+(e.g., for channel coding/decoding, scheduling). At the
+same time, processing for a specific configuration (band-
+width, number of MIMO streams) requires a fixed and
+predictable amount of resources. AI and generative AI
+inference or training solutions are more elastic, provided
+that enough resources are allocated to load the data
+structures associated with the AI models.
+AI-RAN Orchestration Requirements. Considering
+these requirements, the orchestration of AI-for/on-RAN
+requires (i) a holistic accounting of the underlying com-
+pute and networking resources, so as to dynamically
+track infrastructure availability; (ii) northbound Appli-
+cation Programming Interfaces (APIs) to AI and RAN
+developers, to expose available capacity and to submit
+workloads to the system, thus enabling infrastructure
+monetization; (iii) an interface for operator require-
+ments/intents (e.g., priority level for RAN workloads,
+maximum latency for AI inference); (iv) a scheduling
+strategy that combines requests, intents, and available
+resources into actionable policies or allocations; and (v)
+a southbound interface for AI and RAN configuration
+and deployment. This also allows for preemption for
+time-sensitive RAN workloads. Figure 1 captures these
+requirements in the end-to-end architecture.
+B. A Primer on Open RAN
+The AI-RAN Alliance does not develop specifications
+or standards, but builds on and influences those within
+3GPP and the O-RAN ALLIANCE. The latter has driven
+the design and development of networked systems that
+abide by the principles of openness, programmability,
+interoperability, and intelligent closed-loop control. A
+complete overview can be found in [4].
+The O-RAN architecture is based on a softwarized,
+disaggregated RAN, with atomic network functions that
+are deployed on the O-Cloud, a virtualization platform
+for cellular systems. Through open interfaces, the RICs
+connect the RAN to custom intelligence in xApps (for
+the Near-RT RIC) and rApps (for the Non-RT RIC). The
+SMO provides management and orchestration across the
+whole network. The O-RAN architecture already features
+pipelines and workflows for AI-for-RAN.
+The SMO and Non-RT RIC concern network man-
+agement in the time scale of seconds or more, for RAN
+services and RAN performance/efficiency, respectively.
+The latest O-RAN architecture decouples them in a
+service-based framework, where the SMO combines
+multiple independent services communicating through
+the standardized SMO Services (SMOS) interface. The
+O2 interface connects the SMO with the O-Cloud for in-
+frastructure management and workload deployment [9].
+III. CHALLENGES AND OPEN ISSUES TOWARD
+AI-RAN AND O-RAN CONVERGENCE
+The cloud-native architecture of Open RAN can
+streamline AI-RAN innovation. Open interfaces and ser-
+vice composition allow onboarding software, workloads,
+and workflows from multiple vendors, providers, and
+users. The open ecosystem fosters multi-vendor collabo-
+ration, ensuring that AI algorithms can be developed and
+deployed across diverse hardware and software platforms
+without vendor lock-in and with well-defined procedures.
+In addition, building on an existing architecture makes it
+possible to avoid unnecessary complexity, extending O-
+RAN components to also manage AI workloads rather
+than introducing additional orchestration solutions.
+3
+Effective AI-and-RAN orchestration and integration
+with O-RAN system, however, requires addressing sev-
+eral challenges, which we discuss next.
+Architecture and Orchestration Workflows Chal-
+lenges. AI-RAN coexistence requires an evolution of the
+3GPP and O-RAN architectures. The end-to-end man-
+agement system requires an entity responsible for AI-
+and-RAN coexistence, i.e., the orchestrator introduced in
+Fig. 1 and in Sec. II. Challenges include understanding
+what are effective control and data exposure abstractions,
+which is network host for such functionalities, and if
+orchestration requires a hierarchical approach.
+From a workflow point of view, there is a need for
+telemetry, control, and deployment pipelines, extending
+the O-RAN interfaces to define the southbound and
+northbound interfaces of the orchestrator (Fig. 1). South-
+bound interfaces should support continuous telemetry
+collection, preprocessing, and delivery from distributed
+AI-RAN components, accommodating latency require-
+ments for monitoring, inference, or control applications.
+This unlocks the unique opportunity to systematically
+create large-scale datasets. Finally, what Key Perfor-
+mance Measurements (KPMs) are better suited to sup-
+port orchestrator tasks is an open question.
+Finally, the definition of AI-RAN-specific procedures
+for AI lifecycle management implies regulating access to
+RAN resources, orchestrating deployment across nodes,
+and ensuring compliance with the operator’s policies.
+To do so, current O-RAN interfaces (e.g., O1, O2, E2,
+A1) require targeted modifications to support the dual
+operation of RAN control loops and AI workflows.
+Orchestration Challenges. An AI-RAN system (as
+shown in Fig. 1) combines compute with different AI
+accelerators (e.g., Graphics Processing Units (GPUs)),
+storage, networking elements, radios, and spectrum. The
+orchestrator needs to account for such heterogeneity
+when allocating resources. Additional compute can be
+available in the core network, which however does not
+have the same distributed nature as the RAN. RAN
+nodes exhibit diverse processing capabilities, also based
+on deployment location, which can lead to inefficiencies
+in workload distribution [1, 10]. The heterogeneity also
+extends to the workloads. As discussed in Sec. II, AI
+and RAN often have different workload patterns and
+requirements. AI itself can range from lightweight infer-
+ence for real-time network optimization or value-added
+services to high-intensity model training. Moreover, the
+unpredictability of AI workloads, and in particular that
+of large-scale training tasks, can introduce latency spikes
+that may negatively impact RAN performance [11, 12].
+This complicates both monitoring, which needs to ac-
+count for real-time variations in the workload intensity,
+and orchestration, which needs to combine multi-scale
+and proactive coexistence approaches. Finally, orchestra-
+tion workflows can extend beyond the RAN, toward core
+network functions that contribute to the AI operations.
+Resource Allocation Challenges. The resource allo-
+cation problem must consider operators’ priorities, the
+multi-dimensionality of the problem (encompassing a
+distributed infrastructure across different geographical
+locations with heterogeneous capabilities), and poten-
+tially a hierarchical control structure with varying gran-
+ularity, from a centralized orchestrator to distributed
+components. The orchestrator input also comes from dif-
+ferent stakeholders (e.g., AI developers, RAN vendors,
+operators), whose orthogonal requirements may need
+to be harmonized and reconciled. Moreover, operators
+may impose different Service Level Agreement (SLA)
+to AI and RAN. These may change across sites and
+time and need to be accounted for when allocating
+resources. Therefore, while solutions can be inspired by
+prior work on scheduling and slicing, they also need to
+take into account the complexity of the input, output, and
+dimensionality of the infrastructure partitioning problem.
+Use Case, Monetization, and Energy Efficiency
+Challenges. The AI-RAN orchestrator enables monetiza-
+tion strategies for next-generation wireless by identifying
+trade-offs, prioritizing, and provisioning strategies to
+satisfy both AI and RAN tenants. To successfully cater to
+AI-on-RAN stakeholders, the orchestrator needs to align
+with AI and cloud best practices.
+The coexistence and monetization challenge also ex-
+tends to energy efficiency. With RAN energy consump-
+tion being the highest operational expenditure for oper-
+ators to date, it is important to adopt an energy-efficient
+and opportunistic approach to the acceleration of AI, and
+to account for the impact of energy in the total costs
+of the AI-RAN infrastructure. AI models are usually
+associated with high computational demands, in contrast
+to recent trends for low-power RAN components. Hard-
+ware acceleration offers potential mitigation but requires
+careful scheduling to ensure energy efficiency [11] while
+accounting for non-linearity and multi-dimensionality of
+the AI accelerators power consumption as a function of
+processor load, memory utilization, and data transfer.
+Integrating third-party AI workloads also presents
+challenges to security, privacy, and access management.
+The orchestrator APIs and the end-to-end control and
+infrastructure management pipelines need to ensure ac-
+countability and tracking of security roles and privileges.
+Deploying AI models or workloads with vulnerabilities
+in the software stack could affect the stability of the
+RAN. Such attacks could lead to network congestion,
+degraded service quality, or large-scale outages [13].
+4
+AI-SMO
+AI-RAN 
+Resource 
+Allocation
+AI Workload 
+Automation
+Authentication/
+Workload 
+Validation
+RAN SMO 
+Components
+RAN SMO 
+Components
+RAN SMO 
+Components
+Non-RT RIC
+rApp
+rApp
+rApp
+SMOS Interface
+AI-O2 Termination
+O1 Termination
+A1 Termination
+AI Workload Interface 
+RAN Workload 
+Interface
+AI Devs
+RAN Devs
+Operator Policy 
+Interface
+Operator
+• AI-on-RAN
+• Prepare workload for deployment
+• Checks/tests
+CU/DU/Apps/AI
+-for-RAN
+AI-and-RAN 
+coexistence policies
+AI-RAN Orchestrator
+Fig. 2: Extension of the O-RAN SMO to support AI-RAN orchestra-
+tion. The components in light blue, together with the SMOS, are part
+of the O-RAN SMO architecture. Components in dark blue represent
+extensions to accommodate AI-RAN requirements.
+In the next section, we introduce an architecture
+designed to address these challenges while adhering to
+the design principle of minimizing system complexity,
+and considering factors such as privacy and security.
+IV. CONVERGED AI-RAN AND O-RAN
+ARCHITECTURE
+Building on the architecture in Fig. 1 and the require-
+ments identified above, Figs. 2 and 3 detail the specific
+AI-RAN extensions to O-RAN components and their
+interfaces. This converged architecture has been designed
+to enable two concurrent workflows for the orchestration,
+deployment, and execution of AI workloads, i.e., batch
+and real-time. In batch mode, AI tasks are submitted to
+the centralized orchestrator, and distributed when/where
+compute capacity is available. This can be used, for
+example, for AI training, or general AI processing that
+requires acceleration on GPU but does not have con-
+straints on the deployment location and timing of the de-
+ployment. In real-time mode, AI developers submit jobs
+for direct execution to a specific cluster (or geographical
+area of interest) and the request will be accommodated
+by the orchestrator according to resource availability.
+A. AI-SMO and AI-RAN Site
+AI-SMO. Figure 2 illustrates the architectural exten-
+sion of the SMO toward an AI-enabled SMO (AI-SMO).
+Besides O-RAN SMO components connected through
+the SMOS bus, a set of new micro-services covers the
+following functionalities: resource allocation, AI work-
+load automation, authentication and workload validation
+for the AI components, and exposure of interfaces to
+interact with the AI-RAN elements. By embedding the
+AI-RAN orchestrator in the SMO, we provide the or-
+chestrator with (i) access to granular monitoring data
+on the infrastructure already collected through the O-
+RAN O1 and O2 interfaces; and (ii) a global, centralized
+viewpoint on the distributed RAN infrastructure that
+enables a holistic approach to allocation of resources to
+either AI or RAN workloads. The workload validation
+and AI user authentication provide access control with
+an authorization process that vets users and AI tasks
+before they are admitted to the system. It validates the
+identity of AI users through the northbound interface to
+handle requests for training or inference execution. Upon
+successful validation, the service issues an authorization
+token granting access to the appropriate resources. The
+authentication mechanism can be tailored to the specific
+deployment operational constraints, thanks to the disag-
+gregated design of the AI-SMO. Then, upon availability
+of resources determined by the orchestrator, AI task
+requests are forwarded to the AI workloads automa-
+tion component, which triggers their deployment to the
+AI-RAN infrastructure sites. This component operates
+in parallel to equivalent services for RAN workloads,
+including the Network Function Orchestration (NFO)
+and Federated O-Cloud Orchestration and Management
+(FOCOM) services, with which it coordinates through
+the SMOS. Batch AI and RAN workloads are deployed
+to the selected AI-RAN edge sites using an extension
+of the O2 interface (AI-O2), which also communicates
+to the edge sites that resource allocation schedules or
+policies defined by the AI-RAN Orchestration service.
+Quality of Service (QoS) policies for AI-O2 traffic can
+further help by prioritizing RAN workloads over less
+time-sensitive AI tasks. Finally, operators can dynami-
+cally express geographically and temporally customized
+policies that determine AI and RAN sharing strategies.
+AI-RAN Site. At the other end of the AI-O2 interface,
+the AI-RAN edge site, shown in Fig. 3, is responsible
+for the granular, container-level service orchestration.
+Here, the O-Cloud extends into an AI-ready version
+that can manage containerized workloads for AI and
+RAN solutions, and also potentially distributed core
+components such as a local User Plane Function (UPF).
+Figure 3 also shows the taxonomy of workloads that
+can be executed on AI-RAN sites. Besides AI-driven
+Central Units (CUs) and Distributed Units (DUs), AI-for-
+RAN solutions include, for example, dApps [14], real-
+time programmable components that extend the O-RAN
+architecture to provide intelligence within the protocol
+stack. An additional AI-for-RAN category, outside of the
+RAN CUs/DUs, is represented by AI-accelerated Near-
+RT RICs, which can be hosted at the edge to satisfy near-
+real-time inference and control constraints. AI-on-RAN
+solutions can include training for AI models, generative
+AI services (e.g., chatbots), sensing based on AI, and
+other edge inference tasks, among others.
+The AI-RAN site is equipped with compute (including
+AI accelerators, e.g., GPUs), storage, and networking
+5
+AI-RAN Site: AI-O-Cloud Instance
+Compute Cluster
+AI-RAN Accelerators 
+(e.g., GPUs)
+Storage
+Network
+Real-time Container Orchestration
+AI-O-Cloud
+Infrastructure
+Management 
+Service (IMS)
+O-CU-UP
+SDAP
+PDCP
+O-CU-CP
+RRC
+PDCP
+O-DU
+RLC
+MAC
+PHY-high
+AI CU/DU
+AI-RAN Workloads
+AI-for-RAN
+AI/ML Workloads
+AI/ML Training
+Generative AI Services
+AI-driven Sensing
+…
+AI-Accelerated Near-RT RIC
+AI-on-RAN
+AI-for-RAN
+xApp
+xApp
+…
+AI-O2 
+Termination
+O1 
+Termination
+MEC 
+Termination
+AI-O-Cloud
+Deployment
+Management 
+Service (DMS)
+Monitoring
+dApps
+dApps
+dApps
+(d)UPF
+Orchestration
+Infrastructure
+Network Functions
+Fig. 3: Architecture for an edge cloud site that supports AI-RAN so-
+lutions on a compute cluster managed by the AI-O-Cloud. The figure
+shows the AI workloads and RAN workloads (top), the orchestration
+components (middle), and the infrastructure and interfaces (bottom).
+resources. These are managed by a container orches-
+tration platform (e.g., Kubernetes or Red Hat Open-
+Shift), which also provides tenant’s workload isolation
+via namespaces. Both of these components are managed
+by the AI-O-Cloud Infrastructure Management Service
+(IMS) and Deployment Management Service (DMS).
+These extend O-RAN services that terminate the O2
+interface for infrastructure configuration and workload
+lifecycle management, respectively. In the AI-O-Cloud,
+they also translate policies and schedules determined by
+the SMO into AI infrastructure configurations and AI
+workload deployment, while enabling coexistence with
+the RAN.
+B. Scalability and Real-time Deployment Workflow
+The service-based nature of the AI-SMO favors scal-
+ability, with different components that can be scaled to
+handle increasing workloads submissions or large num-
+ber of sites. At the same time, the AI batch submission
+workflow and specific instances of optimization for the
+resource allocation may introduce delays when applied
+to large-scale systems. Further, specific AI-on-RAN task
+may require low-latency deployments. Examples include
+AI inference services that are dynamically offloaded by
+or need to follow highly mobile users in a network, e.g.,
+connected autonomous vehicles. Public safety sensing
+applications may need rapid deployment in response to
+Real-time AI task can be executed
+AI-SMO
+AI-RAN Site
+AI User
+Authentication request
+•
+Identity validation
+•
+Resources required
+Authentication 
+response
+•
+AI-RAN sharing 
+policy
+•
+User priority
+•
+Auth validation
+Real-time AI workload 
+request
+•
+Identity validation
+•
+Resources required
+MEC interface
+AI-SMO AI Workload Interface
+AI-SMO AI Workload Interface
+AI-O2
+AI-O-Cloud DMS/IMS
+•
+Check policy
+•
+Check resources
+MEC interface
+•
+Process
+•
+Return output
+No capacity for real-time AI task
+MEC interface
+•
+Decline
+Batch AI workload 
+request
+Queue task and 
+execute when 
+capacity is available at AI-RAN site
+Fig. 4: Procedure for the authentication and deployment of real-time
+AI tasks on the AI-RAN infrastructure.
+an emergency. For this reason, in Fig. 4, we propose a
+procedure for the real-time deployment of AI workloads.
+It combines (i) pre-authentication with the AI-SMO, with
+an indication of computing requirements at specific AI-
+RAN sites; (ii) the definition of a resource sharing policy
+in the AI-RAN Orchestrator, which is then communi-
+cated to the edge site through AI-O2; (iii) the use of a
+Multi-access Edge Computing (MEC) interface, adopting
+the ETSI standards for edge computing, by the pre-
+authenticated users to submit real-time AI workloads to a
+specific AI-RAN site; and (iv) involvement of the DMS,
+which allocates resources and deploys the AI services
+with minimal latency, as long as the amount of resources
+required is compatible with the policy defined by the AI-
+RAN Orchestrator. If not, the AI task is not admitted,
+and the process resumes at the AI-SMO, where the user
+can explore options to increase priority of the task (e.g.,
+through different monetization tiers) or submit it as a
+batch workload or to a different AI-RAN site.
+C. Profiling the AI-RAN Site
+We profile the feasibility of the approach with a
+prototype of the AI-RAN site, focusing on AI and RAN
+coexistence and on their deployment latency. The results
+are based on multiple, independent experiments executed
+on the Northeastern University X5G testbed [15], which
+implements a private 5G network with multiple com-
+mercial O-RAN Radio Units (RUs) and fronthaul infras-
+tructure. We integrate in X5G a single-node OpenShift
+cluster with a Gigabyte server with an x86 CPU and
+an NVIDIA A100 GPU. For the RAN software, we use
+the NVIDIA Aerial GPU-accelerated physical layer and
+OpenAirInterface. For AI workloads, we use different
+Ollama-based LLMs (processing prompts), and a Con-
+volutional Neural Network (CNN) or a ResNet model
+6
+CNN
+ResNet
+CNN
+ResNet
+0
+20
+40
+60
+—— Llama-3.2-3B ——
+—— Llama-3-8B ——
+MAC Throughput [Mbps]
+DL Th / RAN-only
+DL Th / AI-RAN Coexistence
+0
+5
+10
+15
+CRC Error Rate [error/s]
+CRC Error Rate / RAN-only
+CRC Error Rate / AI-RAN Coexistence
+Fig. 5: Median values for throughput and CRC error rate with RAN
+only (solid bars) or AI-RAN coexistence with LLM prompts and
+CNN/ResNet (dotted bars).
+0
+10
+20
+30
+40
+Qwen2.5-1.5B
+Llama-3.2-1B
+Llama-3.2-3B
+Llama-3-8B
+Time [s]
+LLM
+RAN
+CNN
+Fig. 6: Workload deployment latency on the AI-RAN site.
+trained live on CIFAR-100. The AI-SMO configures the
+AI-RAN site GPU with Multi-Instance GPU (MIG), an
+NVIDIA technology for resource partitioning. For these
+experiments, the GPU is partitioned in 3, with 40 GB for
+RAN, 20 GB for LLM, and 10 GB for ResNet/CNN.
+Figure 5 reports the median throughput and CRC error
+rate at the MAC layer, thus including retransmissions,
+with 95% confidence intervals computed with the boot-
+strap method. The solid bars report the performance
+without AI; dotted bars are for experiments with User
+Equipment (UE) traffic, the CNN/ResNet training, and
+the LLM being prompted. The performance is consistent
+across all experiments, validating AI-RAN coexistence
+even in a single-node site.
+Figure 6 illustrates the sequential deployment latency
+for different LLMs models and parameter sizes. We
+profile the workload deployment latency from when the
+AI-RAN site receives the request to when the service
+is available, assuming a sequential deployment for the
+LLM, followed by the RAN and ResNet. As can be
+seen, the RAN and ResNet are deployed in 1-4 s, with
+the longer time following the deployment of the largest
+Llama model that fits the MIG partition. LLM instances
+require between 5.8-34.4 s (average). This shows that
+complex workloads can be managed on the same in-
+frastructure in a matter of seconds, and provides an
+indication of the dynamicity with which such workloads
+can be (re)deployed by the AI-SMO.
+V. CONCLUSIONS
+We presented an end-to-end network architecture for
+AI-RAN coexistence. After reviewing the AI-RAN Al-
+liance activities and O-RAN architecture, we discussed
+the challenges associated to operating AI and RAN on
+the same infrastructure. We then proposed an extension
+of the O-RAN architecture and O-RAN components that
+enables the deployment and management of AI work-
+loads on the shared RAN infrastructure, including dif-
+ferent modes for managing AI workloads with different
+requirements for deployment latency and location. Near-
+term extensions of this work include further development
+of the architecture into an end-to-end prototype serving
+as a platform to validate resource allocation strategies.
+In the medium term, it will also facilitate studying how
+interfaces and design can be streamlined into O-RAN
+and AI-RAN Alliances activities and specifications.
+REFERENCES
+[1] L. Kundu, X. Lin, R. Gadiyar, J.-F. Lacasse, and S. Chowd-
+hury, “AI-RAN: Transforming RAN with AI-driven Computing
+Infrastructure,” arXiv preprint arXiv:2501.09007, 2025.
+[2] AI-RAN Alliance, “AI-RAN Vision and Mission White Paper,”
+Tech. Rep., 2024. [Online]. Available: https://archive.is/H80U4
+[3] S. Duan, D. Wang, J. Ren, F. Lyu, Y. Zhang, H. Wu, and
+X. Shen, “Distributed Artificial Intelligence Empowered by
+End-Edge-Cloud Computing: A Survey,” IEEE Commun. Sur-
+veys & Tuts., vol. 25, no. 1, pp. 591–624, Firstquarter 2023.
+[4] M. Polese, L. Bonati, S. D’Oro, S. Basagni, and T. Melodia,
+“Understanding O-RAN: Architecture, interfaces, algorithms,
+security, and research challenges,” IEEE Commun. Surveys &
+Tut., vol. 25, no. 2, pp. 1376–1411, 2023.
+[5] G. Ananthanarayanan, X. Foukas, B. Radunovic, and Y. Zhang,
+“Distributed AI Platform for the 6G RAN,” arXiv preprint
+arXiv:2410.03747, 2024.
+[6] N. Li, Y. Wang, Q. Sun, X. Li, J. Huang, C. Liu, Y. Huang,
+Z. Hu, Y. Han, and C.-L. I, “Rethinking RAN Architecture
+for Deep Fusion of AI and Communication in 6G,” IEEE Wir.
+Commun., vol. 32, no. 3, pp. 164–174, 2025.
+[7] S. D. A. Shah, Z. Nezami, M. Hafeez, and S. A. R. Zaidi,
+“The Interplay of AI-and-RAN: Dynamic Resource Allocation
+for Converged 6G Platform,” arXiv:2503.07420, 2025.
+[8] P.-C. Hung, Y.-K. Lin, Y.-C. Jhuang, T.-W. Choong, and J.-S.
+Leu, “DMMP: The AI Service Platform with O-RAN Toward
+AI-RAN,” in EuCNC/6G Summit, June 2025, pp. 121–126.
+[9] O-RAN WG6, “O-RAN Cloud Architecture and Deployment
+Scenarios for O-RAN Virtualized RAN 8.01,” TS, 2025.
+[10] H. Liu, J. Zong, Q. Wang, Y. Liu, and F. Yang, “Cloud Native
+Based Intelligent RAN Architecture Towards 6G Programmable
+Networking,” in Proc. of ICCCS, 2022.
+[11] L. Kundu, X. Lin, E. Agostini, V. Ditya, and T. Martin,
+“Hardware acceleration for Open Radio Access Networks: A
+contemporary overview,” IEEE Commun. Mag., vol. 62, no. 9,
+pp. 160–167, 2023.
+[12] 3GPP, “Study on Artificial Intelligence (AI)/Machine Learning
+(ML) for NR Air Interface (Release 18),” Tech. Rep. TR 38.843
+V18.0.0, Dec. 2023.
+[13] N. A. Khan and S. Schmid, “AI-RAN in 6G Networks: State-of-
+the-Art and Challenges,” IEEE Open Journal of the Commun.
+Soc., vol. 5, pp. 294–311, 2023.
+7
+[14] A.
+Lacava,
+L.
+Bonati,
+N.
+Mohamadi,
+R.
+Gangula,
+F. Kaltenberger, P. Johari, S. D’Oro, F. Cuomo, M. Polese, and
+T. Melodia, “dApps: Enabling real-time AI-based Open RAN
+control,” Computer Networks, vol. 269, p. 111342, 2025.
+[15] D. Villa, I. Khan, F. Kaltenberger, N. Hedberg, R. S. da Silva,
+S. Maxenti, L. Bonati, A. Kelkar, C. Dick, E. Baena, J. M.
+Jornet, T. Melodia, M. Polese, and D. Koutsonikolas, “X5G: An
+Open, Programmable, Multi-Vendor, End-to-End, Private 5G O-
+RAN Testbed With NVIDIA ARC and OpenAirInterface,” IEEE
+Trans. Mobile Comp., vol. 24, no. 11, Nov 2025.
+Michele Polese is a Research Assistant Professor at Northeastern.
+He received his Ph.D. from the University of Padova in 2020.
+Niloofar Mohamadi is Principal Software Engineer at Northeastern.
+She received her Ph.D. from Ontario Tech University in 2022.
+Salvatore D’Oro is a Research Associate Professor at Northeastern
+and the CTO at zTouch Networks. He received his Ph.D. from the
+University of Catania in 2015.
+Leonardo Bonati is an Associate Research Scientist at Northeastern
+University, where he received his Ph.D. in 2022.
+Tommaso Melodia is the William Lincoln Smith Chair Professor at
+Northeastern University and Director of the Institute for the Wireless
+Internet of Things.
+8

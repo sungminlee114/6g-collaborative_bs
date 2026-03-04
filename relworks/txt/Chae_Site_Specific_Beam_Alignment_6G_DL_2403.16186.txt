@@ -1,0 +1,738 @@
+Disclaimer: This work has been accepted for publication in the IEEE Communications Magazine. © 2024 IEEE. Personal
+use of this material is permitted. Permission from IEEE must be obtained for all other uses, in any current or future media,
+including reprinting/republishing this material for advertising or promotional purposes, creating new collective works, for resale
+or redistribution to servers or lists, or reuse of any copyrighted component of this work in other works.
+arXiv:2403.16186v1  [cs.IT]  24 Mar 2024
+1
+Site-Specific Beam Alignment in 6G
+via Deep Learning
+Yuqiang Heng, Yu Zhang, Ahmed Alkhateeb and Jeffrey G. Andrews
+Abstract—Beam alignment (BA) in modern millimeter wave
+standards such as 5G NR and WiGig (802.11ay) is based on
+exhaustive and/or hierarchical beam searches over pre-defined
+codebooks of wide and narrow beams. This approach is slow and
+bandwidth/power-intensive, and is a considerable hindrance to
+the wide deployment of millimeter wave bands. A new approach
+is needed as we move towards 6G. BA is a promising use case
+for deep learning (DL) in the 6G air interface, offering the
+possibility of automated custom tuning of the BA procedure for
+each cell based on its unique propagation environment and user
+equipment (UE) location patterns. We overview and advocate for
+such an approach in this paper, which we term site-specific beam
+alignment (SSBA). SSBA largely eliminates wasteful searches
+and allows UEs to be found much more quickly and reliably,
+without many of the drawbacks of other machine learning-aided
+approaches. We first overview and demonstrate new results on
+SSBA, then identify the key open challenges facing SSBA.
+I. INTRODUCTION
+Next generation cellular networks will need to deliver
+extremely high data rates for emerging applications, which
+will necessitate much more effective utilization of the vast
+amount of spectrum above 28 GHz. The high isotropic pathloss
+at these frequencies require highly directional beamforming
+(BF), where base stations (BSs) and user equipments (UEs)
+– both equipped with dense antenna arrays – focus energy in
+particular directions. Finding and maintaining near-optimal BF
+directions – a process known as beam alignment (BA) – is the
+critical bottleneck to unleashing this spectrum. Done correctly,
+high directionality also provides a path to much improved
+power efficiency, which will be required for important emerg-
+ing use cases such as Augmented Reality (AR) glasses that
+have both high bandwidth demands and small power budgets.
+The BA framework in 5G relies on extensive beam sweep-
+ing, measurement and reporting. In the downlink, the BS
+periodically sweeps one or more generic codebooks of pre-
+defined beams by transmitting beamformed reference signals
+(RSs) while the UE sweeps its receive (Rx) codebook1. The
+best beam or multiple beam pairs with the highest received
+power are selected and reported to the BS. This simple proce-
+dure handles the BA procedure both for initial access (IA) of
+previously undetected UEs and for tracking already connected
+Yuqiang Heng was and Jeffrey G. Andrews is with The University of
+Texas at Austin, Austin, TX, USA. Y. Heng is now with Samsung. Yu Zhang
+and Ahmed Alkhateeb are with Arizona State University, Tempe, AZ, USA.
+Corresponding
+author:
+J.
+G.
+Andrews
+(e-mail:
+jan-
+drews@ece.utexas.edu). Last modified: Tuesday 26th March, 2024.
+1Although this article is focused on cellular networks, in particular 5G
+and 6G, nearly everything we discuss is directly applicable to other millimeter
+wave systems such as the various WiGig standards operating in the 60 GHz
+band, which also rely on beam sweeping and suffer from slow BA.
+UEs. To guarantee that most unconnected UEs can be found
+during IA, generic codebooks with quantized BF angles that
+cover the entire angular space are usually adopted. While on
+some level “foolproof” since new UEs can be found regardless
+of their location in the angular space, this approach to BA is
+obviously inefficient. It effectively starts from scratch during
+each search cycle, learning nothing from previous searches.
+It is agnostic to the propagation environment or the historic
+probability of finding a UE in a particular direction.
+For these reasons, a data-driven and learning-based ap-
+proach should be highly beneficial for BA for 6G. In particular,
+we will argue that deep learning (DL) is well-suited to
+tackle these challenges with its powerful function approxi-
+mation capabilities, relatively low complexity, and its well
+understood training and convergence properties. By leveraging
+characteristics of the propagation environment and patterns
+of UE distribution and mobility, a site-specific DL approach
+can eliminate unproductive searches while quickly predicting
+beams that point accurately towards UEs.
+While a few recent works have provided useful surveys of
+general applications of DL in beam management [1], [2], we
+present a more focused perspective by limiting our scope to
+the spatial and site-specific aspects. We first identify (Sect. II)
+the key requirements of BA and their implication to DL-based
+approaches. We then overview the concept and key aspects and
+advantages of state-of-the-art of site-specific DL techniques
+for BA in Sect. III. In Sect. IV we overview 3 specific ways
+to do site-specific beam alignment (SSBA) that have been
+developed independently by the authors, and we present a
+unified and novel comparison of their performance using ray
+tracing in a Boston neighborhood. We include other baselines
+and theoretical upper bounds and observe the consistently
+immense potential of SSBA for improving beamforming gain
+with a drastically reduced number of beam searches. A number
+of important open problems remain, and these challenges are
+identified and several promising directions for future research
+are proposed to conclude the article.
+II. KEY CRITERIA FOR DL-AIDED BA
+An intelligent BA method should be able to accurately
+and quickly identify high signal-to-noise ratio (SNR) beams
+for each UE in the cell without exhaustively searching all
+candidates. However, high BF gain and low search latency
+are not the only requirements of an ideal BA method. After
+all, the exhaustive and the hierarchical search with uniform
+codebooks have been adopted in 5G largely because they can
+be deployed in any cell site without any custom adaptation,
+2
+and they allow new UEs to be discovered without special side
+information (e.g. GPS coordinates) or excessive amounts of
+feedback.
+Therefore, we first identify the key requirements for a 6G
+BA method. These four requirements should apply univer-
+sally, and in many cases they rule out proposed DL-aided
+approaches, as we now discuss.
+R1: Accurate and Fast over Entire UE population. A
+trade-off between speed and SNR is unavoidable in most
+BA methods: better beams may be found by increasing the
+resolution of the codebook or more frequently sweeping the
+codebook, at the direct expense of latency and overhead.
+However, some BA methods may present much better such
+SNR-speed tradeoffs than others, especially when BA for
+all UEs is considered collectively. Notably, many proposed
+DL-based approaches leverage environment-specific and even
+UE-specific features, but the gain diminishes about linearly
+with the number of UEs due to the requirement of a per-
+UE search. This is because the beam refinement search in 5G
+NR has to be conducted through Channel State Information
+Reference Signal (CSI-RS) on a per-UE basis even though the
+Synchronization Signal Blocks (SSBs) beams are broadcasted
+cell-wide [3]. Therefore, the total cell-wide latency – the
+number of searches to achieve BA for all UEs – is the correct
+latency metric.
+R2: Versatile. A BA method should work well in a large
+variety of deployments, including urban, suburban, outdoor
+and indoor environments with many different types of UEs.
+Each deployment has unique challenges: an outdoor vehicular
+UE has high velocity but predictable mobility patterns while
+an indoor extended reality (XR) user may experience fast
+unpredictable rotations and more frequent non-line-of-sight
+(NLOS) conditions. Rather than designing a different BA
+approach for each scenario, e.g. using application-specific
+sensor data, a desirable BA method should handle a wide range
+of scenarios in a single framework.
+R3: Scalable to Higher Carrier Frequencies. While the
+array size and thus channel dimensionality will grow consider-
+ably as 6G moves up in the spectrum, the BA complexity and
+latency should only increase moderately. This is achievable in
+theory since channel sparsity is preserved at higher carrier fre-
+quencies. DL-based methods can learn the underlying channel
+structure and intelligently predict the optimal beams without
+significantly increasing the BA latency. Grid-free approaches
+that directly compute BF weights will become more attractive
+since codebooks with thousands of narrow beams will prove
+cumbersome.
+R4: Self-training and Auto-updating. For real-world
+adoption of DL in BA, the BS and UEs could be deployed as
+usual with a default codebook and/or BA procedure. Learn-
+ing should ideally utilize ongoing over-the-air measurements
+possibly along with mostly automated site-specific simulation,
+so that devices can seamlessly transition to perform BA
+with the DL-aided methods once they have been sufficiently
+trained. Furthermore, the DL models should also be able to
+continuously (or at least periodically) improve and adapt. This
+is a major open challenge not well-addressed to date, as most
+existing approaches assume extensive offline training prior to
+deployment and when or how to re-train is also not well
+understood.
+III. BEAM ALIGNMENT WITH SITE-SPECIFIC LEARNING
+The BA procedure has two main components: channel
+sensing and beam selection. The objective of channel sensing
+is to collect spatial information about the channel between the
+transmitter and receiver. This is done using a channel probing
+codebook which could be as simple as a fixed set of relatively
+wide beams (as in 5G NR IA) or a more sophisticated com-
+pressive sensing measurement codebook. The measurements
+from channel sensing are then leveraged to design the data
+transmission beam either by selecting it from a pre-defined
+codebook or by computing an arbitrary beam. Interestingly,
+these two stages strongly depend on the attributes of the
+specific site and environment, such as the outdoor buildings’
+geometry or indoor floor layout, antenna panel orientation,
+and user locations. This motivates what we call site-specific
+learning for BA, whereby both the sensing and the beam
+selection tasks attempt to exploit aspects of their specific cell
+site. In this section, we outline the key ideas behind site-
+specific sensing and beam prediction and highlight both the
+potential gains and key design considerations.
+Traditional Approaches Are Not Site-Specific. Traditional
+BA techniques generally follow one of two main approaches:
+beam training or channel estimation-based. In beam training,
+the transmitter and receiver sweep over the beams in the
+probing codebook in an attempt to select the most promising
+pair of beams. This beam pair could be directly used for
+data transmission in the case of exhaustive search, or further
+refined, for example via hierarchical codebooks with different
+beamwidths. Beam training is the BA approach adopted in
+IEEE 802.11ad/ay, as well as in at least the first three releases
+of 5G [3]. For channel estimation-based beam design, the
+multiple-input multiple-output (MIMO) matrix channel is first
+estimated, typically using compressive sensing measurement
+codebooks but possibly via other channel estimation methods
+based on the reception of pilot (reference) signals [4]. The
+estimated channel is then used to design the beamforming
+vectors, for example the maximum left (transmit) and right
+(receive) singular vectors of the channel matrix. In neither case
+does the channel probing codebook and the beam selection
+process leverage site-specific attributes nor prior observations.
+Potential Gains with Site-Specific Optimization. Since
+the two components of the BA process – channel sensing and
+beam selection – rely heavily on characteristics such as the
+geometry of the buildings and scatterers around the BS and
+UEs, as well as the UE locations, it is intuitive that optimizing
+each BS’s probing codebook and beam selection criteria based
+on these site-specific characteristics may significantly improve
+the BA performance. For example, instead of scanning all
+directions, the probing beam codebook could focus on the
+most frequently useful directions and avoid directions with
+line-of-sight (LOS) blockages or where UEs are rarely found.
+Similarly, channel compressive sensing codebooks could be
+refined to focus the sensing energy on the most important
+dimensional subspaces. The probing beams can be transmitted
+3
+Site-Specific Propagation
+(Spatial Signature)
+Probing Beams
+Communication
+Codebook Beams
+Reduced Measurements
+Channel
+Sensing
+Beam
+Prediction
+BS
+BS
+UE
+UE
+Weights Are
+Probing Beams
+Fig. 1: An illustration of SSBA that consists of channel probing and beam selection. The figure presents the deployment phase
+where the system can directly select the desired beam based on channel sensing power measurements.
+using SSBs in a 6G system, allowing new UEs to be discov-
+ered and complete IA. Furthermore, beam selection can also
+leverage site-specific prior observations. Conceptually, it can
+bias towards more commonly selected beams and deprioritize
+beam pairs that have often provided low SNR previously. This
+approach can reduce the BA overhead and enhance the beam
+selection accuracy as shown in Section IV.
+Role of Data and Deep Learning. Realizing the potential
+of site-specific BA optimization using classical signal process-
+ing techniques is non-trivial. First, mmWave systems rely on
+analog-only or hybrid analog/digital transceiver architectures
+which impose strict constraints on the beamforming weights.
+This makes the site-specific probing codebook optimization
+problem highly non-convex and difficult to solve. Second,
+unless the probing codebook has simple steering beams, the
+mapping function that maps the outcomes of the channel
+sensing to the best data transmission beam is hard to charac-
+terize analytically. This motivates leveraging data-driven DL
+to design site-specific BA approaches. Deep neural networks
+(DNNs) possess superior expressive power and have been
+proven successful in solving many challenging, non-convex
+problems. In particular, with proper design of the machine
+learning (ML) architecture, loss function, and learning strat-
+egy, we can learn both optimized site-specific channel probing
+codebooks and functions that map the measurements of these
+probing codebooks to data transmission beams.
+Key Considerations for Site-Specific Learning. We em-
+phasize two important considerations for SSBA. First, devel-
+oping and evaluating site-specific beam prediction solutions
+requires using site-specific channel datasets, either from the
+real world or accurate ray-tracing simulations. This is essential
+since the key idea here is that the probing codebook and the
+beam selection are based on the underlying channel structure
+of the specific deployment. This per-site specialization is
+where the gains come from, and therefore using general statis-
+tical channel models that do not capture the dependency on the
+site geometry and user distribution will prove unsuccessful. We
+will argue that the “price” for this data acquisition and site-
+specific modeling is well-justified and not necessarily even
+very large, but nevertheless this is a key new challenge versus
+current approaches that are not site-specific.
+Second, it is important to differentiate between the design
+and the training of the BA machine learning model. While
+the training should mainly utilize site-specific datasets and
+measurements, and thus be optimized and tuned for the
+specific deployment, the model itself should be universal and
+scalable so that it could work in a large number of sites across
+a variety of deployments.
+IV. END-TO-END LEARNING FOR SITE-SPECIFIC BEAM
+ALIGNMENT
+As discussed in Section III, the SSBA has two sub-
+problems: (i) learning site-specific channel probing codebook
+and (ii) learning the mapping from the channel sensing mea-
+surements to beams. The two problems are coupled, where
+the ultimate objective is to achieve accurate prediction with
+smallest possible number of measurements. Given this cou-
+pling, end-to-end learning that jointly optimizes the probing
+codebook and learns the mapping function based on a com-
+mon loss function is our recommended approach for SSBA
+solutions. In this section, we present two end-to-end learning
+frameworks for SSBA and discuss their tradeoffs, and compare
+them in a common experimental setting.
+Codebook Based Beam Prediction. The first framework
+is based on selecting the best narrow beam from a discrete
+set, i.e. from a codebook. The codebook-based (CB) approach
+is closely related to existing standards like 5G, and the
+option to perform over-the-air beam refinement makes its beam
+predictions more robust. Beam tracking is also more intuitive
+and convenient with CB approaches, since adjacent beams in
+the codebook can be monitored. We consider two CB-based
+4
+Base Station
+Probing Beams
+Fig. 2: Illustration of DeepMIMO Boston5G scenario with the learned probing beam patterns overlaid for visualization purposes.
+2 4
+8
+12
+16
+20
+24
+28
+32
+48
+Number of Probing Beams for Channel Sensing
+16
+17
+18
+19
+20
+21
+22
+23
+Average SNR (dB)
+EGT
+CB, genie
+GF [6], DL probing
+CB [5], DL probing, top-4
+CB [4], DL probing, top-4
+CB [5], DL probing, top-1
+CB [4], DL probing, top-1
+GF [6], site-agnostic probing
+CB [5], site-agnostic probing, top-1
+Gain with SSBA
+Fig. 3: Comparison of the average SNR achieved by site-
+specific CB and GF approaches and site-agnostic baselines.
+approaches, the first is adapted from the early work on site-
+specific BA in [5] and the second is a more recent one, which
+is presented in full detail in [6].
+Grid-free Beam Prediction. The grid-free (GF) approach
+holds out the possibility of identifying a truly optimum beam,
+as well as eliminating any beam refinement search phases,
+which become quite costly in a network setting as they must
+be conducted on a per-UE basis. Thus, in principle, a well-
+functioning and well-trained GF approach could potentially
+require far fewer total beam search measurements over mul-
+tiple UEs. However, the GF approach is more risky, since a
+poorly calculated beam can be arbitrarily poor, and often the
+training and beam normalizations are more sensitive than for a
+predefined codebook. The results may also be less interpretable
+since the action space is infinitely large. Our GF approach is
+from [7].
+Unified Ray Tracing Experiment. We now consider a
+cellular simulation environment based on a section of down-
+town Boston, shown in Fig. 2. The BS is located at an
+intersection. There are a total of 77,597 UEs – of which
+52% are LOS and 48% are NLOS – located along the two
+horizontal and vertical streets closest to the BS. The channels
+are generated through ray-tracing as discussed in [8], with
+simulation parameters summarized in Table I. In particular, we
+assume a 64 × 1 multiple-input single-output (MISO) uniform
+linear array (ULA) scenario, but these approaches do extend to
+more general MIMO and uniform planar array (UPA) models.
+The BS performs analog BF with unquantized phase shifters,
+for which equal gain transmission (EGT) with perfect per
+antenna phase alignment is a true upper bound. An over-
+sampled discrete Fourier transform (DFT) codebook with 256
+beams is adopted for the codebook-based baselines. The CB
+genie corresponds to the best beam in the codebook.
+The first CB approach modifies the neural network (NN)
+architecture originally proposed in [5], perhaps the earliest
+work on end-to-end learning for site-specific BA. The probing
+codebook is designed via a complex-valued NN and param-
+eterized with the phase, from which the real and imaginary
+parts of the probing beams are computed to enforce the unit-
+modulus constraint. The mapping function consists of 2 hidden
+layers with 512 and 1024 neurons, each with ReLu activation
+followed by batch normalization, and an output layer with
+sigmoid activation. The NN is trained to minimize the average
+binary cross-entropy between the model output and the one-
+hot encoded labels.
+The second CB approach is from [6]. The probing codebook
+is implemented as a complex-valued linear layer, which is
+normalized per element to ensure the unit-modulus constraint.
+The mapping function consists of 2 hidden layers with 520
+neurons each and ReLu activation, and a linear output layer
+with softmax activation. The NN is trained to minimize the
+cross-entropy loss. Both CB models output the predicted
+posterior probability of the optimal beam index.
+The GF approach adopts the NN architecture in [7]. The
+probing codebook is implemented as a complex-valued linear
+layer with per-element normalization. The mapping function
+5
+TABLE I: Simulation Parameters
+BS Antenna
+64 × 1 ULA
+BS Codebook Size
+256
+Antenna Element
+Isotropic
+Carrier Frequency
+28 GHz
+Bandwidth
+50 MHz
+Transmit Power
+40 dBm
+Noise PSD
+-161 dBm/Hz
+Probing Spreading Gain
+32
+consists of 2 hidden layers 520 neurons each and ReLu
+activation, and a final linear layer that outputs the real and
+imaginary parts of the predicted BF vector. The predicted BF
+vector is also normalized element-wise to ensure the unit-
+modulus constraint. The NN is trained to maximize the average
+BF gain normalized by the channel norm.
+The average SNR achieved by the site-specific (i.e. “DL
+probing”) CB and GF approaches and the site-agnostic and
+idealized baselines are shown in Fig. 3. It is important to re-
+member that an exhaustive codebook search would entail 256
+measurements and still perform below the CB genie in terms
+of SNR (due to noise and the corresponding measurement and
+feedback errors). We summarize some of the key takeaways
+and insights now.
+• Near optimal performance is achieved with a fraction of
+the measurements/latency. Both the GF and CB methods
+can achieve SNR within 1 and 0.5 dB from that of the genie
+using just 8 and 16 probing measurements, respectively.
+Compared to an exhaustive CB search, the latency is reduced
+by 32× and 16×, respectively. The power demand of the
+lightweight NN should be easily accommodated by BSs,
+while UEs can save power by measuring fewer beams.
+• GF beats CB in terms of total measurements. By eschewing
+a refinement search phase – which is very helpful to the CB
+techniques – the GF approach holds out the ultimate promise
+for low latency searches. This is even more true if the UE
+performs beamforming as well.
+• CB approaches could be more robust. Since the top-
+k predicted beams could be refined over the air (OTA)
+(at additional overhead cost) to select the best beam, CB
+approaches could generally be more robust to prediction
+errors and less sensitive to quick changes in the environment.
+• Site-specific probing is indispensable. If the learned prob-
+ing beams are replaced with evenly-spaced “site agnositc”
+narrow beams and the NNs are re-trained from scratch, there
+is a large performance loss, of over 3 dB or equivalently a
+factor of at least two in terms of required probing measure-
+ments.
+The shape of the learned probing beams is illustrated in Fig.
+2. Note that a given probing beam can have several lobes of
+varying strength, but each probing beam has the same total
+transmit energy. They are clearly adapted to the environment:
+they mainly focus their energy to cover the horizontal and
+vertical streets on which UEs are scattered. This intuitively
+demonstrates the importance of SSBA.
+V. FUTURE RESEARCH DIRECTIONS
+While these DL-aided SSBA solutions show great promise,
+there remain important open problems to solve. In this section,
+we outline these important research problems and identify
+promising future directions.
+A. Practical Training and Deployment Approaches
+Existing DL-aided BA methods typically employ an offline
+training phase prior to deployment and the models need to
+be retrained whenever the environment changes. Collecting
+the large amount of training data required to represent the site
+prohibits dynamic adaptation and network-wide deployment of
+the site-specific models. Further, some DL-aided BA methods
+require explicit full channel knowledge in the training phase,
+which is hard to obtain in practice. Clearly, new deployment
+paradigms will be necessary for SSBA to have a real-world
+impact.
+One encouraging direction lies in the adoption of digital
+twins, which promise true-to-life simulations of the physical
+environment at large scales [9]. High fidelity 3D models of
+entire cities can be constructed from light detection and rang-
+ing (LiDAR) and satellite data, which can also be dynamically
+updated based on live-monitoring of the environment and UE
+distribution. Enabled by the vast computational power of the
+latest graphics processing units (GPUs) in the cloud, high
+quality channels of millions of UEs can be simultaneously
+generated with real-time ray-tracing. Initial applications are al-
+ready seen in 5G cell planning [10] using Nvidia’s Omniverse-
+based Aerial platform.
+An envisioned use case for SSBA is illustrated in Fig. 4,
+where the digital twin keeps a dynamically updated model
+of a city-wide network. Copies of the SSBA NN models are
+constantly fine-tuned or re-trained using data continuously
+generated by the digital twin in the background, which can
+be rapidly deployed to all the BSs to replace the outdated
+models and calibrated through few-shot transfer learning with
+a few OTA measurements. Such digital twins are envisioned
+to be used for many other applications as well, including
+outdoor XR experiences, driverless cars, and other types of
+communication optimization, and so the required data and
+platforms for SSBA may be available nearly “for free” in the
+6G era.
+B. Advanced Deep Learning Approaches
+Existing work on DL-aided BA focused mainly on de-
+veloping efficient learning models that can perform well on
+small-scale datasets. Realizing the potential gains of SSBA
+in practical deployments, however, requires developing full
+ML operation frameworks that actively select which data to
+keep, monitor distribution shifts, efficiently process large-scale
+datasets, and frequently update the learning of the SSBA
+models [11]. This is essential as the data-driven nature of
+SSBA inherently requires these solutions to be able to detect
+and account for any channel distribution shifts. Further, how
+to efficiently select and utilize past data/observations is also
+an important research direction. For instance, it might be
+6
+deploy NN model
+update digital twin
+DL-based BA model
+Digital Twin
+Actual Environment
+model pretraining
+model fine-tuning
+collect OTA measurements
+generate ray-tracing data
+Fig. 4: Illustration of a DL-based BA pipeline aided by digital twin. The digital twin provides ray-tracing data to pretrain the
+DL-based BA model. Measurements from the actual environment are used to fine-tune the BA model and update the digital
+twin.
+promising to leverage continual learning concepts to develop
+systematic frameworks that can continuously acquire, update,
+accumulate, and exploit knowledge throughout the operation
+lifetime [12].
+Another important direction is developing more advanced
+learning architectures that can scale to more complex systems
+and diverse deployment scenarios. Leveraging tools from
+active learning to iteratively generate probing beams based
+on previous measurements [13] is an interesting approach
+to further reduce latency compared to using a fixed set of
+probing beams. However, these approaches normally scale
+poorly with the number of UEs since the probing beams are
+UE-specific. Future research should investigate the gain of
+site-specific and UE-specific BA and improve its scalability
+under practical network considerations. Multi-task learning is a
+potential approach to improve the learning and data efficiency
+while making models more robust and generalizable [14].
+Auxiliary tasks such as channel estimation and localization can
+be solved simultaneously in additional to beam alignment by
+designing a NN with a common probing codebook for channel
+sensing and sub-modules to produce task-specific outputs.
+C. Coverage and robustness
+While DL-aided approaches often demonstrate much faster
+BA, they have not yet addressed concerns over robustness and
+reliability. Metrics such as average SNR and beam selection
+accuracy used by most DL models do not paint the whole
+picture. Operators often care more about providing a minimal
+performance guarantee to cell-edge UEs and avoiding link
+failures than maximizing the SNR for the top-percentile UEs.
+Future research needs to focus on the entire performance
+distribution and particularly on cell-edge UEs. Reliability
+metrics such as the coverage should also be incorporated into
+the training objective.
+DL-aided BA methods also need to be robust against imper-
+fections that arise in practical deployments. For example, the
+channels used during training may be different from the actual
+channel distribution experienced in practice, which could be
+caused by channel estimation error, channel model inaccuracy
+or mismatch between the simulated and actual environment.
+Noisy environmental side information (ESI) and radio fre-
+quency (RF) hardware imperfections will also deteriorate the
+BA performance. Such imperfections need to be considered
+and modeled in the training process. Adversarial training can
+further improve the robustness of these DL models and im-
+prove generalizability. Future research may also explore more
+transparent and interpretable DL models, which would allow
+us to better assess their performance in practical scenarios.
+D. Uplink Alignment
+Existing research on DL-aided BA has largely focused on
+improving latency on the BS side and has not addressed several
+unique challenges faced by UEs, namely power conservation
+and nontrivial mobility and rotations. Millimeter wave UEs in
+5G are assumed to have relatively few beams and moderate
+mobility. In emerging use cases such as high-speed trains,
+unmanned aerial vehicle and XR, UEs will experience more
+complex mobility patterns and faster velocity and rotations.
+Better tools are needed to model the 3D mobility, rotation
+pattern and effect of self-blockage of UEs.
+Uplink RSs defined in 5G can be repurposed for uplink
+probing. The equivalent of SSBA for the uplink should learn
+to capture additional information such as the rotation pattern,
+correlation between antenna panels and device self-blockage
+pattern that are unique to the UE. This could lead to joint
+site and UE-specific BA approaches. As BF is intricately
+tied to the characteristics of UEs, influenced by hardware
+and implementation variations, the ideal probing codebook
+and beam selection function may be different for each UE.
+Ensuring the generalizability of SSBA to a range of UEs,
+or its ability to evolve alongside shifts in UE populations, is
+crucial. In general, if the impressive reduction in the number of
+downlink measurements achieved by SSBA can be translated
+to the uplink, the potential for power and latency reduction is
+huge.
+7
+E. Network-wide Multi-cell Optimization
+Existing approaches have considered single-cell scenarios
+with uniformly distributed or clusters of UEs. Future research
+may explore optimization in a multi-cell network. Whereas
+cell boundaries in 5G are determined by the strongest beams
+in the uniform codebooks, DL-aided BA methods may learn
+site-specific codebooks or even GF BF. Hence, network-wide
+optimization needs to coordinate among cells, each providing
+non-uniform coverage. Training in a multi-cell deployment can
+also take place in a centralized or distributed fashion, where
+federated learning is a promising tool [15]. For instance, the
+centralized cloud may gather data across the network to learn
+a large model, which is distilled and adapted to each indi-
+vidual cell using the smaller-scale site-specific data. Finally,
+neighboring cells may share elements of their environment,
+especially in denser networks at higher carrier frequencies.
+Combined with the rising interest in multi-point connectivity,
+information sharing and coordination BA among nearby BSs
+is another promising research direction. In dense networks, the
+BA decisions may also be coupled with other user association
+and hand-off decisions, which motivate developing multi-task
+DL models to address these cases.
+F. Standardization and Commercial Deployment
+Standardization of BA in 5G is built around assumptions
+of sweeping, measurement and reporting of codebooks of
+beams. For instance, the BS and the UE establish a mutual
+correspondence between beams in the codebook, RSs and
+resource blocks through transmission configuration indicator
+(TCI) states. On the other hand, DL-aided methods can
+use enormous codebooks represented by DNNs, making the
+existing codebook-based signaling cumbersome. Furthermore,
+the beams used by the UE are transparent to the BS during
+feedback in 5G. For BA methods that rely on in-band sensing,
+this limits the information available to the BS, which will be
+a severe bottleneck when both BS and UE have large antenna
+arrays. Future standards should dedicate resources and signals
+for learning, such as for testing the learned beams before
+deployment and for more robust and prioritized feedback of
+the ESI or sensing measurements. While the existing BA
+framework is simple, we need to reconsider codebook-based
+assumptions and allow for more flexibility to accommodate
+powerful DL-aided BA methods.
+To accelerate research on DL-aided BA, more complete
+and diverse public datasets should be developed for easier
+training and standardized performance benchmarks. Compe-
+titions should be hosted with a variety of hidden testing data
+to encourage more competitive DL models and faster design
+iterations. The industry can also accelerate SSBA by providing
+practical deployment scenarios, allowing use of commercial-
+grade simulators, and sharing real-world measurement data.
+Deciding when these DL-aided BA techniques are ready for
+actual deployment is another challenge.
+VI. CONCLUSION
+SSBA is an exciting application of deep learning that
+can provide an increasingly rare opportunity for order-of-
+magnitude improvements in physical layer performance met-
+rics. It is a promising use case for DL in 5G-Advanced and 6G,
+and could prove to be a crucial enabler for wider coverage and
+deployment of mmWave spectrum, if the challenges identified
+in this article can be satisfactorily addressed.
+REFERENCES
+[1] M. Qurratulain Khan, A. Gaber, P. Schulz, and G. Fettweis, “Machine
+learning for millimeter wave and terahertz beam management: A survey
+and open challenges,” IEEE Access, vol. 11, pp. 11880–11902, Feb.
+2023.
+[2] K. Ma, Z. Wang, W. Tian, S. Chen, and L. Hanzo, “Deep learning for
+mmWave beam-management: State-of-the-art, opportunities and chal-
+lenges,” IEEE Wireless Commun., pp. 1–8, Aug. 2022.
+[3] Y. Heng, J. G. Andrews, J. Mo, V. Va, A. Ali, B. L. Ng, and J. C. Zhang,
+“Six key challenges for beam management in 5.5G and 6G systems,”
+IEEE Commun. Mag., vol. 59, pp. 74–79, July 2021.
+[4] R. W. Heath, N. Gonzalez-Prelcic, S. Rangan, W. Roh, and A. M.
+Sayeed, “An overview of signal processing techniques for millimeter
+wave MIMO systems,” IEEE J. Sel. Topics Signal Process., vol. 10,
+pp. 436–453, Feb. 2016.
+[5] X. Li and A. Alkhateeb, “Deep learning for direct hybrid precoding
+in millimeter wave massive MIMO systems,” in Proc. IEEE Asilomar,
+pp. 800–805, Nov. 2019.
+[6] Y. Heng, J. Mo, and J. G. Andrews, “Learning site-specific probing
+beams for fast mmWave beam alignment,” IEEE Trans. Wireless Com-
+mun., vol. 21, pp. 5785–5800, Jan. 2022.
+[7] Y. Heng and J. G. Andrews, “Grid-free MIMO beam alignment through
+site-specific deep learning,” IEEE Trans. Wireless Commun., May 2023.
+early access.
+[8] A. Alkhateeb, “DeepMIMO: A generic deep learning dataset for mil-
+limeter wave and massive MIMO applications,” in Proc. Inf. Theory and
+Appl. Workshop (ITA), pp. 1–8, Feb. 2019.
+[9] A. Alkhateeb, S. Jiang, and G. Charan, “Real-time digital twins: Vision
+and research directions for 6G and beyond,” arXiv preprint arXiv:
+2301.11283, 2023.
+[10] T. Mostak, “Introducing HeavyRF: Accelerated Cell Site Planning
+for
+Telcos.”
+Accessed
+Jul.
+27,
+2023.
+[Online].
+Available:
+https://www.heavy.ai/blog/introducing-heavyrf-accelerated-cell-site-
+planning-for-telcos.
+[11] Y. Ovadia, E. Fertig, J. Ren, Z. Nado, D. Sculley, S. Nowozin, J. Dillon,
+B. Lakshminarayanan, and J. Snoek, “Can you trust your model's
+uncertainty? Evaluating predictive uncertainty under dataset shift,” in
+Proc. NeurIPS, vol. 32, 2019.
+[12] F. Zenke, B. Poole, and S. Ganguli, “Continual Learning Through
+Synaptic Intelligence,” in Proc. ICML, vol. 70, pp. 3987–3995, Aug.
+2017.
+[13] F. Sohrabi, T. Jiang, W. Cui, and W. Yu, “Active sensing for commu-
+nications by learning,” IEEE Journal on Sel. Areas in Communications,
+vol. 40, pp. 1780–1794, Mar. 2022.
+[14] S. Liu, E. Johns, and A. J. Davison, “End-to-end multi-task learning
+with attention,” in Proc. IEEE/CVF CVPR, pp. 1871–1880, June 2019.
+[15] A. M. Elbir, A. K. Papazafeiropoulos, and S. Chatzinotas, “Federated
+learning for physical layer design,” IEEE Commun. Mag., vol. 59,
+pp. 81–87, Nov. 2021.
+Yuqiang Heng is a senior research engineer at Samsung. He
+earned his PhD at UT Austin in 2022 and BS at Rice.
+Yu Zhang received his BS and MS from Beijing Jiaotong
+University. He is a PhD student at ASU.
+Ahmed Alkhateeb is an Assistant Professor at ASU. He holds
+a PhD from UT Austin and has received awards including
+the 2016 IEEE Signal Processing Society Young Author Best
+Paper Award.
+Jeffrey Andrews is the Truchard Family Endowed Chair in
+Engineering at UT Austin and the Director of 6G@UT. He
+received the 2019 IEEE Kiyo Tomiyasu Award and holds a
+PhD from Stanford.

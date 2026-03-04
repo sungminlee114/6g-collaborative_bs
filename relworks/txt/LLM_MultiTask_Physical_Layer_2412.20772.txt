@@ -1,0 +1,1550 @@
+1
+Large Language Model Enabled Multi-Task
+Physical Layer Network
+Tianyue Zheng, Graduate Student Member, IEEE, and Linglong Dai, Fellow, IEEE
+Abstract—The advance of Artificial Intelligence (AI) is contin-
+uously reshaping the future 6G wireless communications. Partic-
+ularly, the development of Large Language Models (LLMs) offers
+a promising approach to effectively improve the performance and
+generalization of AI in different physical-layer (PHY) tasks. How-
+ever, most existing works finetune dedicated LLM networks for a
+single wireless communication task separately. Thus performing
+diverse PHY tasks requires extremely high training resources,
+memory usage, and deployment costs. To solve the problem,
+we propose a LLM-enabled multi-task PHY network to unify
+multiple tasks with a single LLM, by exploiting the excellent
+semantic understanding and generation capabilities of LLMs.
+Specifically, we first propose a multi-task LLM framework, which
+finetunes LLM to perform multi-user precoding, signal detection
+and channel prediction simultaneously. Besides, multi-task in-
+struction module, input encoders, as well as output decoders, are
+elaborately designed to distinguish different tasks. The proposed
+design allows different wireless data types to be well aligned with
+the LLM input format. Moreover, low-rank adaptation (LoRA) is
+utilized for LLM fine-tuning. To reduce the memory requirement
+during LLM fine-tuning, a LoRA fine-tuning-aware quantization
+method is introduced. Extensive numerical simulations are also
+displayed to verify the effectiveness of the proposed method.
+Index Terms—large language models (LLMs), multi-task LLM,
+physical layer communications
+I. INTRODUCTION
+The deep integration of Artificial Intelligence (AI) with
+wireless communications is one of the key features of Sixth-
+Generation (6G) communications [1]. With the development of
+6G communications, the application of AI becomes essential
+to manage the explosively-growing data service. Attributed
+to the strong feature extraction capability, AI, especially
+deep learning (DL), has demonstrated great potential in a
+wide range of physical-layer (PHY) communication tasks [2],
+including CSI feedback [3], channel estimation [4], channel
+prediction [5], signal detection [6], etc. The AI Radio Access
+Network (AI-RAN) is anticipated to offer reduced latency,
+improved bandwidth, spectrum efficiency, and coverage. More-
+over, significant efforts have been made by 3rd Generation
+Partnership Project (3GPP) to standardize DL in wireless
+networks recently [7].
+This work was supported in part by the National Science Fund for
+Distinguished Young Scholars (Grant No. 62325106), in part by the Key
+Program of the National Natural Science Foundation of China (Grant No.
+62031019), and in part by the National Key Research and Development
+Program of China (Grant No. 2023YFB3811503).
+T. Zheng, and L. Dai are with the Department of Electronic Engineer-
+ing, Tsinghua University, and the State Key laboratory of Space Network
+and Communications, Tsinghua University, Beijing 100084, China (e-mails:
+zhengty22@mails.tsinghua.edu.cn, daill@tsinghua.edu.cn). L. Dai is also with
+Department of Electrical Engineering and Computer Science, Massachusetts
+Institute of Technology, Cambridge, MA 02139, United States (Email:
+daill@mit.edu).
+Despite the significant progress, existing DL empowered
+methods still face some fundamental issues that limit their
+applications in practical communication networks. First, with
+the dramatically increasing channel dimension and rapidly
+changing wireless environment in 6G applications, it is dif-
+ficult for existing DL methods to comprehensively recognize
+patterns from complicated data distribution, due to their small
+model size and simple network structure. This insufficiency
+restricts their ability to provide reliable solutions in dynamic
+real-world scenarios. Secondly, existing DL methods exhibit
+a poor generalization capability to different wireless envi-
+ronments. For instance, a channel prediction model trained
+in an indoor scenario usually requires retraining when the
+wireless environment is changed to urban. Fortunately, recent
+advancements in large language models (LLMs) [8]–[10] have
+provided a radical solution to the challenges of existing
+DL methods. Bearing a huge amount of parameters, LLMs
+possess the ability to capture universal knowledge, which has
+demonstrated impressive language understanding and genera-
+tion capabilities to various tasks in different domains.
+Very recently, several initial studies [11]–[14] have been
+conducted since 2024 to leverage LLMs for boosting the
+performance of PHY communication systems. To be specific,
+in [11] LLM is adopted to perform power allocation using
+a few-shot learning approach. In this method, the channel
+gains and the corresponding transmit power strategies are
+provided as the input of LLM, also called “prompt” in the
+society of AI. The paper [11] demonstrates that LLM can
+automatically understand the principle of water-filling based
+optimal power allocation without any retraining. The authors
+in [12] effectively utilize LLMs to enhance AI-based CSI
+feedback performance in various scenarios. They incorporate
+the channel distribution as a prompt within the decoder to
+further enhance channel reconstruction quality. Besides, in
+order to obtain more accurate channel prediction and improve
+the generalization capability, the authors in [13] propose a
+LLM-driven channel prediction approach. [14] also unleashes
+the strength of LLMs for time series forecasting to improve
+the robustness of beam prediction. Moreover, a few review
+papers [15]–[19] have explored the potential transformative
+impact of LLMs and provide envisions for LLM-aided wireless
+communications.
+However, most existing works finetune dedicated LLM
+networks for a single wireless communication task such as
+the previously mentioned channel prediction and CSI feed-
+back, etc. In reality, wireless communication systems involve
+a multitude of tasks, each with distinct requirements that
+necessitate the adoption of LLMs. Given the huge model
+arXiv:2412.20772v2  [cs.IT]  7 Mar 2025
+2
+size of LLM, designing and training dedicated models for
+each task separately will lead to extremely high computational
+complexity, memory usage, and deployment costs.
+To solve the problem, we propose a LLM-enabled multi-
+task PHY network to unify multiple tasks with a single
+LLM, by leveraging the excellent language understanding and
+generation capabilities of LLMs. The main contributions of
+this paper are summarized as follows1.
+• We propose a multi-task LLM framework for PHY com-
+munications. The framework enables us to input different
+task requirements to LLMs with natural language, and
+explore the global feature extraction ability of LLMs to
+execute multiple tasks within one network. Particularly,
+this work focuses on three of the most typical tasks in
+PHY communications, multi-user precoding, signal de-
+tection, and channel prediction. The proposed framework
+can also accommodate any other PHY tasks.
+• For the design of the proposed framework, dedicated
+modules are proposed to adapt the LLMs for multi-
+ple tasks in the wireless domain. It mainly consists of
+two components: multi-task instructions, and task-specific
+encoders and decoders. Specifically, first, in order to
+distinguish and cope with different tasks and different
+data formats of the tasks, we elaborately design multi-task
+instructions as prompts of LLM; secondly, to bridge the
+gap between the feature of wireless data and that of the
+LLM, task-specific encoders and decoders are proposed
+to adapt the text-based pre-trained LLM.
+• For the fine-tuning of the proposed framework, we in-
+troduce low-rank adaptation (LoRA) [20], which freezes
+the pre-trained model weights and injects trainable low-
+rank matrices. Furthermore, to mitigate the computational
+and memory demands of the proposed model, we employ
+a LoRA fine-tuning-aware quantization method [21] that
+simultaneously quantizes an LLM and finds a proper low-
+rank initialization for LoRA fine-tuning.
+• Extensive simulation experiments have been conducted to
+verify the effectiveness of the proposed method, which
+achieves comparable performance with the dedicated de-
+signed network for each task. In addition, the LoRA fine-
+tuning-aware quantization method achieves 75% storage
+reduction during fine-tuning with almost no performance
+degradation. Moreover the proposed multi-task instruc-
+tion effectively accelerates the convergence and improve
+the performance.
+The rest of the paper is organized as follows. Section II
+introduces the system model. Then the three selected tasks,
+namely multi-user precoding, signal detection, and channel
+prediction, are formulated respectively. In Section III, the
+design of the proposed multi-task PHY LLM is illustrated in
+detail. Besides, Section IV elaborates the fine-tuning strategy
+of the proposed multi-task PHY LLM. Simulation results are
+provided in Section V. Finally, Section VI concludes this paper.
+Notation: aH, AH denote the conjugate transpose of vector
+a and matrix A, respectively; ∥a∥2 denotes the l2 norm of
+1Simulation codes will be provided to reproduce the results in this paper:
+http://oa.ee.tsinghua.edu.cn/dailinglong/publications/publications.html.
+vector a; ∥A∥F denotes the Frobenius norm of matrix A;
+R,C denote the set of real numbers and complex numbers,
+respectively; CN(µ, Σ) denotes the probability density func-
+tion of complex multivariate Gaussian distribution with mean
+µ and variance Σ.
+II. SYSTEMS MODEL
+We consider a multi-user (MU) multiple-input-single-output
+(MISO)- orthogonal-frequency-division-multiplexing (OFDM)
+system working in a time-division-duplex (TDD) mode. A
+base station (BS) simultaneously serves K single-antenna
+mobile users using K RF chains. The BS is equipped with
+a uniform planar array (UPA) consisting of NT = Nh × Nv
+antennas, where Nh and Nv denote the quantity of antennas
+along the horizontal and vertical dimensions, respectively.
+To design a multi-task LLM for the BS, we select three
+typical tasks in PHY communications for instance, downlink
+multi-user precoding, uplink signal detection, and channel
+prediction for mobile devices, respectively. The system models
+and problem descriptions of these three tasks are presented one
+by one below.
+A. Multi-user Precoding
+For downlink transmission scenario, the channel between
+user k and the BS at the m-th subcarrier is denoted as hm
+k ∈
+CNt×1, m = 1, 2, · · · , M. The received signal of user k at the
+m-th subcarrier is given by
+ym
+k = hm
+k
+H
+K
+X
+k′=1
+wm
+k′xm
+k′ + nm
+k ,
+(1)
+where wm
+k represents the beamforming vector for user k, xm
+k
+with E(|xm
+k |2) = 1, is the transmitted symbol from the BS to
+user k, and nm
+k ∼CN(0, σ2) denotes the additive Gaussian
+white noise (AWGN) with zero mean and variance σ2.
+Multi-user precoding aims to maximize the system sum
+rate via the optimization of the transmit precoders. The total
+power of all beamforming vectors is limited due to the BS
+power budget. For simplicity, we design the beamformers
+based on the channel of the central carrier-frequency hk and
+the problem is mathematically formulated as
+max
+W
+K
+X
+k=1
+log2(1 + γk),
+s.t.
+K
+X
+k=1
+∥wk∥2 ≤Pmax,
+(2)
+where W = [w1, w2, · · · , wK] is a set of beamforming
+vectors and Pmax is the power budget. Besides, γk represents
+the received signal-to-interference-plus-noise ratio (SINR) at
+user k. It is written as
+γk =
+hH
+k wk
+2
+PK
+k′=1,k′̸=k
+hH
+k wk′2 + σ2 .
+(3)
+As pointed out in [22], the optimal downlink beamforming
+vectors for (2) follow the structure as
+w∗
+k = √pk
+
+INT + PK
+k=1
+λk
+σ2 hkhH
+k
+−1
+hk
+
+
+INT + PK
+k=1
+λk
+σ2 hkhH
+k
+−1
+hk
+
+2
+,
+∀k,
+(4)
+3
+where pk is the power allocated to the k-th use, and λk is a
+positive parameter and PK
+k=1 λk = PK
+k=1 pk = Pmax. The so-
+lution structure in (4) provides the required expert knowledge
+for the LLM-empowered beamforming design in (2). Given
+this knowledge, the LLM is only required to learn 2K key
+parameters λ = [λ1, λ2, · · · , λK] and p = [p1, p2, · · · , pK],
+instead of the whole K × N beamforming matrix W =
+[w1, w2, · · · , wK]. Thus, the problem of DL-based multi-user
+precoding can be reformulated as
+P1: min
+ΩPRE
+K
+X
+k=1
+log2(1 + γk),
+(5)
+s.t.
+wk in (4), ˆλ, ˆp = fΩPRE(H),
+(6)
+where H = [h1, h2, · · · , hK], and fΩPRE is the mapping
+function with variable parameters ΩPRE.
+B. Signal Detection
+During uplink transmission, the BS antenna array simulta-
+neously receive the transmitted symbols from the K users.
+For clarity, we introduce the superscript “¯·” to all parameters
+related to the uplink transmission, e.g., ¯a. Specifically, we
+denote the transmitted symbol vector from all users at the
+m-th subcarrier as ¯xm = [¯xm
+1 , ¯xm
+2 , · · · , ¯xm
+K] ∈CK×1. Each
+element is drawn from the P-QAM constellation, and then
+transmitted over channel. The received signal ¯ym ∈CNT×1
+is given by
+¯ym = ¯Hm¯xm + ¯nm,
+(7)
+where ¯Hm = [¯hm
+1 , ¯hm
+2 . · · · , ¯hm
+K] is the uplink channel of the
+K users and ¯nm ∼CN(0, ¯σ2INT) is the AWGN at the m-th
+subcarrier.
+BS requires to recover the signals ¯xm from the received
+signal ¯ym given ¯Hm. We adopt the minimum mean squared
+error (MMSE) estimator to formulate the associated signal
+detection problem as
+P2: min
+ΩDET
+||ˆ¯xm −¯xm||2
+(8)
+s.t.
+ˆ¯xm = fΩDET( ¯Hm, ¯ym),
+(9)
+where fΩDET is the mapping function with variable parameters
+ΩDET.
+C. Channel Prediction
+In mobile scenarios involving high-velocity users, it is
+possible that the channel coherence time is shorter than the
+channel estimation period. Under these circumstances, precise
+channel prediction becomes crucial to mitigate the channel
+aging phenomenon [23] in high-mobility communication en-
+vironments with rapidly changing channels. In this work, we
+aim to accurately predict channel state information (CSI) of
+next T2 time slots given CSI of previous T1 time slots. The
+CSI of M subcarriers at time t is represented in matrix form
+as
+Ht
+k = [h1,t
+k , h2,t
+k , · · · , hM,t
+k
+], ∀k, t,
+(10)
+where hm,t
+k
+is the channel of user k, time t, and subcarrier m.
+To evaluate the channel prediction accuracy, the normalized
+MSE (NMSE) between predicted CSI by the network and
+ground-truth CSI is selected as the metric. Utilizing the metric,
+the channel prediction problem can be described as follows:
+P3: min
+ΩCP
+PT2
+t=1 ∥ˆHt0+t −Ht0+t∥2
+F
+PT2
+t=1 ∥Ht0+t∥2
+F
+(11)
+s.t.
+( ˆHt0+1, ..., ˆHt0+T2) = fΩCP(Ht0, ..., Ht0−T1+1),
+(12)
+where ˆHt is the predicted CSI, and fΩCP is the mapping
+function of the network with trainable parameters ΩCP. Note
+here we ignore the subscript since the channel prediction is
+performed independently to each user.
+III. THE FRAMEWORK OF THE PROPOSED PHYSICAL
+LAYER MULTI-TASK LLM
+In this paper, we propose an LLM-enabled PHY network to
+unify multiple tasks (channel prediction, multi-user precoding,
+as well as signal detection) with a single network. The
+proposed framework is illustrated in Fig. 1, including a multi-
+task instruction module, an input encoder, an LLM backbone,
+and an output decoder. To distinguish and cope with different
+tasks, we design multi-task instructions as prompts of LLM,
+which are processed by the pre-trained LLM embedder as part
+of the LLM input. Besides, the wireless data are encoded by
+task-specific encoders to make the feature of wireless data
+understandable to a text-based pre-trained LLM, e.g., GPT-
+2. The prompt and encoded wireless data are concatenated
+together to serve as the inputs of LLM. These inputs are
+later fed into the LLM backbone. Note that the same LLM
+backbone is used for all considered tasks. Finally, obtaining
+the outputs of the LLM backbone, task-specific decoders are
+utilized to generate desired outputs for different tasks.
+We describe each component of the framework as follows. It
+is worth noting that, in this paper, we select three typical tasks
+suitable for deep learning methods in PHY communications,
+namely multi-user precoding, signal detection, and channel
+prediction; while the proposed method can be smoothly ex-
+tended to other PHY tasks. Besides, we mention that although
+the encoders and decoders are designed specifically for each
+task, the parameter sizes of these modules are much smaller
+than that of the LLM backbone. The LLM backbone, which
+takes up the majority of the total parameter size, is shared
+among different tasks.
+A. Multi-task Instruction Template
+When training a single unified model for multiple different
+tasks, a basic and critical problem is how to distinguish each
+task. Thanks to the remarkable text understanding capability,
+LLM allows users to input task requirements with natural
+language. Therefore, we can design a multi-task instruction
+template with task-specific tokens as prompt to make each
+task easily distinguishable. Next, we introduce our multi-task
+instruction template in detail.
+4
+Fig. 1.
+The model framework of our method. In this figure, “CP” denotes
+channel prediction, “Det” denotes signal detection, and “Pre” denotes multi-
+user precoding.
+We structure the instruction template into three parts, which
+is denoted as follows,
+[Task Identifier]Task description < Instruction > .
+(13)
+The first part is the task identifier token, the second part
+is the task and data description, and the third part is the
+instruction input. Task Identifier provides a distinct identifier
+for each task to reduce the ambiguity across various tasks.
+Task description attempts to input basic domain knowledge
+and illustrate the dataset for LLM to better understand the
+task. Take multi-user precoding as an example, the designed
+task description is presented by “Multi-user precoding aims to
+maximize the sum rate of multiple users through the design of
+precoder. For the collected dataset, we consider a base station
+with 128 antennas to serve 8 single antenna users simulta-
+neously”. The third part Instruction gives direct and clear
+objective of the task. Again, for instance the instruction for
+multi-user precoding is “<Instruction> Design the precoding
+matrix given channels of the users, to maximize the sum rate
+of the multiple users.”.
+The designed prompt is then fed to the pre-trained LLM
+embedder as part of the input of LLM. The prompt embedding
+is denoted as Xemb
+promot.
+B. Input Encoders
+Adapting text-based pre-trained LLM to multiple commu-
+nication domain tasks is another challenging problem. To
+be specific, first, there is a huge gap between the specific
+characteristics of the data in the communication domain and
+the natural language. Therefore, directly applying a general-
+domain LLM to these communication tasks may lead to poor
+performance. Secondly, the format, length, and meaning of the
+data also differs significantly among the tasks. The difficulties
+Fig. 2. Detailed illustration of encoders and decoders.
+urge us to design dedicated input encoder modules for each
+task to fit the feature space of the LLM, and facilitate multi-
+task feature extraction.
+1) Encoder for multi-user precoding: Since neural net-
+works generally deal with real numbers, we first convert the
+complex multi-user channel into real tensors Xin
+Pre ∈RK×2Nt
+as the input. For multi-user precoding, we employ a transfomer
+to extract the channel feature and inter-user relationship. The
+transfomer is composed of L = 3 blocks. The structure of
+each block is presented in Fig. 2, including a multi-head self-
+5
+attention module and a multilayer perceptron (MLP) module.
+The input Xin
+Pre is first processed by the multi-head self-
+attention module:
+Xatt(1)
+Pre
+= LayerNorm(ATT(Xin
+Pre) + Xin
+Pre),
+(14)
+where ATT(·) denotes the multi-head self-attention. Then
+MLP module is performed as
+Xmlp(1)
+Pre
+= LayerNorm(MLP(Xatt(1)
+Pre
+) + Xatt(1)
+Pre
+),
+(15)
+which serves as the input of next block. Denote the output
+of the transfomer as Xmlp(3)
+Pre
+. Then a linear layer is used to
+project Xmlp(3)
+Pre
+into the language model space
+Xemb
+Pre = Linear(Xmlp(3)
+Pre
+).
+(16)
+2) Encoder for signal detection:
+The input of signal-
+detection encoder contains the uplink channel ¯Hm and the
+received signal ¯ym. The encoder rearranges the channel ¯Hm as
+one token XHin
+Det ∈RK×2Nt. Then a MLP module is employed
+to extract features from the channel
+XHmlp
+Det
+= MLP(XHin
+Det).
+(17)
+We also extract shallow features from the rearranged real
+received signal Xyin
+Det by a MLP module
+Xymlp
+Det
+= MLP(Xyin
+Det).
+(18)
+In the simulation parts, we find that integrating received sig-
+nals of several time slots into one sample effectively improves
+the training performance compared to treating them as multiple
+samples. Therefore, we utilize received signals of L0 = 8 time
+slots in one sample in practice. Then, the extracted features
+of channel and received data are concatenated and projected
+to the input format of LLM:
+Xemb
+Det = Linear([XHmlp
+Det , Xymlp
+Det ]).
+(19)
+3) Encoder for channel prediction: Consider that the CSI
+Ht ∈CNt×M of at time t is the high-dimensional structural
+data, directly predicting the matrix by the network will bring
+significant complexity. The complexity can be unacceptable
+for future 6G systems with a large number of antennas and
+subcarriers. Inspired by [13], we parallelize the channel predic-
+tion for different antennas. That is to say, we predict the CSI of
+each transmitter antenna separately. Thereby, the input sample
+of j-th antenna, for j ∈{1, 2, · · · , NT }, can be converted into
+a real tensor Xin
+CP ∈RT1×2M. To facilitate convergence of
+network training, we first perform batch normalization for the
+input data as Xin′
+CP. Then the normalized input Xin′
+CP is divided
+into T ′
+1 = ⌈T1
+N ⌉non-overlapping patches of size N along
+the temporal dimension [24]. The patching operation helps
+to capture the local temporal features and the patched input is
+denoted as Xpat
+CP ∈RT ′
+1×N×2M. We adopt the CSI attention
+module proposed in [25], to extract preliminary temporal and
+frequency features before LLM:
+XCA
+CP = CSIATTL(Xpat
+CP),
+(20)
+where CSIATTL represents the CSI attention module cas-
+caded L times. Finally, to align with the input format of LLM
+Fig. 3. The illustration of a transformer block in LLAMA2.
+backbone, XCA
+CP is rearranged to XCA′
+CP ∈RT ′
+1×2MN and then
+mapped to the feature dimension of the pre-trained LLM with
+a single fully-connected layer:
+Xemb
+CP = Linear(XCA′
+CP ).
+(21)
+C. LLM Mainbody
+In this paper, we adopt LLAMA2 as the LLM backbone
+for our proposed multi-task PHY framework. It should be
+emphasized that our framework allows for seamless integration
+of alternative LLMs, including but not limited to GPT [10]
+and QWen [26]. The decision of model architecture and scale
+requires evaluation of the trade-off between computational
+complexity and performance.
+The architecture of LLAMA2 is presented in Fig. 3. It con-
+sists of stacked classical transformer decoders. Note that in the
+proposed multi-task PHY network, the LLM backbone takes
+up most of the model parameters. In contrast, the encoders
+and decoders, though designed specifically for each task, only
+occupies a very small portion in the network. To be specific,
+the parameter size of LLAMA2-7B backbone is 7 billion,
+while the parameter size of all other modules, including the
+multi-task instructions, input encoders and output decoders,
+is only about 19 million. Obtaining the LLM backbone, we
+concatenate the embedding of prompt and data obtained in
+the previous subsections as Xemb and feed into the LLM
+backbone. The output can be obtained by
+XO
+LLM = LLM(Xemb).
+(22)
+D. Output Decoders
+Similar to input encoders, to facilitate multiple downstream
+tasks simultaneously, task-specific decoders are required to
+convert the output features of the LLM into the final results for
+different tasks. Here, we elaborate on the output decoders of
+the three tasks sequentially. Note that for output decoders, we
+discard the prefix portion that is associated with the instruction
+prompt, while we only retain the output presentations of the
+data for the decoder.
+6
+1) Decoder for multi-user precoding:
+As discussed in
+Section II A., the multi-user precoding problem can be
+transformed into the learning of the parameters λ
+=
+[λ1, λ2, · · · , λK] and p = [p1, p2, · · · , pK]. Therefore, a MLP
+module comprising of two fully-connected (FC) layers is
+adopted to generates 2K values including the power allocation
+vectors ˆλ and ˆp. The output of the MLP module XO
+Pre ∈RK×2
+can be written as
+XO
+Pre = MLP(XO
+LLM),
+(23)
+where ˆλ = XO
+Pre[:, 1] and ˆp = XO
+Pre[:, 2]. Then the scaling
+layer scales the results of the output layer ˆλ and ˆp to meet
+the power constraint by:
+ˆp∗= Pmax
+∥ˆp∥1
+ˆp
+and
+ˆλ∗= Pmax
+∥ˆλ∥1
+ˆλ.
+(24)
+2) Decoder for signal detection: For signal detection, we
+employ two FC layers to transform the dimension of the XO
+LLM
+to the number of antennas:
+Xmlp
+Det = MLP(XO
+LLM).
+(25)
+Then Xmlp
+Det is rearranged XO
+Det ∈RK×2 to where the first and
+the second dimension respectively correspond to the real part
+and the imaginary part.
+3) Decoder for channel prediction: We utilize an MLP
+module as the decoder to predict the channel. The output is
+presented by
+Xmlp
+CP = MLP(XO
+LLM).
+(26)
+Last, Xmlp
+CP is de-normalized to generate the final output of the
+network, i.e.,
+Xnorm
+CP
+= σCPXmlp
+CP + µCP,
+(27)
+where µCP and σCP is the mean and variance of the channel
+matrix. Then the tensors are rearranged to XO
+CP ∈RT2×M×2
+to separate the real part and the imaginary part of the predicted
+channel.
+IV. THE FINE-TUNING STRATEGY OF THE PROPOSED
+PHYSICAL LAYER MULTI-TASK LLM
+Considering the huge parameter size of LLMs, directly
+fine-tuning all the parameters of the proposed network is
+impractical. To address this issue, this section focuses on the
+computationally efficient fine-tuning of the proposed PHY
+multi-task LLM. First, we introduce LoRA [20] for LLM
+fine-tuning, which inserts low-rank adapters into the LLM
+backbone to finetune the pre-trained LLM for PHY tasks.
+Then, to mitigate the computational and memory demands of
+the proposed model, we employ a LoRA fine-tuning-aware
+quantization method [21] that performs LLM quantization
+while concurrently properly initializes the low-rank adapters
+for LoRA-based fine-tuning. Moreover, the multi-task loss as
+well as training schedule are illustrated.
+A. LoRA for LLM Mainbody
+LoRA [20] is a parameter-efficient technique, which freezes
+the pre-trained model weights and injects trainable rank de-
+composition matrices into each layer. The use of LoRA mainly
+brings two advantages. Firstly, due to the immense parameter
+size of LLMs, full-parameter fine-tuning could be impractical.
+LoRA circumvents this by only fine-tuning low-rank weight
+matrices, with a significantly reduced number of parameters.
+Secondly, LoRA prevents the problem of catastrophic for-
+getting of the original knowledge during fine-tuning. This is
+attributed to the fact that the newly learned knowledge has
+a lower rank than the original knowledge. As a result, LoRA
+facilitates the use of the universal modeling and generalization
+capability of pre-trained LLMs to achieve multiple tasks with
+a single model.
+Specifically, we focus on the fine-tuning of the query
+matrices and value matrices in an attention block of the LLM
+backbone, denoted as Wq and Wv respectively, as illustrated
+in Fig. 3. LoRA updates two rank decomposition weight
+matrices A and B that are attached to a frozen pre-trained
+weight matrix W (Wq and Wv). In this case, the original
+weight W is modified as
+W ←W + ABT ,
+(28)
+where W ∈Rd1×d2, A ∈Rd1×r, B ∈Rd2×r, and r ≪
+min{d1, d2}. Generally, we initialize the weights as follows:
+A ∼N(0, σ2),
+B = 0.
+(29)
+As mentioned above, during the fine-tuning, we freeze W
+while update A and B. Since r << min(d1, d2), the number
+of parameters for fine-tuning A and B, i.e., rd1 + rd2, is
+significantly less than that of the full weight matrix, d1d2.
+The reduced parameter size thus makes the LoRA-based fine-
+tuning much efficient.
+B. LoRA Fine-tuning-aware Quantization
+Despite the usage of LoRA, the extensive computational and
+memory demands of LLM-based models still pose significant
+challenges for both fine-tuning and inference, especially for
+resource-restricted equipment in wireless communications. To
+reduce the storage demands of pre-trained models, quantiza-
+tion acts as an essential compression strategy. Its key idea
+is to transform the original weights with a high precision
+into a finite set of discrete values. For instance, convert-
+ing model parameters from the original 16-bit floating-point
+format (FP16) to a 4-bit integer format leads to a 75%
+decrease in storage overhead. However, it is worth noting that a
+quantized network parameters might degrade the performance
+of the aforementioned LoRA fine-tuning strategy. Particularly,
+consider a quantized weight matrix Q = q(W), where q(·)
+denotes the quantization operator. If the low-rank adapters A
+and B initialized by (29) and then attached to Q, the initial
+weight matrix Q + ABT naturally diverges from the original
+pre-trained parameters W because of the variations caused
+by the quantization process. Such unavoidable variations may
+negatively influence the initial setup of the LoRA fine-tuning
+procedure.
+To solve the problem, we adopt a LoRA-fine-tuning-aware
+method to smoothly integrate quantization into the procedure
+of LoRA fine-tuning. The main idea is to approximate the
+original high-precision pre-trained weights by alternatively
+7
+Full-precision 
+LoRA
+LoRA Fine-tuning-aware 
+Quantization
+Fine-tuning
+Pre-trained
+Weights 𝐖
+(FP16)
+𝐀
+𝐁
+𝑟
+𝐗
+Quantized 
+Weights 𝐖
+(NF4)
+𝐀
+𝐁
+𝑟
+𝐗
+Initialization
+based on
+Algorithm 1
+Inference
+FP16
+FP16
+FP16
+FP16
+NF4
+Fig. 4. The comparison of LoRA fine-tuning-aware quantization with tradi-
+tional full-precision LoRA.
+applying quantization for LLMs and proper low-rank ini-
+tialization for LoRA fine-tuning. This initialization strategy
+effectively reduces the gap between the quantized and full-
+precision model, leading to a notable enhancement in fine-
+tuning performance.
+The key procedures of the LoRA fine-tuning-aware quan-
+tization method are presented in Fig. 4. During the ini-
+tialization of LoRA fine-tuning, a quantized weight matrix
+Q ∈Rd1×d2 with N-bit precision, along with the low-rank
+adapters A ∈Rd1×r, B ∈Rd2×r are designed to closely
+approximate the original full-precision pre-trained parameter
+matrix W ∈Rd1×d2. Mathematically, the model weight
+initialization problem can be formulated as:
+P4:
+min
+Q,A,B ∥W −Q −ABT ∥F .
+(30)
+This problem can be efficiently solved via alternatively con-
+ducting quantization and singular-value-decomposition. The
+step-by-step procedures provided in Algorithm 1 and the
+details are as follows.
+Quantization Step: In the i-th iteration, the quantiza-
+tion process is applied to the residual between the pre-
+trained parameter matrix W and the low-rank approximation
+Ai−1BT
+i−1, yielding the quantized weight matrix Qi
+Qi = qN(W −Ai−1BT
+i−1),
+(31)
+where qN(·) : R 7→{0, 1, · · · , 2N −1} maps a high-precision
+weight matrix, e.g., matrix with 16-bit floating point number,
+to an N-bit quantized matrix. Typically, the quantization
+process can be expressed as
+Q = round((2N −1)F(W)),
+(32)
+where F(·) : R 7→[0, 1] is a normalization function. In this
+work, we utilize the 4-bit NormalFloat Quantization (NF4)
+proposed in [27] to model the normalization function. It
+assumes W ∼N(0, σ2) and hence F(W) = Φ(W/σ), where
+Φ(·) is the cumulative distribution function of the standard
+normal distribution. Besides, other quantization methods can
+also be involved such as the uniform quantization.
+SVD Step: After obtaining the i-th quantized weight Qi,
+SVD is applied to the residual of the quantization denoted by
+Ri = W −Qi by
+Ri =
+d
+X
+j=1
+σi,jui,jvT
+i,j,
+(33)
+where d = min{d1, d2},
+σi,1 ≥σi,2 ≥. . . ≥σi,d are the
+singular values of Ri, ui,j, vi,j are the associated left and right
+singular vectors of Ri. We then obtain a rank-r approximation
+of Ri by Ai−1BT
+i−1, where
+Ai = [√σi,1ui,1, . . . , √σi,rui,r],
+(34)
+Bi = [√σi,1vi,1, . . . , √σi,rvi,r].
+(35)
+After obtaining the initialization, LoRA fine-tuning can be
+performed as described in Section III-C.
+Moreover, during the inference, we merge the quantized
+backbone with the finetuned adapters to acquire the final
+output. If the deployed device is resource-limited, the merged
+model can be further quantized before deployment; otherwise,
+the full-precision model can be deployed directly.
+Algorithm 1 The initialization of LoRA fine-tuning-aware
+quantization.
+Input: Full-precision pre-trained weight W, LoRA rank r,
+N-bit quantization function qN(·), iteration number Iter.
+1: Initialize A0 ←0, B0 ←0;
+2: for i = 1 to Iter do
+3:
+Obtain quantized weight Qi ←qN(W −Ai−1BT
+i−1);
+4:
+Obtain low-rank approximation Ai, Bi ←SVD(W −
+Qi) based on [36]-[37];
+5: end for
+Output: QIter, AIter, and BIter.
+C. Multi-task Loss Function and Training Schedule
+During the training stage, we randomly choose a task and
+sample data from the corresponding dataset for each iteration.
+After determining the involved task and data, we select the
+proper prompt and activate the required modules of encoder
+and decoder. It is worth noting that the backbone of the
+pre-trained LLM is frozen, while the other parameters of
+the network, together with the LoRA adapters are trainable.
+Then the proposed network update the parameters of encoders,
+decoders and LoRA adapters using the corresponding loss. The
+detailed loss functions for each task are illustrated below.
+For multi-user precoding, the training is divided into
+two stages, namely supervised learning and unsupervised
+learning, respectively. The WMMSE algorithm is one of the
+most popular iterative algorithms to find the locally optimal
+solutions. Therefore, in the supervised learning stage, we can
+first generate the power allocation vectors p and λ using
+the WMMSE algorithm as the label. Then, the supervised
+learning will employ the MSE loss function to make the power
+allocation vectors, ˆp and ˆλ, generated by LLM as close to p
+and λ as possible, i.e.,
+LossP re =
+1
+2K
+
+∥p −ˆp∥2
+2 + ∥λ −ˆλ∥2
+2
+
+.
+(36)
+8
+Nevertheless, the WMMSE algorithm achieves only local
+optimality, making (36) insufficient for fully addressing the
+fundamental objective of problem P3. To enhance the overall
+rate performance, we implement additional network train-
+ing using an unsupervised learning manner, where the loss
+function is directly derived from the original optimization
+objective:
+LossP re = −
+K
+X
+k=1
+log2(1 + γk)
+(37)
+In the signal detection task, the original transmitted data is
+rearranged as XDet ∈RK×2, which serves as ground truth of
+the network output. Then we choose MSE loss for the training,
+LossDet =
+1
+2K ∥XDet −XO
+Det∥2
+F .
+(38)
+For channel prediction, the ground truth of the predicted
+CSI is also available. We transform the complex CSI matrix
+to real ground truth XCP ∈RT2×M×2, and MSE is adopted
+as the loss function to minimize the prediction error, i.e.,
+LossCP =
+1
+2MT2
+∥XCP −XO
+CP∥2
+F .
+(39)
+V. SIMULATION RESULTS
+In this section, extensive numerical simulations are pre-
+sented to verify the effectiveness of the proposed method.
+Firstly, we elaborate on the simulation setup. Then the perfor-
+mance of three selected tasks, i.e. channel prediction, multi-
+user precoding, and signal detection, is evaluated respectively.
+Besides, the performance of LoRA fine-tuning-aware quan-
+tization is compared with the full-precision model. Finally,
+we analyze the impact of designed multi-task instruction and
+different LLM backbones, respectively.
+A. Simulation Setup and Training Details
+For the experimental setup, we utilize the QuaDRiGa
+channel generator [28], implementing the 3GPP Urban
+Macro (UMa) propagation model [29] under non-line-of-sight
+(NLOS) conditions. The channel consists of 21 scattering
+clusters, each containing 20 propagation paths. We consider a
+multi-user MISO-OFDM system, where a BS simultaneously
+serves K = 4 ∼8 moving users. BS employs a UPA
+comprising Nh = 16 elements in horizontal and Nv = 8
+in vertical, while users are configured with single-antenna
+receivers. The antenna spacing is maintained at half of the
+wavelength at the center frequency. The users are uniformly
+distributed within angle range [−π/2, π/2], and distance range
+[ρmin, ρmax] = [20 m, 100 m]. We suppose a time-division
+duplex (TDD) system, where the center frequency of channel
+is set as 2.4 GHz. The bandwidth of the channel is 8.64
+MHz, comprising of M = 48 subcarriers, i.e., the frequency
+interval of subcarriers is 180 kHz. The dataset is partitioned
+into training and testing subsets, containing 50,000 and 10,000
+samples per task respectively. The model undergoes training
+for 200 epochs over the dataset.
+For channel prediction problem, We predict future CSI of
+T2 = 4 time slots based on historical CSI of T1 = 16 time
+slots. We suppose that the users are initialized with random
+positions and follow linear movement patterns. The velocity
+distribution for mobile users spans uniformly from 10 km/h
+to 100 km/h. To enhance the robustness against noise, the
+SNR is uniformly sampled between 5 dB and 20 dB during
+the training stage, to account for both the low-noise and
+high-noise scenarios. For uplink signal detection, we suppose
+the transmitted data is generated from 16-QAM modulation
+symbol. Similarly, the received signal is corrupted by noise
+with SNR uniformly distributed between 5 and 20 dB, during
+the fine-tuning.
+B. Performance Evaluation for Channel Prediction
+1) Baselines and Performance Metric: To evaluate the
+performance, we compare the proposed multi-task LLM with
+the following benchmarks.
+• Transformer: [5] introduces a parallelized channel predic-
+tion framework based on transformer to predict future CSI
+in parallel, and thus avoid error propagation problems.
+• RNN: A Recurrent Neural Network (RNN) [30] is a
+traditional type of neural network used for processing
+sequences and is commonly utilized in channel prediction
+tasks. In the experiments, we configure the RNN with
+four layers.
+• LSTM:
+The
+long
+short-term
+memory
+network
+(LSTM) [31] incorporates specialized memory units and
+gating mechanisms to effectively capture long-range
+temporal dependencies. Our implementation utilizes a
+four-layer LSTM structure for predictive modeling.
+• GRU: As an enhanced version of LSTM, the gated
+recurrent unit (GRU) [32] introduces simplified gating
+operations to mitigate gradient-related challenges during
+training. Similarly, the GRU-based model consists of 4
+layers.
+• LLM4CP: LLM4CP [13] represents a pioneering effort
+in leveraging pre-trained language model, i.e. GPT-2, for
+channel prediction task, demonstrating superior predic-
+tion accuracy and enhanced generalization.
+• Single-task LLM: We also train the proposed network on
+a single task to better compare the performance with the
+proposed multi-task LLM.
+In channel prediction evaluation, the NMSE serves as a
+crucial indicator for assessing prediction precision, making
+it an essential measurement criterion in our experimental
+analysis.
+2) Performance Analysis: The evaluation dataset for chan-
+nel prediction comprises 10 distinct velocities spanning from
+10 km/h to 100 km/h, with each velocity containing 1000 data
+samples. As illustrated in Fig. 5, the NMSE performance of
+our proposed multi-task LLM framework is compared against
+various baseline methods across different user velocities. The
+historical CSI data is added by Gaussian whiten noise with
+SNR = 20 dB. Experimental results demonstrate a consistent
+degradation in NMSE performance across all methods as
+user mobility increases. This phenomenon can be attributed
+to the accelerated channel variation and reduced coherence
+time associated with higher velocities, which consequently
+9
+10
+20
+30
+40
+50
+60
+70
+80
+90
+100
+-24
+-22
+-20
+-18
+-16
+-14
+-12
+-10
+-8
+-6
+Fig. 5.
+The NMSE performance of proposed method and other baselines
+versus different user velocities.
+0
+5
+10
+15
+20
+25
+30
+-20
+-18
+-16
+-14
+-12
+-10
+-8
+Fig. 6.
+The NMSE performance of proposed method and other baselines
+versus different SNR.
+amplifies the complexity of accurate channel estimation. Fig. 5
+reveals that attention-based methods, achieve relatively high
+performance than traditional AI methods, validating the po-
+tential of attention-based methods in channel prediction task.
+Equipped with excellent modeling capability of LLM, the
+proposed model finetuned on channel prediction task only,
+consistently outperforms other baselines among testing ve-
+locities. With elaborately designed multi-task instruction, the
+proposed LLM-enabled multi-task model obtains comparable
+channel prediction accuracy with the single-task one, which
+verified the effectiveness of the proposed multi-task LLM.
+In Fig. 6, the robustness against noise of the proposed
+method is evaluated, where the SNR of noise in historical
+CSI is growing from 0 dB to 25 dB. The NMSE performance
+has been averaged over all test speeds. It can be observed that
+for all schemes, increased SNR conditions lead to improved
+Fig. 7. The sum rate performance of proposed method and other baselines
+versus different BS transmit powers.
+NMSE performance in prediction accuracy. Thanks to the
+generalization ability of LLMs, the proposed method exhibits
+high robustness performance against CSI noise. It achieves the
+lowest NMSE performance in the entire SNR regime.
+C. Performance Evaluation for Multi-user Precoding
+1) Baselines and Performance Metric: For multi-user pre-
+coding, the following methods are selected as baselines, in-
+cluding traditional methods and deep learning-based methods.
+• ZF: Eigen-based zero-forcing (ZF) algorithm [33] is a
+computationally efficient approach, which derives the
+precoding matrix through the Moore-Penrose pseudo-
+inverse operation applied to the channel matrix.
+• WMMSE: As mentioned above, the WMMSE algo-
+rithm [34] is one of the most popular iterative algo-
+rithms. The method can achieve satisfactory sum rate
+performance while suffering from high computational
+complexity. The iterative number is set as 20.
+• CNN: In [35], the authors propose a CNN-based frame-
+work for the optimization of downlink beamforming.
+• Single-task LLM: Similarly, we train the proposed net-
+work on multi-user precoding only.
+The sum rate of users, which is the objective of multi-user
+precoding, is utilized as performance metric to evaluate the
+multi-user precoding task.
+2) Performance
+Analysis:
+The
+sum
+rate
+performance
+against different BS transmit power is plotted in Fig. 7.
+The noise power is set as σ2 = −10 dBW, the maximal
+transmit power of BS Pmax increases from −10 to 10 dBW.
+Besides, the user number is set as 4. As illustrated in Fig. 7,
+with the increase of the BS transmit power, the sum rate
+of all methods increase accordingly. As depicted in Fig. 7,
+the ZF-based method, though with low complexity, achieves
+unsatisfactory performance. The iterative algorithm WMMSE
+improves the sum rate, while it is still possible to fall in
+local optimal solutions, inducing an obvious gap from the
+10
+Fig. 8. The sum rate performance of proposed method and other baselines
+versus different user numbers.
+capacity. With the powerful network and carefully designed
+training strategy, the deep-learning-based methods, including
+the CNN-based method and LLM-based method, are promis-
+ing in conquering the problem and further improving the
+performance. Specifically, the proposed model, both trained
+on a single task and trained on multiple tasks, achieves near-
+optimal performance for all transmit power and outperforms
+other benchmark schemes for the entire transmit power range.
+Owing to the increasing size of the network, the LLM-based
+method exhibits superior optimization and generalization ca-
+pabilities and outperforms the CNN-based method in terms of
+performance.
+In Fig. 8, we illustrate the sum rate performance against
+the user number, which ranges from 4 to 8. The transmit
+power and noise power is set as 0 dBW and -10 dBW,
+respectively. As the user number increases, the spectrum
+efficiency increases with further exploitation of multiplexing
+gain. We observe from Fig. 8 that the proposed multi-task
+LLM-based method enjoys a higher sum rate performance,
+compared to existing methods for different number of users.
+This verifies the effectiveness and scalability of the proposed
+method. It is worth noting that LLMs inherently possess the
+ability to process variable-length sequences, thus our proposed
+scheme can be directly applied to different number of users
+without requiring any modifications. In contrast, for traditional
+AI methods, to accommodate varying numbers of users, input
+data under different user numbers must be zero-padded to
+match the shape of the maximum user number.
+D. Performance Evaluation for Signal Detection
+1) Baselines and Performance Metric:
+To validate the
+effectiveness of the proposed method, several methods are
+implemented as baselines.
+• LMMSE:
+Linear
+minimum
+mean-squared
+error
+(LMMSE) detector is a classical method for achieving
+signal detection with low complexity.
+0
+2
+4
+6
+8
+10
+12
+14
+16
+18
+20
+0
+0.05
+0.1
+0.15
+0.2
+0.25
+0.3
+0.35
+Fig. 9. The NMSE performance of the proposed method and other baselines
+versus different SNRs.
+• DNN: In [36], a data-driven model which inputs the
+channel as well as the received data and outputs the
+original data through a deep learning network.
+• DetNet: The detection network (DetNet) in [37] unfolds
+the iterations of a projected gradient descent algorithm to
+recover the data.
+• OAMP-Net: A famous model-driven deep learning net-
+work proposed in [6], which incorporates deep learning
+into the orthogonal AMP (OAMP) algorithm for accurate
+signal detection.
+• Single-task LLM: The proposed network is finetuned only
+on the signal detection task.
+In this work, we utilize NMSE and symbol error ratio (SER)
+as metrics to evaluate the performance of signal detection.
+NMSE loss is the direct performance metric to present the
+accuracy of data recovery. It should be noted that the reason
+for employing the data recovery accuracy rather than only
+choosing the bit error ratio (BER) or SER to optimize and
+evaluate the model is described below. In the practical com-
+munication link, the objective of signal detection is to recover
+the data as accurately as possible, which can be utilized to
+compute the log-likelihood ratio (LLR) for demodulation and
+channel decoding to enable reliable communications. Besides,
+obtaining the recovered signal, we also demodulate the trans-
+mitted symbol by minimum euclidean distance decision, and
+then SER is employed to evaluate the performance in this case.
+2) Performance Analysis: In Fig. 9, the NMSE performance
+of the proposed multi-task LLM on signal detection under
+different SNRs is presented. We also compare the performance
+with several baselines. As illustrated in Fig. 9, the DNN-based
+method presents poor performance since it directly inputs the
+data to the black-box-based network, while ignores the domain
+knowledge and structure of the problem and data. Besides,
+despite the low computational complexity, the LMMSE-based
+method also shows relatively high NMSE performance. The
+model-based methods, including DetNet [37] and OAMP-
+Net [6], significantly improve the data recover accuracy; the
+11
+0
+2
+4
+6
+8
+10
+12
+14
+16
+18
+20
+0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+Fig. 10. The SER performance of the proposed method and other baselines
+versus different SNRs.
+OAMPNet [6] achieves higher performance than the LLM-
+based method in high SNR regime with better utilization of
+the statistical information of noise. Moreover, the proposed
+multi-task LLM can accurately recover the transmitted data,
+especially in the low SNR regime. It can be observed that
+the performance of multi-task LLM is comparable to that of
+single-task LLM, suggesting the potential of multi-task LLM
+networks in wireless communications.
+The SER performance against SNR is depicted in Fig. 10.
+When the SNR is lower than 8 dB, the proposed multi-task
+LLM network outperforms other baselines, which indicates
+that the generalization capability of LLMs endows the pro-
+posed method with high robustness against noise. As the SNR
+increases, the OAMPNet [6] achieves the best performance,
+since it fully utilizes the statistical information of noise.
+Based on this observation, we provide two comments as
+follows. First, for the scenarios where the power of noise
+σ2 can be obtained, future works can consider effectively
+incorporating statistical information of channel and noise as
+prompt to further improve the performance of LLM-based
+method, especially in high SNR regimes. Secondly, there are
+still many cases where the statistical information of noise may
+not be obtained in practical system. In these cases, OAMPNet
+may fail to achieve satisfactory performances.
+E. Performance evaluation for LoRA-fine-tuning-aware quan-
+tization
+For fair and convenient comparison, in the above subsec-
+tions, we mainly utilize full-precision model for performance
+evaluation. Then in this subsection, we focus on the impact of
+LoRA-fine-tuning-aware quantization.
+The performance comparison of the proposed full-precision
+model, the model with LoRA-fine-tuning-aware quantization,
+and the model with traditional quantization are presented in
+Table I. For the full-precision model, the model parameters are
+stored and computed in a 16-bit floating-point format. On the
+contrary, the model with LoRA-fine-tuning-aware quantization
+0
+50
+100
+150
+200
+250
+300
+0
+1
+2
+3
+4
+5
+6
+Fig. 11. Training losses of different methods against epoch.
+transforms the LLM backbone into a 4-bit integer format,
+which indicates a 75% storage reduction during the fine-
+tuning. Besides, the iterative number for initialization is set
+as Iter = 5. It is noted here that during LoRA fine-tuning,
+the quantized weight is temporarily dequantized to the simu-
+lated high-precision weight to facilitate accurate computation.
+Moreover, the model with traditional quantization serves as a
+baseline, which quantifies the LLM backbone weight matrices,
+initials the adapters as (29), and conducts LoRA fine-tuning
+afterward.
+As shown in Table I, the model with LoRA-fine-tuning-
+aware quantization achieves comparable performance with the
+proposed full-precision model. For the channel prediction task,
+the NMSE is averaged for different speeds and SNRs; for
+the signal detection task, the performance is averaged for
+different SNRs; for multi-user precoding task, we set user
+number as 4, the power of noise and transmit power is set
+as -10 dBW and 0 dBW, respectively. Besides, it significantly
+outperforms the model with traditional quantization for all
+the tasks selected. We can conclude from the results that the
+introduced LoRA-fine-tuning-aware quantization successfully
+approximates high-precision weight by the quantized weight
+and low-rank adapters, and thus the performance degradation
+resulting from quantization is negligible.
+F. Impact of multi-task instruction
+In this subsection, we analyze the influence of the pro-
+posed multi-task instruction module in Section III-A on the
+performance and convergence rate of neural network training.
+It is worth noting that, in order to distinguish different tasks,
+utilizing multi-task instruction as prompts is indispensable for
+the proposed multi-task PHY network to understand different
+task requirements. For single-task LLM, although it is possible
+to neglect the prompt, introducing the designed instruction
+with wireless data can involve domain knowledge to facilitate
+task-specific adaptation of LLMs.
+12
+TABLE I
+COMPARISON OF THE MODEL WITH LORA-FINE-TUNING-AWARE QUANTIZATION WITH OTHER BASELINES.
+Quantization method
+NMSE for CP
+NMSE for DET
+Sum rate for PRE
+Full-precision
+-16.37 dB
+0.0322
+29.3658 bit/s/Hz
+LoRA-fine-tuning-aware quantization
+-16.25 dB
+0.0363
+29.3632 bit/s/Hz
+Traditional quantization
+-15.68 dB
+0.0528
+28.6032 bit/s/Hz
+• “CP” denotes channel prediction, “DET” denotes signal detection, and “PRE” denotes multi-user precoding.
+TABLE II
+COMPARISON OF THE MODEL WITH DIFFERENT LLM BACKBONE.
+LLM backbone
+NMSE for CP
+NMSE for DET
+Sum rate for PRE
+Network parameters
+LLAMA2-7B
+-16.37 dB
+0.0322
+29.3658 bit/s/Hz
+23.9713 M
+GPT2
+-15.39 dB
+0.0573
+29.0365 bit/s/Hz
+17.3338 M
+-
+-13.49 dB
+0.1908
+27.2981 bit/s/Hz
+19.777 M
+• “CP” denotes channel prediction, “DET” denotes signal detection, and “PRE” denotes multi-user precoding.
+In Fig. 11, we take the signal detection task for instance to
+illustrate the training loss in MSE against the training epoch.
+In this figure, we depict the training loss of the proposed model
+trained for multiple tasks with prompts, the proposed model
+trained for a single task with prompts, and the proposed model
+trained for a single task without prompts. We can observe that
+the overall trends of all losses are declining with the increase
+of training epoch. The training loss of single-task LLM with
+prompts converges the fastest, and 200 epochs of training are
+enough to achieve satisfactory performance. When the training
+epoch reaches about 200, the loss function of multi-task LLM
+also converges. Nevertheless, the proposed model trained for a
+single task without prompts requires 300 epochs of training to
+obtain comparable performance with the model with prompts.
+Therefore, it is indicated that the incorporation of designed
+multi-task instruction as prompts significantly accelerates the
+network fine-tuning and improves the LLM’s adaptability to
+downstream tasks.
+G. Impact of LLM backbone
+Finally, in this subsection, the influence of LLM backbone
+on the performance is evaluated. In this work, we employ
+LLAMA2-7B as the backbone. To analyze the impact, we
+compare the selected backbone with the following bench-
+marks. Firstly, we replace the LLAMA2-7B with a smaller
+pre-trained model GPT2 [8] while other modules remain the
+same. Secondly, the LLM backbone is directly removed, which
+means that the output of the encoders is straightly fed into the
+designed decoders.
+We summarize the simulation results in Table II. Similarly,
+as stated in Section V-E, the NMSE is averaged within
+different SNRs and speeds for channel prediction and is
+averaged within different SNRs for signal detection. Besides,
+user number is set as 4, the power of noise and transmit power
+is set as -10 dBW and 0 dBW for multi-user precoding. It
+can be observed from Table II that the performance achieved
+in different tasks improves with the introduction of the LLM
+backbone. For instance, the NMSE performance for channel
+prediction of the proposed method with LLAMA2 backbone is
+-16.37 dB, while the performance drops 3 dB when removing
+the backbone. And the performance drops sharply especially
+for signal detection task. Furthermore, due to the increas-
+ing size of the LLM backbone, the model with LLAMA2-
+7B backbone outperforms the model with GPT2 backbone,
+although GPT2 can still achieve the multi-task PHY network.
+Therefore, we can adopt a proper LLM backbone to balance
+the computational costs and performance.
+VI. CONCLUSIONS
+In this paper, we propose a LLM-enabled multi-task PHY
+network to unify multiple tasks with a single LLM. Multi-
+task instruction module, input encoders, as well as output
+decoders, are elaborately designed to distinguish multiple tasks
+and adapted the features of different formats of wireless data
+for the feature of LLM. Moreover, to reduce the memory
+requirements of the proposed model, a LoRA fine-tuning-
+aware quantization method is introduced. Simulation results
+have verified the effectiveness of the proposed method. The
+proposed LLM framework is promising to perform different
+tasks using a single model, significantly saving the redundancy
+and costs of the practical deployment of LLM. It makes an
+initial attempt to provide a more adaptable, comprehensive,
+and intelligent PHY network with the aid of LLMs. Future
+works can be focused on incorporating more tasks into the
+network. Besides, the LLM pruning and knowledge distillation
+techniques can also be employed to reduce the computational
+and storage overhead of LLM-based method.
+REFERENCES
+[1] J. Hoydis, F. A. Aoudia, A. Valcarce, and H. Viswanathan, “Toward a
+6G AI-native air interface,” IEEE Commun. Mag., vol. 59, no. 5, pp.
+76–81, May 2021.
+[2] T. O’Shea and J. Hoydis, “An introduction to deep learning for the
+physical layer,” IEEE Trans. Cog. Commun. Netw., vol. 3, no. 4, pp.
+563–575, Dec. 2017.
+[3] C.-K. Wen, W.-T. Shih, and S. Jin, “Deep learning for massive MIMO
+CSI feedback,” IEEE Wireless Commun. Lett., vol. 7, no. 5, pp. 748–751,
+Oct. 2018.
+13
+[4] H. He, C.-K. Wen, S. Jin, and G. Y. Li, “Deep learning-based channel
+estimation for beamspace mmwave massive MIMO systems,” IEEE
+Wireless Commun. Lett., vol. 7, no. 5, pp. 852–855, Oct. 2018.
+[5] H. Jiang, M. Cui, D. W. K. Ng, and L. Dai, “Accurate channel prediction
+based on transformer: Making mobility negligible,” IEEE J. Sel. Areas
+Commun., vol. 40, no. 9, pp. 2717–2732, Sep. 2022.
+[6] H. He, C.-K. Wen, S. Jin, and G. Y. Li, “Model-driven deep learning for
+MIMO detection,” IEEE Trans. Sigal Process., vol. 68, pp. 1702–1715,
+Feb. 2020.
+[7] M. K. Shehzad, L. Rose, M. M. Butt, I. Z. Kov´acs, M. Assaad,
+and M. Guizani, “Artificial intelligence for 6G networks: Technology
+advancement and standardization,” IEEE Veh. Tech. Mag., vol. 17, no. 3,
+pp. 16–25, May 2022.
+[8] R. K. Alec, J. Wu, R. Child, D. Luan, D. Amodei, and I. Sutskever,
+“Language models are unsupervised multitask learners,” OpenAI blog,
+vol. 1, no. 8, p. 9, 2019.
+[9] H. Touvron, L. Martin, K. R. Stone, P. Albert, A. Almahairi, Y. Babaei,
+N. Bashlykov, S. Batra, P. Bhargava, and et al.. Shruti Bhosale,
+“Llama 2: Open foundation and fine-tuned chat models,” arXiv preprint
+arXiv:2307.09288, 2023.
+[10] T. Brown, B. Mann, N. Ryder, M. Subbiah, J. D. Kaplan, P. Dhariwal,
+A. Neelakantan, P. Shyam, G. Sastry, and et al.. Amanda Askell,
+“Language models are few-shot learners,” in Proc. Adv. Neural Inf.
+Process. Syst. (NeurIPS), Dec. 2020, pp. 1–5.
+[11] W. Lee and J. Park, “LLM-empowered resource allocation in wireless
+communications systems,” arXiv preprint arXiv:2408.02944, 2024.
+[12] J. Guo, Y. Cui, C.-K. Wen, and S. Jin, “Prompt-enabled large AI models
+for CSI feedback,” arXiv preprint arXiv:2501.10629, 2025.
+[13] B. Liu, X. Liu, S. Gao, X. Cheng, and L. Yang, “LLM4CP: Adapting
+large language models for channel prediction,” J. Commun. Inf. Netw.,
+vol. 9, no. 2, pp. 113–125, Jun. 2024.
+[14] Y. Sheng, K. Huang, L. Liang, P. Liu, S. Jin, and G. Y. Li, “Beam predic-
+tion based on large language models,” arXiv preprint arXiv:2408.08707,
+2024.
+[15] J. Shao, J. Tong, Q. Wu, W. Guo, Z. Li, Z. Lin, and J. Zhang,
+“WirelessLLM: Empowering large language models towards wireless
+intelligence,” J. Commun. Info. Netw., vol. 9, no. 2, pp. 99–112, Jun.
+2024.
+[16] H. Zhou, C. Hu, Y. Yuan, Y. Cui, Y. Jin, C. Chen, H. Wu, D. Yuan,
+L. Jiang, and et al.. Wu, Di, “Large language model (LLM) for telecom-
+munications: A comprehensive survey on principles, key techniques, and
+opportunities,” IEEE Commun. Surv. Tutor., Sep. 2024.
+[17] W. Yu, H. He, S. Song, J. Zhang, L. Dai, L. Zheng, and K. B. Letaief,
+“AI and deep learning for THz ultra-massive MIMO: From model-driven
+approaches to foundation models,” arXiv preprint arXiv:2412.09839,
+2024.
+[18] F. Jiang, Y. Peng, L. Dong, K. Wang, K. Yang, C. Pan, D. Niyato, and
+O. A. Dobre, “Large language model enhanced multi-agent systems for
+6G communications,” IEEE Wireless Communications, vol. 31, no. 6,
+pp. 48–55, Dec. 2024.
+[19] L. Bariah, Q. Zhao, H. Zou, Y. Tian, F. Bader, and M. Debbah, “Large
+generative AI models for telecom: The next big thing?” arXiv preprint
+arXiv:2306.10249, 2023.
+[20] E. J. Hu, Y. Shen, P. Wallis, Z. Allen-Zhu, Y. Li, S. Wang, L. Wang,
+and W. Chen, “LoRA: Low-rank adaptation of large language models,”
+arXiv preprint arXiv:2106.09685, 2021.
+[21] Y. Li, Y. Yu, C. Liang, P. He, N. Karampatziakis, W. Chen, and
+T. Zhao, “LoftQ: LoRA-Fine-Tuning-Aware Quantization for large lan-
+guage models,” arXiv preprint arXiv:2310.08659, 2023.
+[22] E. Bj¨ornson, M. Bengtsson, and B. Ottersten, “Optimal multiuser trans-
+mit beamforming: A difficult problem with a simple solution structure,”
+IEEE Signal Process. Mag., vol. 31, no. 4, pp. 142–148, Jul. 2014.
+[23] K. T. Truong and R. W. Heath, “Effects of channel aging in massive
+MIMO systems,” J. Commun. Netw., vol. 15, no. 4, pp. 338–351, Aug.
+2013.
+[24] Y. Nie, N. H. Nguyen, P. Sinthong, and J. Kalagnanam, “A time series
+is worth 64 words: Long-term forecasting with transformers,” arXiv
+preprint arXiv:2211.14730, 2022.
+[25] J. Hu, L. Shen, and G. Sun, “Squeeze-and-excitation networks,” in 2018
+IEEE/CVF Conference on Computer Vision and Pattern Recognition
+(CVPR), 2018, pp. 7132–7141.
+[26] A. Yang, B. Yang, B. Zhang, B. Hui, B. Zheng, B. Yu, and C. L. et al.,
+“Qwen2.5 technical report,” arXiv preprint arXiv:2412.15115, 2024.
+[27] T.
+Dettmers,
+A.
+Pagnoni,
+A.
+Holtzman,
+and
+L.
+Zettlemoyer,
+“QLoRA: Efficient finetuning of quantized LLMs,” arXiv preprint
+arXiv:2305.14314, 2023.
+[28] S. Jaeckel, L. Raschkowski, K. B¨orner, and L. Thiele, “QuaDRiGa: A
+3-D multi-cell channel model with time evolution for enabling virtual
+field trials,” IEEE Trans. Antennas and Propag., vol. 62, no. 6, pp.
+3242–3256, Jun. 2014.
+[29] 3GPP RADIO ACCESS NETWORK WORKING GROUP, “Study on
+channel model for frequencies from 0.5 to 100 GHz(Release 15)[R].”
+3GPP TR 38.901, 2018.
+[30] W. Jiang and H. D. Schotten, “Neural network-based fading channel pre-
+diction: A comprehensive overview,” IEEE Access, vol. 7, pp. 118 112–
+118 124, Aug. 2019.
+[31] ——, “Deep learning for fading channel prediction,” IEEE Open J.
+Commun. Soc., vol. 1, pp. 320–332, Mar. 2020.
+[32] I. Helmy, P. Tarafder, and W. Choi, “LSTM-GRU model-based channel
+prediction for one-bit massive MIMO system,” IEEE Trans. Veh. Tech.,
+vol. 72, no. 8, pp. 11 053–11 057, Mar. 2023.
+[33] C. Zhang, Y. Jing, Y. Huang, and L. Yang, “Performance analysis for
+massive MIMO downlink with low complexity approximate zero-forcing
+precoding,” IEEE Trans. Commun., vol. 66, no. 9, pp. 3848–3864, Sep.
+2018.
+[34] S. S. Christensen, R. Agarwal, E. De Carvalho, and J. M. Cioffi,
+“Weighted sum-rate maximization using weighted MMSE for MIMO-
+BC beamforming design,” IEEE Trans. Wireless Commun., vol. 7, no. 12,
+pp. 4792–4799, Dec. 2008.
+[35] W. Xia, G. Zheng, Y. Zhu, J. Zhang, J. Wang, and A. P. Petropulu,
+“A deep learning framework for optimization of MISO downlink beam-
+forming,” IEEE Trans. Commun., vol. 68, no. 3, pp. 1866–1880, Dec.
+2020.
+[36] H. Ye, G. Y. Li, and B.-H. Juang, “Power of deep learning for channel
+estimation and signal detection in OFDM systems,” IEEE Wireless
+Commun. Lett., vol. 7, no. 1, pp. 114–117, Sep. 2018.
+[37] N. Samuel, T. Diskin, and A. Wiesel, “Deep MIMO detection,” in Proc.
+18th IEEE Int. Workshop Signal Process. Advances Wireless Commun
+(SPAWC), Hokkaido, Japan, Jul. 2017, pp. 1–5.

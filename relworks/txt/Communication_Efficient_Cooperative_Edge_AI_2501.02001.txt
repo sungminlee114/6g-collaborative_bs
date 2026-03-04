@@ -1,0 +1,2084 @@
+1
+Communication Efficient Cooperative Edge AI via
+Event-Triggered Computation Offloading
+You Zhou, Graduate Student Member, IEEE, Changsheng You, Member, IEEE, and Kaibin Huang, Fellow, IEEE
+Abstract—Rare events, despite their infrequency, often carry
+critical information and require immediate attentions in mission-
+critical applications such as autonomous driving, healthcare, and
+industrial automation. The data-intensive nature of these tasks
+and their need for prompt responses, combined with designing
+edge AI (or edge inference), pose significant challenges in systems
+and techniques. Existing edge inference approaches often suffer
+from communication bottlenecks due to high-dimensional data
+transmission and fail to provide timely responses to rare events,
+limiting their effectiveness for mission-critical applications in
+the sixth-generation (6G) mobile networks. To overcome these
+challenges, we propose a channel-adaptive, event-triggered edge-
+inference framework that prioritizes efficient rare-event process-
+ing. Central to this framework is a dual-threshold, multi-exit
+architecture, which enables early local inference for rare events
+detected locally while offloading more complex rare events to edge
+servers for detailed classification. To further enhance the system’s
+performance, we developed a channel-adaptive offloading policy
+paired with an online algorithm to dynamically determine the
+optimal confidence thresholds for controlling offloading decisions.
+The associated optimization problem is solved by reformulating
+the original non-convex function into an equivalent strongly
+convex one. Using deep neural network classifiers and real
+medical datasets, our experiments demonstrate that the proposed
+framework not only achieves superior rare-event classification
+accuracy, but also effectively reduces communication overhead,
+as opposed to existing edge-inference approaches.
+Index Terms—Rare event detection, edge inference, event-
+triggered offloading, cooperative edge AI, channel-adaptive com-
+putation offloading.
+I. INTRODUCTION
+The sixth-generation (6G) mobile networks are envisioned
+to enable a wide range of intelligent applications by integrating
+edge artificial intelligence (AI) and network sensing. By
+combining the computational power of edge AI with the
+pervasive sensing capabilities of networked devices, these
+networks aim to provide intelligent real-time services across
+diverse scenarios [1]–[3]. Among the critical applications of
+6G networks, the timely detection and processing of rare but
+high-impact events, such as security breaches or medical emer-
+gencies, stands out as a key challenge. Rare events, though
+infrequent, often carry critical information that demands im-
+mediate attention and efficient resource allocation. However,
+the data-intensive nature of AI-driven applications, coupled
+with the need for energy-efficient processing, complicates the
+Y. Zhou and K. Huang are with the Department of Electrical and Electronic
+Engineering (EEE), The University of Hong Kong (HKU), Hong Kong SAR,
+China (Email: zhouyou@eee.hku.hk, huangkb@eee.hku.hk). C. You is with
+the Department of EEE, Southern University of Science and Technology
+(SUSTech), China (Email: youcs@sustech.edu.cn). The corresponding author
+is K. Huang.
+ability to respond promptly to these events within constrained
+resources. To address these challenges, our work introduces the
+framework of dynamic cooperative inference. This framework
+facilitates adaptive collaboration between devices and edge
+servers to split the execution of AI algorithms, specifically
+targeting the efficient detection and processing of rare events.
+By leveraging an event-triggered approach, the framework
+significantly minimizes unnecessary radio-access transmis-
+sions, alleviating communication bottlenecks, and enabling the
+resource-efficient deployment of AI-powered sensing systems
+in 6G networks.
+Rare events, offer unique opportunities to enhance the
+split inference framework by prioritizing high-impact data
+and optimizing resource allocation. Split inference, a popular
+architecture for edge AI, partitions an inference task between
+a device and a server to overcome the device’s resource
+constraint. This design offloads complex computations to edge
+servers while allowing devices to handle initial processing,
+significantly reducing the latter’s computational burdens and
+also the communication overhead. Research has shown that
+split inference improves the inference accuracy under dynamic
+channel conditions [4], reduces communication costs [5], [6],
+and supports hardware-limited devices [7]. Additionally, split
+inference takes advantage of the sparsity of intermediate data
+by incorporating feature compression to reduce communi-
+cation overhead [8]. However, this method remains insuffi-
+cient device’s transmission of high-dimensional intermediate
+features still create a substantial communication bottleneck.
+This poses a critical issue in rare-event scenarios where high-
+priority data require immediate and precise transmission. Joint
+source-and-channel coding frameworks improve robustness in
+noisy environments [9], but their fixed transmission strategies
+does not recognize the urgency of rare events, potentially
+delaying critical responses. Similarly, advanced solutions such
+as integrated sensing and communication (ISAC) frameworks
+[10] and task-oriented over-the-air computation (AirComp)
+[11] address communication constraints in multi-device sys-
+tems but lack the capability to dynamically prioritize rare,
+high-impact data. Similarly, existing methods as batching and
+early exiting [12] optimizes throughput but fails to prioritize
+critical information, treating all data equally. These limitations
+restrict the system’s ability to deliver timely and efficient
+responses in critical scenarios. Addressing this gap requires
+integrating event-triggered mechanisms to detect and prioritize
+rare events, allowing systems to reduce unnecessary transmis-
+sions while ensuring rapid responses. By incorporating such
+mechanisms, split inference can overcome communication
+bottlenecks and fully realize its potential in handling high-
+arXiv:2501.02001v1  [cs.LG]  1 Jan 2025
+2
+stakes, rare-event scenarios.
+Computation offloading, with split inference as a specialized
+branch for task classification, offloads computationally inten-
+sive tasks from resource constrained devices to resourceful
+servers, thereby overcoming the former’s limitation in storage-
+and-computation capacities and energy [13]–[20]. Recent re-
+search has developed energy-efficient offloading controllers for
+asynchronous systems with dynamic event arrivals [15], re-
+source allocation techniques for satellite-aerial edge networks
+[16], and dynamic voltage and frequency scaling (DVFS)
+methods to adjust computational speed based on demand
+[17]. However, despite these advances, existing approaches
+overlook the unique demands and potential efficiency gains
+associated with rare, high-impact events. Specifically, tradi-
+tional models typically distribute the workload of all events
+uniformly between devices and servers without favouring rare
+events in resource allocation and as a result, fail to meet their
+mission critical requirements [21]. Similarly, while techniques
+such as Lyapunov optimization adapt offloading decisions to
+dynamic network states to minimize execution delay, they fail
+to differentiate between routine and critical tasks, potentially
+delaying responses to high-priority events [18]. In addition to
+their inability to prioritize rare events, many existing methods
+struggle with excessive communication overhead. Offloading
+techniques such as UAV trajectory optimization and user
+scheduling aim to reduce latency, but they do not address
+the high-dimensional data generated during rare events, which
+often overwhelms network capacity [19]. Similarly, lagrange
+coded computing frameworks enable fast and secure offload-
+ing, but their fixed coding and transmission strategies are
+inefficient for handling the sporadic nature of rare events
+[20]. Similar limitation exist for techniques such as resource
+optimization in satellite-aerial edge networks focusing pre-
+planned allocations [16]. In summary, event-triggered offload-
+ing presents an opportunity to overcome the communication
+bottleneck of existing techniques. By selectively focusing on
+critical, high-impact events, computational workload and net-
+work congestion can be significantly reduced, leading to more
+efficient resource allocation and meeting the requirements of
+mission critical applications.
+Building on the preceding discussion, it is evident that rare
+events and their associated sparse access patterns are important
+considerations for optimizing resource utilization in 6G com-
+munication systems. Sparse access, characterized by sporadic
+device activity, has been extensively studied in the context
+of Internet of Things and machine-type communications net-
+works for its potential to enhance the communication effi-
+ciency [22]. For instance, compressed sensing techniques en-
+able signal reconstruction from fewer measurements to reduce
+computational overhead at sensor nodes [23]. On the other
+hand, grant-free access schemes exploit sparse traffic patterns
+to minimize contention delays in random access protocols [24].
+Additional advancements, such as integrated sensing and com-
+munication frameworks [25] and adaptive anomaly detection
+methods [26], further enhance the multi-access efficiency by
+leveraging the sporadic nature of device activity. Despite these
+advancements, existing sparse access techniques still have
+significant limitations. In particular, many existing methods
+for rare event detection are confined to primitive tasks, such
+as monitoring simple environmental parameters (see e.g., [27],
+which do not address the complex sensing requirements of
+6G networks [28]. Furthermore, while sparse access research
+has made substantial progress, its integration with channel
+dynamics remains insufficiently explored. This is useful given
+the unpredictable nature of rare events and the variability of
+network and channel conditions. For instance, systems like
+collision avoidance in autonomous driving critically depend on
+the seamless integration of rare-event detection with channel-
+adaptive mechanisms to ensure timely and accurate responses
+under dynamic network environments [29]. These gaps un-
+derscore the necessity of a channel-adaptive, event-triggered
+system capable of dynamically adjusting computation and
+communication based on real-time channel conditions and
+event criticality.
+To address the issue, we consider an event-triggered system
+designed for rare-event detection in edge AI applications. The
+objective of this system is to maximize end-to-end (E2E)
+rare event classification accuracy while operating within con-
+strained communication and computation resources. Achieving
+this objective requires a framework that integrates efficient
+event detection, adaptive inference, and dynamic offloading
+techniques. In this work, we present an event-triggered frame-
+work that combines early exiting (see e.g., [30]) and channel-
+adaptive computation offloading. This framework dynamically
+adjusts computation and communication based on the real-time
+channel state, enabling efficient communication inference. The
+key contributions and findings are summarized as follows.
+• Design of Dynamic Inference Architecture: We propose
+a novel event-triggered cooperative inference framework,
+refered to as co-inference, featuring a dual-threshold,
+early-exiting architecture. This system enables efficient
+local binary tail-event detection while offloading rare,
+high-impact events to the server for refined multi-class
+classification. The dual thresholds create an uncertainty
+region where events that cannot be confidently classified
+continue to subsequent blocks for a decision with better
+confidence. This flexibility allows highly confident events
+to exit early for rapid local inference, while uncertain
+events are processed further, and complex rare cases are
+offloaded to the server for detailed analysis. By balancing
+the event’s missing target probability and offloading prob-
+ability, the framework effectively balance the tradeoff be-
+tween communication and computation while preserving
+high inference accuracy, making it particularly suitable
+for long-tail distributed events.
+• Channel-Adaptive
+Offloading
+Policy
+Design
+with
+Threshold Optimization: To enhance E2E classifica-
+tion performance under energy and communication con-
+straints, we develop a channel-adaptive offloading policy
+and an algorithm to dynamically determine the optimal
+dual-thresholds on confidence for rare event offloading.
+This policy enables real-time rare event offloading, ef-
+fectively balancing local computation with offloading
+workload to adapt to varying channel conditions. By
+transforming the non-convex optimization problem into
+3
+Edge Device
+Edge Server
+Label Feedback
+Multi-label 
+ Classification
+Inferred label 
+“Intruder”
+Long-tailed 
+event
+Light-weight 
+model
+“Tail”
+Binary  
+classified label
+Tail Event 
+Checking 
+Y
+N
+Feature 
+Offloading
+Event Feature 
+Extraction
+Transmitted Feature
+Event number
+Categories
+…
+Feature Receiving
+Alarm Feedback
+Fig. 1: Edge co-inference system.
+a strongly convex equivalence, our approach maximizes
+rare event classification accuracy under constraints on
+energy consumption and communication overhead.
+• Experiments: The effectiveness of our proposed event-
+triggered co-inference system is demonstrated using real
+medical datasets across various CNN architectures (i.e.,
+ShuffleNet and MobileNet [31], [32]). The results reveal
+a significant reduction on both computation and commu-
+nication overhead while consistently outperforming tradi-
+tional split-inference techniques in term of classification
+accuracy.
+The remainder of this paper is organized as follows. The dy-
+namic co-inference system models and metrics are introduced
+in Section II. An overview of the co-inference architecture
+is demonstrated in Section III. The dual-threshold multi-exit
+model and tradeoffs during event offloading are presented
+in Section IV, while the offloading policy is introduced and
+the dual-threshold for rare event classification is optimized
+in Section V. Section VI reports the experimental results,
+followed by concluding remarks in Section VII.
+II. MODELS AND METRICS
+We consider an edge co-inference system, depicted in Fig.
+1, where an edge server collaborates with a mobile device
+to perform inferences for a sequence of events in the local
+device’s event queue. The event queue follows a first-in-first-
+out (FIFO) order. Unlike existing works that primarily focus
+on balanced data distribution, this paper addresses the practical
+scenario of unbalanced data. Specifically, we focus on a long-
+tailed distribution model, characterized by a majority of head
+(normal) events and a minority of tail (rare) events [33]. The
+specific models and metrics are described in the sub-sections.
+A. Inference Model
+1) CNN Classification with Early Exiting: We adopt the
+CNN model, commonly used for image recognition and pro-
+cessing, which includes multiple convolutional (CONV) layers,
+pooling layers, rectified linear unit (ReLU) correction layers,
+and fully-connected (FC) layers. Let X ∈RN×Lh×Lw denote
+the tensor of intermediate feature maps received at the edge
+server from an input event. Here, N represents the number
+Fig. 2: Illustration of a backbone model with early exiting.
+of feature maps, each with height Lh and width Lw. Given
+the ground-truth label for an event m, denoted as ˆℓm, the
+server can compute the posterior Pr(ℓm|X) using the forward-
+propagation algorithm and estimate the label ˆℓm by maximiz-
+ing the posterior probability, i.e., ˆℓm = argmax ℓmPr(ℓm|X).
+To address the high communication cost caused by large
+original input data (e.g., 3D images and films), we employ an
+early-exiting model, allowing for classification at earlier stages
+instead of traversing the entire CNN structure. Following the
+standard architecture in the literature, the early-exiting model
+at the edge server divides the CNN model into N consecutive
+blocks, each followed by a classifier that can predict the
+label using the extracted features, as illustrated in Fig. 2.
+An intermediate classifier is a simplified neural network with
+fewer layers compared to the conventional CNN block.
+2) Local Inference Energy Consumption: In the context
+of CNNs, the local inference energy is influenced by both
+memory access and arithmetic operations. However, memory
+access typically consumes significantly more power compared
+to arithmetic operations [31]. Therefore, we focus on char-
+acterizing energy consumption and latency based on memory
+access operations. Given one CNN contains N blocks, the
+local energy consumption can be calculated as follows [18]:
+Eloc(N) =
+N
+X
+i=1
+Smem
+i
+ϱ,
+(1)
+where Smem
+i
+denotes the number of memory access operations
+at the i-th block, and ϱ is the energy per memory access
+operation.
+B. Communication Model
+In our extended modeling of energy consumption for co-
+inference scenarios, we account not only for the computational
+energy required by the local device but also for the energy
+expended during the transmission of uplink features. The
+energy required to offload is primarily influenced by the size
+of the extracted feature maps being transmitted from the local
+device to the edge server. Representing the size of the feature
+input data as D and the transmit power of the mobile device
+as Ptr, the energy consumed during the feature offloading can
+4
+be quantified as:
+Eoff = Ptr
+D
+Rtr
+,
+(2)
+where Rtr represents the transmission rate for offloading
+events. The transmission rate depends on the available band-
+width B, channel gains G, and noise power σ2, and can be
+computed using the equation [14]:
+Rtr = B log(1 + SNR).
+(3)
+In practical scenarios, Ptr is often maintained constant to
+simplify power management in wireless devices. During each
+coherent time, the channel conditions can vary significantly
+due to factors such as environmental changes, mobility of the
+transmitter and receiver, and other dynamic elements affecting
+the channel. Consequently, the SNR during each coherent time
+may differ, leading to variations in the transmission rate Rtr
+and offloading energy Eoff.
+C. Performance Metrics
+1) Classification Accuracy: The classification accuracy is
+defined as the proportion of correctly categorized events
+among the whole testing dataset. Its empirical accuracy typ-
+ically approximates the likelihood that an uploaded event is
+accurately identified. Let bxm, xm denote the predicted label
+and the ground truth label of event m, respectively. The event
+m is accurately inferred if ˆxm = xm.
+2) Mobile Energy Consumption: The energy consumption
+of the mobile device is quantified from the initiation of local
+inference until the completion of offloading the intermediate
+features to the server. In this context, the overall mobile
+energy consumption consists of two distinct components: 1)
+the energy consumed by local computation during partial
+inference, denoted as Eloc, and 2) the energy consumed during
+the offloading process, denoted as Eoff.
+III. OVERVIEW OF DYNAMIC CO-INFERENCE
+To accurately detect tail events and minimize the device’s
+overall energy consumption, we propose a two-stage dynamic
+co-inference model, as depicted in Fig. 1. A lightweight CNN
+is deployed on the local device for tail event detection, while
+a deep CNN on the server handles multi-class classification
+of the detected tail events. The system operates through
+cooperating two inference models and the controller for dy-
+namic co-inference adaptes the model by making offloading
+decisions. The advantages of the proposed two-stage dynamic
+co-inference model are two-fold. First, it enables a new event-
+triggered scheme to significantly reduce the communication
+overhead for server inference since a majority of head events
+can be successfully detected at the mobile device by properly
+designing the early exiting model. Second, the early existing
+model also greatly reduces the computation loads at the mobile
+device since the head events do not need to traverse all
+CNN block layers for detection. In this instance, the precise
+configuration of the intermediate classifier, particularly the
+threshold settings, is crucial for accurately detecting the event
+and significantly influences the model’s performance. The
+detailed operations are demonstrated as follows.
+Fig. 3: Dual-threshold confidence aware inference progress.
+A. Model 1 - Local Inference
+The first stage aims to distinguish head and tail events by
+using the intermediate classifiers of the local device model.
+Specifically, the device will first make a binary classification
+to label the input event m into either the head or tail class. By
+applying the early exiting technique, the intermediate classifier
+Cn(βu, βℓ) is located on the device model’s n-th block for
+detection. In particular, the intermediate classifier at each block
+n will predict the input event label by comparing the event
+confidence score at block n with two confidence thresholds,
+namely, the upper threshold βu and the lower threshold βℓ.
+The two thresholds are set commonly for all intermediate
+classifiers, which will be detailed in Section IV. After going
+through the block n, if the event m’s output confidence Cn(m)
+is between two thresholds, i.e., βℓ≤Cn(m) ≤βu, the
+intermediate feature will be passed to the next block for further
+classification. In stage 1, our target is to determine the optimal
+threshold set of intermediate classifiers for minimizing the tail
+event’s missing probability.
+B. Model 2 - Event-Triggered Computation Offloading
+If the event m’s confidence score at block n is in the
+detectable region, i.e., Cn(m) > βu or Cn(m) < βℓ, the event
+can be classified as follows.:
+1) If Cn(m) < βℓ, then the event is labeled as a head event,
+i.e., bxm →Lhead. In this case, the inference result will be
+output immediately after this block, and the co-inference
+model will be restarted to detect a new event.
+2) Otherwise, if Cn(m) > βu, the event is detected as a tail
+event, i.e., bxm →Ltail. In this case, the classifiers in the
+subsequent local blocks will be set inactive. However,
+the lightweight local CNN model may not perform
+well in multi-class classification and could also lead to
+significant energy consumption. To address this issue,
+we propose to offload the detected tail event’s features
+to the server. To minimize the device’s total energy
+consumption, an online algorithm for event offloading
+decision will be designed in Section V.
+IV. DUAL-THRESHOLD BASED EVENT DETECTION -
+SCHEME AND TRADEOFF
+In this section, we present a new confidence-aware detector
+based on dual threshold evaluation. We then show the exis-
+tence of a fundamental tradeoff for the scheme between the
+(tail-event) missing probability and offloading probability.
+5
+A. Event Detection Scheme
+Generally, an event classifier model generates a confidence
+score for each event to indicate its confidence level as a
+tail event. Given an imbalanced data distribution, the event
+detection by applying a single threshold on confidence can
+cause the issue of high (tail-event) missing probability or
+(head-event) false-alarm probability. As illustrated in the left
+part of Fig. 3, the distributions of head and tail events are
+plotted against the tail event confidence score. When a single
+threshold is set at the traditional value of 0.5, events with
+a confidence score above 0.5 are classified as tail events,
+and those below 0.5 are classified as head events. However,
+this approach results in significant misclassification: a portion
+of head events is incorrectly identified as tail events, and a
+substantial portion of tail events is misclassified as head events.
+In statistics, this issue can be addressed using dual thresholds,
+with one detecting head events and the other for tail events as
+proposed in [34]. Inspired by this method, we propose a new
+event detector targeting the backbone model with early exiting
+(see the right part of Fig. 3), where dual thresholds are applied
+to confidence scores generated by intermediate classifiers.
+Before delving into the detailed design, it is necessary to
+introduce an essential metric for tail-event detection, known
+as the confidence score, which is defined below.
+Definition 1. Given the m-th input event enters the n-th exit
+block of the event-detection model. Let two neuron outputs
+of the exit block m be denoted as f tail
+n(m) and f head
+n(m), which
+are associate with the head and tail events, respectively. The
+confidence score output by the SoftMax function for detecting
+a tail event is defined as [35]:
+Ctail
+n(m) =
+ef tail
+n(m)
+ef tail
+n(m) + ef head
+n(m) .
+(4)
+Next, we apply dual thresholds on the confidence scores
+of exit blocks sequentially (in the order of increasing depth)
+until the event is classified confidently. To this end, let the
+thresholds be denoted as βℓand βu with 0 < βℓ< βu < 1.
+The procedures for detecting head/tail events are described in
+the sequel.
+1) Head Event Detection: Consider the n-th exit block of
+the event-detection sub-model and its confidence score defined
+in (4). The condition Ctail
+n(m) < βℓindicates a head event since
+the opposite has a low probability. Furthermore, the sequential
+detection requires that βℓ≤Ctail
+n(m) ≤βu, 1 ≤n ≤N −1. The
+validation of the above conditions can be articulated through
+the evaluation of the following asymptotic indicator function:
+Ihead
+n
+(m, βℓ, βu) = σ(βℓ−Ctail
+n(m))
+n−1
+Y
+k=1
+σ(βu−Ctail
+k(m))σ(Ctail
+k(m)−βℓ),
+(5)
+where σ(x) denotes the Verhulst logistic function given as:
+σ(y) =
+1
+1 + e−αy ,
+α →∞.
+(6)
+Note that as α →∞, the logistic function converges to the
+Heaviside step function, namely that σ(y) is 1 if y is non-
+negative or else 0. Therefore, Ihead
+n
+(m, βℓ) →1 if the event
+is inferred as head at block n or otherwise Ihead
+n
+(m, βℓ) →0.
+If the event is not recognized as tail at the last block N. The
+event’s label will be considered as head to avoid the false
+alarm issue. Mathematically,
+Ihead
+N
+(m, βℓ, βu) = σ(βu−Ctail
+N(m))
+N−1
+Y
+k=1
+σ(βu−Ctail
+k(m))σ(Ctail
+k(m)−βℓ).
+(7)
+2) Tail Event Detection: Event m is classified as a tail event
+under the following condition: Ctail
+n(m) > βu, 1 ≤n ≤N.
+Before reaching the last block, the condition βℓ≤Ctail
+n(m) ≤
+βu causes the event to continue to the next exit point [i.e.,
+(n+1)-th exit]. Similar to (5), the conditions can be validated
+using the following asymptotic indicator function for all n ∈
+{1, 2..., N}:
+Itail
+n (m, βℓ, βu) = σ(Ctail
+n(m) −βu)
+n−1
+Y
+k=1
+σ(βu −Ctail
+k(m))σ(Ctail
+k(m) −βℓ).
+(8)
+An event is classified locally as either a head or a tail event. We
+define L(xm, bxm) as the loss function such that L(xm, bxm) =
+0 if xm = bxm, or otherwise L(xm, bxm) = 1. Based on (8), the
+indicator function that validates one tail event m is correctly
+detected using the threshold can be expressed as follows:
+Itail(xm, bxm, βℓ, βu) =
+N
+X
+n=1
+Itail
+n (m, βℓ, βu)[1 −L(xm, bxm)].
+(9)
+Likewise, a head event m is correctly detected can have the
+indicator function as follows:
+Ihead(xm, bxm, βℓ, βu) =
+N
+X
+n=1
+Ihead
+n
+(m, βℓ, βu)[1 −L(xm, bxm)].
+(10)
+Last, it is worth mentioning that a head event is typically
+detected at a relatively shallower layer and a tail event at a
+relatively deeper layer.
+B. Tradeoff Analysis
+Let Pmiss and Pfalse denote the probability that a tail event
+is incorrectly detected as a head event and the probability that
+a head event is falsely detected as a tail event, respectively.
+Moreover, let Mtail and Mhead denote the number of tail and
+head events among a total of M events. Using the notation,
+we can write:
+Pmiss(βℓ, βu) = 1 −
+PM
+m=1 Itail(xm, bxm, βℓ, βu)
+M
+· M
+Mtail ,
+M →∞,
+= 1 −Ptail, loc(βℓ, βu)
+Ptail
+,
+(11)
+where Ptail, loc(βℓ, βu) denotes the probability of events cor-
+rectly classified as the tail class locally. Likewise, let
+Phead(x, bx, βℓ) denote the probability that a head event is
+correctly detected among all events. From (10), Pfalse can be
+derived as:
+Pfalse(βℓ, βu) = 1 −
+PM
+m=1 Ihead(xm, bxm, βℓ, βu)
+M
+·
+M
+Mhead ,
+M →∞,
+= 1 −Phead, loc(βℓ, βu)
+Phead
+,
+(12)
+6
+where Phead, loc(βℓ, βu) denotes the probability of events cor-
+rectly classified among all events. We denote Poff as the
+probability that one event is detected as tail by the dual-
+threshold mechanism and offloaded to the server, namely the
+offloading probability. Utilizing (11), (12) and considering
+M →∞, we can express Poff using a new form:
+Poff(βℓ, βu) =
+PM
+m=1 Itail(xm, bxm, βℓ, βu)
+M
++ Mhead −PM
+m=1 Ihead(xm, bxm, βℓ, βu)
+M
+, M →∞,
+= Ptail, loc(βℓ, βu) + Phead −Phead, loc(βℓ, βu),
+= (1 −Pmiss(βℓ, βu)) · Ptail + Pfalse(βℓ, βu) · Phead.
+(13)
+Upon identifying an event as tail, the local device offloads the
+event’s relevant features to the server. The server then performs
+multi-class classification to achieve an accurate recognition of
+the tail event using a deeper CNN.
+“Missing-target-offloading tradeoff”: It is observed from
+(13) that there exists a fundamental tradeoff between reducing
+the missing target probability (Pmiss) and reducing the offload-
+ing probability (Poff). Specifically, a larger Poff causes more
+events to be detected as a tail, which increases the tail event
+classification accuracy. Although Pmiss decreases, all events
+must traverse more CNN blocks for detailed classification,
+which increases the system’s communication and computation
+overhead. The tradeoff is regulated by the dual thresholds
+(βℓ,βu). This necessitates their optimization that is the topic
+of the next section.
+V. OPTIMAL DYNAMIC CO-INFERENCE
+Recall that at the core of dynamic co-inference is the
+event detection scheme controlled by dual thresholds. In this
+section, we optimize the thresholds to maximize the E2E
+co-inference accuracy under constraints on communication
+overhead (as quantified by the offloading probability) and
+mobile energy consumption. By showing its convexity, the
+optimization problem is solved using the gradient descent
+method. As a result, the optimal offloading policy is revealed
+to have a threshold based structure that depends on the channel
+SNR.
+A. Problem Formulation
+Given M events and (9), the indicator function that validates
+whether one tail event m is correctly classified at the server
+can be expressed as [36]:
+Itail(ym, bym, βℓ, βu) = Itail(xm, bxm, βℓ, βu)[1 −L(ym, bym)], (14)
+where ym and bym correspond to the predicted and ground
+truth labels at the server, respectively. The tail event’s final
+classification accuracy can then be derived as follows:
+facc(βℓ, βu) =
+PM
+m=1 Itail(ym, bym, βℓ, βu)
+M
+· M
+Mtail
+,
+M →∞.
+(15)
+Considering the device’s average total energy consumption per
+event detection, denoted as Etotal, which comprises two main
+components: the local computation energy Eloc and the energy
+utilized for the offloading of features Eoff. This relationship is
+succinctly captured by the following equation:
+Etotal(βℓ, βu) = Eloc(βℓ, βu) + Eoff(βℓ, βu),
+(16)
+where Eloc is determined by summing the local computation
+energy consumed during all memory access operations re-
+quired per one event detection. From (1), (5) and (8), this
+can be mathematically expressed as follows:
+Eloc(βℓ, βu) =
+PM
+m=1
+PN
+n=1[Itail
+n (m, βℓ, βu) + Ihead
+n
+(m, βℓ, βu)]Eloc(n)
+M
+,
+M →∞.
+(17)
+Since the offloading energy is applicable only to events
+identified as tail events, given the event size D, transmit power
+Ptr and the data rate Rtr, the offloading energy is formulated
+as:
+Eoff(βℓ, βu) = Ptrtoff,
+= PtrD
+RtrM
+M
+X
+m=1
+N
+X
+n=1
+Itail
+n (m, βℓ, βu),
+M →∞.
+(18)
+Given the dynamic nature of channel conditions, which im-
+pact offloading energy by altering the data transmission rate,
+adopting a channel-adaptive optimization strategy is essential.
+We assume that within each coherence time, the system can
+detect M events and offload those classified as tail-class to the
+server. To meet our new energy efficiency goal, we transform
+the constraint on offloading probability Poff into a constraint
+on the data transmission volume v(βℓ, βu). The optimization
+problem is formulated as follows:
+(P1)
+min
+βℓ,βu
+−facc(βℓ, βu),
+(19)
+s.t.
+v(βℓ, βu) = D · M · Poff(βℓ, βu) ≤θ,
+(20)
+fenergy(βℓ, βu) = M · Etotal(βℓ, βu) ≤ξ.
+(21)
+In P1, the complexity arises from multiple non-convex con-
+straints that intertwine tail event detection accuracy with
+offloading volume and energy considerations, while also ac-
+commodating the variability of communication channels over
+coherence times. The challenge is to develop a robust mech-
+anism that dynamically adjusts thresholds to maximize the
+system performance within acceptable data rate and energy
+limits.
+B. Channel-Adaptive Threshold Optimization
+1) Offloading Feasibility Condition: Since offloading rare
+events requires the system to adapt to varying channel condi-
+tions, it is essential to understand the channel requirements
+needed for the system to perform offloading within given
+energy and data volume constraints. By dynamically adjusting
+the dual thresholds, the system can classify events at the
+earliest possible block, minimizing local energy consumption.
+When all events are detected at the first block of the CNN,
+local energy use is minimized. If a tail event is detected
+and offloading is required, the system must ensure that the
+transmission energy required for offloading remains within the
+available energy budget: PtrD
+Rtr
+≤ξ −M · Eloc(1). Under this
+7
+condition, the offloading feasibility condition is articulated in
+the following Lemma.
+Lemma 1. (Feasibility Condition). Given the total number of
+events M, the bandwidth B, and the energy constraint ξ, the
+system is feasible to support offloading if the SNR satisfies
+the following condition:
+SNR ≥2
+PtrD
+B (ξ −M · Smem
+1
+ϱ) −1.
+(22)
+The inequality highlights that an increase in data size per
+event, transmission power, or the total number of events raises
+the required SNR, as these factors increase the energy demands
+for data transmission. Conversely, enhanced bandwidth capa-
+bilities reduce the required SNR by facilitating quicker data
+transmission.
+2) Optimization of Dual Confidence Thresholds: To solve
+P1, it is essential to understand the mathematical properties
+of both the objective function and constraints, particularly in
+terms of convexity and smoothness. These properties play a
+key role in determining the behavior of optimization algo-
+rithms and their convergence. To this end, we analyze and
+demonstrate the Lipschitz continuity of the functions in P1.
+Lemma 2. The gradient of objective function facc(βℓ, βu)
+is
+Lipschitz
+continuous
+with
+the
+Lipschitz
+constant
+γ = k2 N(N+1)(N+4
+√
+3−1)
+24
+.
+The proof is given in Appendix A.
+Lemma
+3. v(βℓ, βu)’s gradient is Lipschitz continuous
+with
+the
+Lipschitz
+constant
+2DMγ.
+fenergy(βℓ, βu)’s
+gradient is Lipschitz continuous with the Lipschitz constant
+2Mγ
+
+Eloc(N) + PtrD
+2Rtr
+
+.
+The proof is given in Appendix B.
+Since all functions are proved to have a Lipschitz continuous
+gradient, the convexity and smoothness of each function in P1
+are analyzed in the following Lemma.
+Lemma
+4. facc(βℓ, βu) is a γ-weakly convex and γ-
+smooth function. v(βℓ, βu) is a 2DMγ-weakly convex and
+2DMγ-smooth function. Given the data rate Rtr, transmit
+power Ptr, and event data size D, fenergy(βℓ, βu) exhibits
+2Mγ
+
+Eloc(N) + PtrD
+2Rtr
+
+weak convexity and smoothness.
+The proof is given in Appendix C.
+Subsequently, we propose an approach to obtain an efficient
+solution to problem P1 using the proximal-point penalty
+method [37]. This method involves constructing a proximal
+term and a quadratic penalty term, which associate the con-
+straint function with the original objective function. For t-th
+iteration, it performs the update:
+(β
+t+1
+ℓ
+, β
+t+1
+u
+) = arg min
+βℓ,βu ft(βℓ, βu),
+(23)
+where ft(βℓ, βu) denotes the proximal penalty function. Math-
+ematically,
+Algorithm 1: Channel Adaptive Dual-threshold Opti-
+mization
+1: Input: Proximal parameter λ, Penalty parameters κ, ρ,
+Smoothness parameter ψ, Convexity parameter η,
+Transmit power Ptr, Bandwidth B, Data size D, Event
+number M, The local energy consumption at the first
+block Smem
+1
+ϱ.
+2: Initialize: β
+0
+prox =
+ 
+β
+0
+ℓ
+β
+0
+u
+!
+, β
+0
+extra =
+ 
+β
+0
+ℓ
+β
+0
+u
+!
+3: for c = 1 to C do
+4:
+if SNR ≥2
+PtrD
+B (ξ −M · Smem
+1
+ϱ) −1 then
+5:
+Update Rtr(c), ψc and ηc based on current channel
+conditions
+6:
+Update Eoff and f c
+energy based on the new Rtr(c)
+7:
+for t = 0 to T −1 do
+8:
+Define ft(β) = fmiss(β) + λ
+2 ∥β −β
+t∥2 +
+κ
+2 (max{0, Poff(β)})2 + ρ
+2
+ max{0, f c
+energy(β)}
+2
+9:
+for i = 0 to I −1 do
+10:
+β
+(i+1)
+prox
+= Proxλ,κ
+
+β
+(i)
+extra −
+1
+ψc ∇ft(β
+(i)
+extra)
+
+//Proximal operator
+11:
+β
+(i+1)
+extra
+= β
+(i+1)
+prox
++
+√ψc−√ηc
+√ψc+√ηc (β
+(i+1)
+prox
+−β
+(i)
+prox)
+//Extrapolation step
+12:
+end for
+13:
+β
+t+1 = β
+(I)
+prox
+14:
+end for
+15:
+end if
+16:
+Output: β that minimizes ∥β
+t+1 −β
+t∥across all t
+17: end for
+ft(βℓ, βu) = facc(βℓ, βu) + λ
+2
+
+ 
+βℓ−β
+t
+ℓ
+βu −β
+t
+u
+!
+2
++ κ
+2 (max{0, v(βℓ, βu)})2
++ ρ
+2 (max{0, fenergy(βℓ, βu)})2 .
+(24)
+Leveraging the Lemma 4, the convexity and smoothness of
+the function ft(βℓ, βu) are established in the Proposition 1.
+Proposition 1. Given a sufficiently large proximal parameter
+λ, the function ft(βℓ, βu) is strongly convex, with its smooth-
+ness parameter ψ and strong convexity parameter η given by:
+ψ = γ + λ + κDMA (A + 2γ)
++ ρB
+
+B + 2Mγ
+
+Eloc(N) +
+PtrD
+2B log (1 + SNR)
+
+,
+(25)
+η = λ −γ −2Mγ
+
+κAD + ρB
+
+Eloc(N) +
+PtrD
+2B log (1 + SNR)
+
+,
+(26)
+where A and B are constants determined by the condition:
+A = max
+
+θ, DM(N −1)
+2
+√
+2
+
+,
+(27)
+B = max
+
+ξ, (N 2 + 1)Eloc(N)
+2
+√
+2
++ (N + 2)(N −1)PtrD
+4
+√
+2B log (1 + SNR)
+
+.
+(28)
+8
+The proof is given in Appendix D.
+Acknowledging the smoothness and strong convexity pa-
+rameter of ft(βℓ, βu), an algorithm based on accelerated
+gradient descent is developed to update the optimal dual
+thresholds. After the offloading feasibility condition is checked
+using (22), the algorithm adjusts the offloading decision and
+data transmission rate for each possible channel condition. By
+applying the proximal gradient method, the algorithm refines
+the thresholds to maximize event classification accuracy while
+maintaining energy efficiency. Additionally, it precomputes
+optimal thresholds for various channel conditions and con-
+straints, storing them in a lookup table. During operation, the
+algorithm quickly references these thresholds based on the
+current SNR, ensuring efficient and accurate decision-making.
+The operational mechanics are detailed in Algorithm 1. As
+the smoothness and strong convexity parameter of the function
+ft(βℓ, βu) depend on channel SNR, the algorithm’s efficiency
+is inherently influenced by the channel quality, which will be
+discussed in the following Remark.
+Remark 1. With fixed transmit power Ptr and event data size
+D, the convergence rate for resolving each sub-problem in
+Algorithm 1 is expressed as:
+f(β
+(i)) −ft(β
+∗) ≤O
+ 
+1 −
+r η
+ψ
+i!
+.
+(29)
+The convergence rate of this dynamic algorithm is modulated
+by channel conditions. Specifically, enhanced channel gain in-
+creases Rtr, which in turn accelerates the convergence process,
+optimizing the algorithm’s performance in variable network
+environments. Conversely, an increase in the number of events,
+transmission power, or event size can adversely affect system
+efficiency by expanding the computational and communication
+demands for each iteration.
+3) Structure of Optimal Policy: With the optimal dual
+thresholds identified through our adaptive optimization frame-
+work, the system generates a responsive optimal offloading
+policy that aligns with real-time channel conditions to en-
+sure resource-efficient operation. The following proposition
+formalizes this offloading policy, which dynamically adjusts
+the number of events processed locally versus offloaded to the
+server according to the varied SNR. The system’s channel-
+adaptive offloading policy can be formulated in the Proposition
+2.
+Proposition 2. (Threshold based Offloading Policy). Given
+(β∗
+ℓ, β∗
+u ) is the optimal solution stored in the lookup table for
+the classification of M events under the data volume constraint
+θ, energy constraint ξ, and the channel condition specified by
+the SNR, the co-inference system’s optimal offloading policy
+has the following structure:
+1) Given each event’s size is D, none of these events
+are offloaded if the SNR does not meet the feasibility
+condition in (22), i.e.,
+M ∗
+off = 0,
+SNR < 2
+PtrD
+B (ξ −M · Smem
+1
+ϱ) −1.
+(30)
+2) The system offloads Moff events based on different
+channel conditions, specifically:
+M ∗
+off =
+$
+B (ξ −M · Eloc (β∗
+ℓ, β∗
+u )) log(1 + SNR)
+PtrD
+%
+,
+SNR ≥2
+PtrD
+B (ξ −M · Smem
+1
+ϱ) −1.
+(31)
+The Proposition highlights that the adaptive offloading
+policy strategically dynamically adjusts the dual thresholds
+based on SNR conditions, balancing classification accuracy
+and resource efficiency under a fixed energy constraint. This
+adaptive mechanism optimally selects thresholds for event
+classification by adjusting to different SNR scenarios:
+1) High SNR: With increased transmission rates under the
+same energy constraint, the energy cost for offloading
+each event decreases, enabling the system to adjust
+the dual thresholds to offload more events with greater
+confidence. The system has two possible strategies for
+adjusting the dual thresholds. The first strategy is to
+lower the upper threshold βu, allowing more events to
+be classified as tail and subsequently offloaded to the
+server, effectively reducing the miss rate for tail events.
+Alternatively, the system can expand the uncertainty area
+by lowering the lower threshold βℓand/or increasing the
+βu, permitting more events with less certain confidence
+scores to pass through additional local CNN layers.
+This adjustment ensures that events are more accurately
+analyzed locally before offloading, leading to improved
+data reliability upon reaching the server and enhanced
+overall classification accuracy.
+2) Low SNR: Under low SNR conditions, where trans-
+mission constraints restrict data offloading, the system
+adjusts the dual thresholds by lowering βu and raising
+βℓ, effectively narrowing the uncertainty area. This ad-
+justment prioritizes earlier classification of head events
+locally, helping to maintain a manageable false alarm
+rate while allowing the system to conserve computation
+energy by quickly filtering out head events without
+unnecessary processing.
+VI. EXPERIMENTAL RESULT
+A. Experimental Settings
+The default experimental settings are as follows unless
+specified otherwise.
+• DNN Model and Dataset Setting: In this study, the
+ShuffleNetV2 [31] and MobileNetV2 [32] models are
+deployed on the local device, with each block followed by
+an intermediate classifier. The ResNet50 [38] model is de-
+ployed on the server. The local models were pretrained on
+a well-known dataset [39] comprising 25,000 retinal im-
+ages, including both normal and unhealthy retina images,
+for binary classification. The server model (ResNet50)
+was pretrained on the same dataset with one normal
+class and three unhealthy retina classes for multi-class
+classification. To explore the effects of class imbalance,
+each local CNN model was further trained using two
+9
+separate datasets with imbalance ratios of 4:1 and 9:1.
+Here, we consider each image to be one event. For
+validation and testing, distinct sets of 1,250 images are
+used. The entire validation set was utilized to determine
+the optimal threshold for classification. Subsequently, the
+1,250 test images were divided into five groups of 250
+images each, maintaining the same class imbalance ratio.
+Independent classification tests were conducted on each
+group using the optimal threshold. Finally, the overall
+model performance was assessed by averaging the clas-
+sification accuracies and missing probabilities across the
+five groups.
+• Communication Settings: We consider M images se-
+quentially detected locally and decide whether to offload
+them to the server for tail classification. To reduce the
+communication overhead, each image is resized from 3
+× 224 × 224 to 3 × 56 × 56 (i.e., reducing the image
+resolution) for offloading. Assuming perfect channel state
+information (CSI) at the server, the transmission power
+Ptr is fixed at 30 dBm, and the bandwidth B is set to
+30 MHz. The fading coefficient h is varied to control
+the SNR, calculated as SNR = |h|2Ptr
+Pn
+where Pn is the
+noise power. This setup allows us to observe the impact
+of different SNR levels on the data rate, computed using
+Shannon’s theorem: Rtr = B log2(1+SNR). By adjusting
+h, we simulate varying channel conditions to study their
+effect on communication performance.
+Three benchmarking schemes from the standard inference
+model are adopted, as described below.
+• Single Threshold Detection: This traditional approach
+[30] employs intermediate classifiers in conjunction with
+a single threshold mechanism throughout the network.
+At each intermediate stage, the classification decision
+is based on the highest confidence score for a class,
+provided this score exceeds a predefined threshold. If,
+by the final block, no class’s confidence score surpasses
+this threshold, the event is automatically assigned to the
+head class.
+• Terminal Detection: This method eschews intermediate
+classifiers and implements a single decision threshold
+solely at the final stage of the network [40]. Every event
+undergoes full processing through the entire network,
+culminating in a single classification decision at the end.
+The event is classified as the tail class if the Softmax-
+processed confidence level for the tail class at the final
+classifier exceeds a specific threshold.
+• Ideal Case: In an ideal tail-detection system, it is as-
+sumed that all event labels are accurately identified at the
+first block on the local device without any errors. This
+implies that the system flawlessly distinguishes between
+head and tail classes, ensuring that no instances of head
+classes are incorrectly classified as tail classes.
+B. Comparison of Detection Mechanism with CNN Models
+In our comparative analysis of threshold-based classification
+strategies using CNNs, we varied the offloading constraint
+from 16% to 45% in 1% intervals to evaluate the effectiveness
+(a) MobileNetV2
+(b) ShuffleNetV2
+Fig. 4: Missing probability versus offloading constraints in the case
+of imbalanced ratio R = 4.
+(a) MobileNetV2
+(b) ShuffleNetV2
+Fig. 5: Missing probability versus offloading constraints in the cases
+of imbalanced ratio R = 4 and R = 9.
+of our proposed dual threshold detection mechanism against
+established benchmarks. Using datasets with an imbalance
+ratio of 4:1, we assessed performance on the MobileNetV2
+and ShuffleNetV2 architectures, as shown in Fig. 4(a) and 4(b).
+The dual threshold mechanism outperformed the other meth-
+ods in identifying the minority class by employing two flex-
+ible confidence thresholds for early decision-making, thereby
+reducing misclassification and overfitting by intermediate clas-
+sifiers. In both models, the performance gain of purposed dual
+threshold detection schemes increases because the terminal
+detection fails to accurately detect more complex events as the
+offloading constraint increases. The single threshold detection
+initially showed an advantage over terminal detection due to
+its early-stopping capability, which prevents overfitting and
+enhances generalization. However, the benefits of the single
+threshold mechanism plateaued as the offloading probability
+continued to rise. This is because its minimum threshold value
+of 0.5 led to consistent misclassification of low-confidence
+events as belonging to the head class. Compare to the Mo-
+bileNetV2, dual threshold detection demonstrated superior
+performance in ShuffleNetV2 at low offloading constraint, due
+to ShuffleNetV2’s efficient architecture featuring group convo-
+lutions and channel shuffling, which allows it to quickly adapt
+and perform well with limited input. Conversely, as offloading
+rates and event complexity increased, MobileNetV2’s deeper
+network architecture, with depthwise separable convolutions,
+exhibited superior feature extraction and class discrimination.
+C. Detection
+Mechanism
+Analysis
+across
+Imbalanced
+Datasets
+We continue our investigation into the efficacy of different
+detection mechanisms by analyzing their performance across
+datasets that exhibit varying degrees of class imbalance, as
+demonstrated in Fig.5(a) and 5(b). The datasets are bifurcated
+10
+(a) MobileNetV2 + ResNet50
+(b) ShuffleNetV2 + ResNet50
+Fig. 6: Tail classification accuracy versus energy constraints in the
+case of imbalanced ratio R = 4, SNR = 5dBm.
+into two categories with imbalanced ratios of 4:1 and 9:1,
+whilst maintaining an equivalent total number of events.The
+single threshold approach has been excluded from this analysis
+because it rapidly reaches the offloading limit in highly im-
+balanced datasets. In such datasets, many tail events have con-
+fidence scores below 0.5, which prevents their offloading and
+limits the approach’s effectiveness. As offloading probabilities
+increase, the dual threshold method consistently outperforms
+the terminal detection scheme, particularly in the dataset ratio
+R = 9. This suggests that as the offloading probability
+grows, each system begins to struggle with more challenging
+instances of the tail class that are not as easily separable
+from the head class. The increased imbalance ratio exacerbates
+this challenge, as the prevalence of the majority class (head
+class) introduces bias in the classifiers. The slower reduction
+in the miss rate indicates a trade-off indicates a trade-off
+where improved tail class detections come at the cost of more
+head class misclassifications. This performance gain highlights
+the dual threshold method’s robustness in handling highly
+imbalanced data scenarios and its effectiveness in maintaining
+classification accuracy under varying offloading constraints.
+D. Detection Mechanism Analysis across Energy Constraint
+We proceeded to analyze the performance of various detec-
+tion models under different energy constraints, focusing on the
+efficiency of early-stopping mechanisms within single and dual
+threshold models. The offloading data volume constraint was
+set at 0.7 MB, with an SNR of 5 dB. The simulation results
+are illustrated in Fig. 6(a) and 6(b). The ideal curve assumes
+that all events are detected at the first block, allowing the
+remaining energy to be utilized for offloading all tail events to
+the server for classification. The terminal threshold detection,
+lacking an early-stopping feature, cannot be fairly compared to
+the other two schemes on MobileNetV2 under the same energy
+constraints due to MobileNetV2’s significant depth, which
+incurs substantial computational energy consumption. This
+approach requires traversing all network blocks to reach a clas-
+sification decision. Although it achieves classification accuracy
+on ShuffleNetV2, it exhibits the worst performance in terms of
+energy efficiency compared to the other schemes, owing to its
+inherently higher energy consumption. Under identical energy
+constraints, the dual threshold model consistently demonstrates
+higher classification accuracy than the single threshold and
+terminal threshold schemes. The performance gain becomes
+more significant under increasing energy constraints because
+(a) MobileNetV2 + ResNet50
+(b) ShuffleNetV2 + ResNet50
+Fig. 7: Tail classification accuracy versus SNR in the case of
+imbalanced ratio R = 4, data volume constraint = 0.7MB.
+the dual threshold model can flexibly adjust its two thresholds
+to reduce the misclassification of challenging head-class events
+as tail-class, thereby conserving energy. However, as event
+complexity increases, accuracy converges due to the need for
+more network blocks or incorrect tail-class labeling, both in-
+creasing energy consumption. Additionally, the ShuffleNetV2
+model demonstrates lower energy consumption and a smaller
+discrepancy between the real and ideal cases compared to Mo-
+bileNetV2. Consequently, while deeper networks can achieve
+higher maximum accuracy, they present significant challenges
+for energy-constrained applications. This underscores the ne-
+cessity of balancing complexity and energy efficiency in the
+design of CNNs.
+E. Detection Performance Analysis with Varied Channel Con-
+ditions
+In this study, we investigate the system’s performance across
+various channel states. Our comparative analysis involved
+subjecting the ShuffleNetV2+ResNet50 model to a 210mJ
+energy constraint and the MobileNetV2 to a 60mJ limit, both
+with an offloading data volume constraint of 0.7MB, against
+a dataset with a 4:1 imbalanced ratio. The corresponding
+simulation results are presented in Fig.7(a) and Fig.7(b). As
+the SNR increases, there is a concomitant performance gain
+in tail classification accuracy for dual threshold detection
+mechanism. This relationship can be attributed to enhanced
+transmission rates at higher SNRs, which reduce the energy
+cost for event offloading. Consequently, within a fixed energy
+budget, improved transmission efficiency effectively liberates
+additional energy, which can be reallocated to processing
+events through more network blocks for precise detection. The
+widening gap between schemes and the ideal scenario at higher
+SNRs indicates that more complex tail-class events require
+traversal through additional network blocks for correct identi-
+fication, thereby consuming more energy. The single threshold
+detection model, despite improvements in SNR, fails to match
+the performance of the dual threshold model. This is because
+the single threshold model tends to overfit and lacks an early
+exiting mechanism, making it less effective at distinguishing
+between head and tail classes in an imbalanced dataset. At
+high SNRs, the tail classification accuracy converges due to
+the offloading data volume constraint. Within this constraint,
+the system can offload a maximum of approximately 30%
+of events within a given period, achieving the corresponding
+minimum missing probability, as demonstrated in previous Fig.
+4(a) and 4(b).
+11
+VII. CONCLUSION
+In this paper, we have proposed a dynamic co-inference
+framework designed to alleviate communication and compu-
+tation bottlenecks while preserving high inference accuracy for
+long-tail distributed events. Our system enables local binary
+tail detection and optimizes thresholds for offloading tail
+events to the server for multi-class classification, balancing the
+event’s missing target probability and offloading probability.
+To achieve high detection accuracy, we developed a dual-
+threshold classifier within early-exiting models. Additionally,
+to optimize E2E tail event classification at the server while
+considering the device’s energy limitations, we designed an
+offloading policy and presented an online algorithm for deter-
+mining the optimal confidence threshold for feature offloading.
+The optimization challenge was addressed by transforming
+non-convex functions into a strongly convex problem.
+This work is the first to explore event-triggered cooper-
+ative inference systems with a novel dual-threshold based
+architecture design, opening numerous opportunities for future
+research. One direction could focus on implementing the
+architecture in distributed sensing for multi-view systems,
+necessitating further exploration of feature dimensionality’s
+impact on offloading priority. Additionally, integrating more
+stringent transmission requirements, such as ultra-reliable low-
+latency communication systems in the context of 6G, warrants
+further investigation.
+APPENDIX A
+PROOF OF LEMMA 2
+Consider the single event scenario when m
+=
+m1.
+∀n ∈1, 2, ..., N −1 and let gtail
+n (βℓ, βu) = Itail
+n (m1, βℓ, βu),
+ghead
+n
+(βℓ, βu)
+=
+Ihead
+n
+(m1, βℓ, βu)
+and
+gtail
+N (βℓ, βu)
+=
+Itail
+N (m1, βℓ, βu) . Since |σ(x)| ≤1, |σ(x)
+′| ≤
+1
+4, |σ(x)
+′′| ≤
+√
+3
+6 , an upper bound of gtail
+n (βℓ, βu)’s spectral norm can be
+derived as:
+∥∇2gtail
+n (βℓ, βu)∥2 ≤∥∇2gtail
+n (βℓ, βu)∥F ≤k2(n2 −n
+8
++
+√
+3n
+3
+).
+(32)
+Indeed, this upper bound also applies to ghead
+n
+(βℓ, βu) and
+Itail
+N (m, βℓ, βu), as they share the same structure of consec-
+utive Sigmoid function products as Pn(βu). Likewise, it is
+straightforward that
+∥∇2ghead
+n
+(βℓ, βu)∥2 ≤∥∇2ghead
+n
+(βℓ, βu)∥F ≤k2(n2 −n
+8
++
+√
+3n
+3
+),
+(33)
+∥∇2gtail
+N (βℓ, βu)∥2 ≤k2(N 2 −N
+8
++
+√
+3N
+3
+).
+(34)
+Since gtail
+n (βℓ, βu), ghead
+n
+(βℓ, βu) and Itail
+N (m, βℓ, βu) all have
+hessians with bounded norms, they all follow Lipschitz con-
+tinuous gradient. Let β =
+βℓ−βℓ
+βu −βu
+
+denotes the differential
+vector between two threshold pairs (βℓ, βu) and
+ βℓ, βu
+
+, the
+inequality holds for that:
+∇gtail
+n (βℓ, βu) −∇gtail
+n (βℓ, βu)
+ ≤k2(n2 −n
+8
++
+√
+3n
+3
+) · ∥β∥,
+(35)
+∇ghead
+n
+(βℓ, βu) −∇ghead
+n
+(βℓ, βu)
+ ≤k2(n2 −n
+8
++
+√
+3n
+3
+) · ∥β∥,
+(36)
+∇gtail
+N (βℓ, βu) −∇gtail
+N (βℓ, βu)
+ ≤k2(N 2 −N
+8
++
+√
+3N
+3
+) · ∥β∥.
+(37)
+Since Itail(xm, bxm, βℓ, βu) contains gtail
+n (βℓ, βu), deriving the
+partial derivative of Itail(xm, bxm, βℓ, βu) is equalized to calcu-
+lating the gradient of gtail
+n (βℓ, βu). Mathematically,
+
+∂Itail(ym, bym, βℓ, βu)
+∂βℓ∂βu
+−∂Itail(ym, bym, βℓ, βu)
+∂βℓ∂βu
+
+(a)
+≤
+
+N
+X
+n=1
+gtail
+n (βℓ, βu)
+∂βℓ∂βu
+−gtail
+n (βℓ, βu)
+∂βℓ∂βu
+
+(b)
+≤k2 N(N + 1)(N + 4
+√
+3 −1)
+24
+· ∥β∥
+= γ · ∥β∥,
+(38)
+where γ = k2 N(N+1)(N+4
+√
+3−1)
+24
+denotes the Lipschitz con-
+stant of the gradient of Itail(xm, bxm, βℓ, βu), (a) arises from
+the fact that 1 −L(xm, bxm) ≤1; 1 −L(ym, bym) ≤1. (b)
+arises from the relation that
+N
+X
+n=1
+∇gtail
+n (βℓ, βu) −∇gtail
+n (βℓ, βu)
+
+≤k2
+" N
+X
+n=1
+n2 −n
+8
++
+√
+3n
+3
+#
+· ∥β∥.
+(39)
+Since the Lipschitz constants in (38) does not depend on spe-
+cific events, we extend and generalize the preceding inequality
+into our objective function:
+∇facc(βℓ, βu) −∇facc(βℓ, βu)
+ ≤γ · ∥β∥.
+(40)
+Therefore, the gradient of objective function facc(βℓ, βu) is
+proved to be Lipschitz continuous with the constant γ =
+k2 N(N+1)(N+4
+√
+3−1)
+24
+. Proof of Lemma A is completed.
+APPENDIX B
+PROOF OF LEMMA 3
+Let
+h(xm, bxm, βℓ, βu)
+denote
+a
+sequence
+of
+func-
+tion Poff(βℓ, βu)’s nominator, which h(xm, bxm, βℓ, βu)
+=
+Itail(xm, bxm, βℓ, βu)−Ihead ((xm, bxm, βℓ, βu)+Mhead. Accord-
+ing to (35), (36) and (37), it follows that
+
+∂h(xm, bxm, βℓ, βu)
+∂βℓ∂βu
+−∂h(xm, bxm, βℓ, βu)
+∂βℓ∂βu
+
+=
+
+N
+X
+n=1
+Bn
+ [1 −L(xm, bxm)]
+(c)
+≤
+N
+X
+n=1
+2k2(n2 −n
+8
++
+√
+3n
+3
+) · ∥β∥
+= k2 N(N + 1)(N + 4
+√
+3 −1)
+12
+· ∥β∥
+= 2γ · ∥β∥.
+(41)
+Here, Bn denote the summation of gradient differences from
+(35) and (36). Mathematically,
+Bn = ∇gtail
+n (βℓ, βu) −∇gtail
+n (βℓ, βu)
+(42)
++ ∇ghead
+n
+(βℓ, βu) −∇ghead
+n
+(βℓ, βu).
+(43)
+12
+(c) arises from the inequality
+
+N
+X
+n=1
+Bn
+ ≤
+N
+X
+n=1
+∇gtail
+n (βℓ, βu) −∇gtail
+n (βℓ, βu)
+
++
+∇ghead
+n
+(βℓ, βu) −∇ghead
+n
+(βℓ, βu)
+ .
+(44)
+Since the Lipschitz constants in (41) do not depend on specific
+data, we extend and generalize the preceding inequality into
+the constraint function:
+∇v(βℓ, βu) −∇v(βℓ, βu)
+ ≤2DMγ · ∥β∥.
+(45)
+In this case, the constraint function’s gradient is demonstrated
+to be Lipschitz continuous with the Lipschitz constant 2DMγ.
+According to the lemma 2, it is straightforward that
+
+PtrD
+Rtr
+N
+X
+n=1
+Itail
+n (βℓ, βu)
+∂βℓ∂βu
+−Itail
+n (βℓ, βu)
+∂βℓ∂βu
+
+(46)
+≤k2N(N + 1)(N + 4
+√
+3 −1)PtrD
+24Rtr
+· ∥β∥,
+(47)
+Let o(βℓ, βu) = PN
+n=1[Itail
+n (βℓ, βu) + Ihead
+n
+(βℓ, βu)]Eloc(n), it
+follows (41) that
+
+∂o(βℓ, βu)
+∂βℓ∂βu
+−∂o(βℓ, βu)
+∂βℓ∂βu
+
+≤
+N
+X
+n=1
+2k2(n2 −n
+8
++
+√
+3n
+3
+)Eloc(n) · ∥β∥
+≤k2N(N + 1)(N + 4
+√
+3 −1)
+12
+Eloc(N) · ∥β∥.
+(48)
+Since the fenergy contains the term in both (46) and (48) and
+the Lipschitz constant can be generalized to all M events,
+fenergy’s gradient follows
+∇fenergy(βℓ, βu) −∇fenergy(βℓ, βu)
+
+≤Mk2N(N + 1)(N + 4
+√
+3 −1)
+12
+
+Eloc(N) + PtrD
+2Rtr
+
+∥β∥.
+(49)
+According
+to
+the
+definition
+of
+weakly
+convexity
+and
+smoothness,
+fenergy(βℓ, βu)
+is
+proved
+to
+have
+its
+gra-
+dient
+Lipschitz
+continuous
+with
+the
+Lipschitz
+constant
+2Mγ
+
+Eloc(N) + PtrD
+2Rtr
+
+. Proof of Lemma 3 is completed.
+APPENDIX C
+PROOF OF LEMMA 4
+Given β =
+βℓ−βℓ
+βu −βu
+
+, since both objective and constraint
+functions are proved to follow continuous Lipschitz gradient
+in previous two Lemmas. According to Lemma 1.2.3 from
+Nesterov’s work [41], it is straightforward to prove:
+facc(βℓ, βu) −facc(βℓ, βu) −
+
+∇fmiss(βℓ, βu), β
+ ≤γ
+2 ∥β∥2 ,
+(50)
+and
+v(βℓ, βu) −v(βℓ, βu) −
+
+∇v(βℓ, βu), β
+ ≤DMγ ∥β∥2 , (51)
+fenergy(βℓ, βu) −fenergy(βℓ, βu) −
+
+∇fenergy(βℓ, βu), β
+
+≤Mγ
+
+Eloc(N) + PtrD
+2Rtr
+
+∥β∥2 .
+(52)
+Hence, (50) indicates that facc(βℓ,βu) is both γ-smooth and γ-
+weakly convex. (51) and (52) implies that v(βℓ, βu) is both
+2DMγ-smooth and 2DMγ-weakly convex, fenergy(βℓ, βu) ex-
+hibits 2Mγ
+
+Eloc(N) + PtrD
+2Rtr
+
+weak convexity and smooth-
+ness. Proof of Lemma 4 is completed.
+APPENDIX D
+PROOF OF PROPOSITION 1
+Given β =
+
+βℓ−βℓ
+βu −βu
+
+. Since facc(βℓ, βu) has proved its
+weakly convexity, Poff follows that:
+Poff(βℓ, βu) ≥Poff(βℓ, βu) +
+
+∇Poff(βℓ, βu), β
+
+−γ ∥β∥2 .
+(53)
+Based on (53) and the fact that κ
+2 (max{0, Poff(βℓ, βu)})2 is
+still weakly convex, it is straightforward to derive:
+κ
+2 (Poff(βℓ, βu))2
+≥κ
+2 Poff(βℓ, βu))2 + κPoff(βℓ, βu) ·
+ Poff(βℓ, βu) −Poff(βℓ, βu)
+
+≥κ
+2 Poff(βℓ, βu))2 + κPoff(βℓ, βu) ·
+ 
+∇Poff(βℓ, βu), β
+
+−γ ∥β∥2
+.
+(54)
+Let x = (βℓ, βu) and y = (βℓ, βu) for simplicity. Therefore, it
+is straightforward to show
+κ
+2 (Poff(x))2−κ
+2 Poff(y))2 ≥κPoff(y)·⟨∇Poff(y), β⟩−κAγ ∥β∥2 ,
+(55)
+By applying the triangle inequality and using the smoothness
+of Poff(βℓ, βu), the gradient of κ
+2 (Poff (βℓ, βu))2 is Lipschitz
+continuous as
+∇∥κ
+2 (Poff(x))2 −κ
+2 (Poff(y))2∥
+= κ∥Poff(x)∇Poff(x) −Poff(y)∇Poff(y)∥
+= κ (|Poff(x) −Poff(y)|∥∇Poff(x)∥)
++ κ (|Poff(y)|∥∇Poff(x) −∇Poff(y)∥)
+(56)
+Since ∥∇Poff(x) −∇Poff(y)∥≤2γ ∥β∥2, it follows that
+∥∇κ
+2 (Poff(x)2 −∇κ
+2 Poff(y)2∥≤κA(A + 2γ)∥x −y∥, (57)
+For both (55) and (57), A corresponds to the constant that
+A ≥max {|Poff(βℓ, βu)| , ∥∇Poff(βℓ, βu)∥}
+= max
+
+θ, DM(N −1)
+2
+√
+2
+
+.
+(58)
+In this case,
+κ
+2 (Poff(x))2 is proved as a 2κγA weakly
+convex
+and
+κA (A + 2γ)
+smooth
+function.
+Since
+v(βℓ, βu)
+=
+DMPoff(βℓ, βu), it is straightforward that
+κ
+2 (max{0, v(βℓ, βu)})2
+is
+a
+2κDMγA
+weakly
+convex
+and κDMA (A + 2γ) smooth function. Given the proved
+fact
+that
+fenergy(βℓ, βu)
+exhibits
+2Mγ
+
+Eloc(N) + PtrD
+2Rtr
+
+weak
+convexity
+and
+smoothness
+from
+(52),
+similar
+mathematical derivation can done according to (55) and
+(57).
+In
+this
+case,
+ρ
+2 (max{0, fenergy(βℓ, βu)})2
+exhibits
+ρB
+
+B + 2Mγ
+
+Eloc(N) + PtrD
+2Rtr
+
+smoothness
+and
+2MγρB
+
+Eloc(N) + PtrD
+2Rtr
+
+weak
+convexity.
+Specifically,
+13
+the Lipschitz constant is 2ρB when B is chosen to satisfy:
+B ≥max {|fenergy(βℓ, βu)| , ∥∇fenergy(βℓ, βu)∥}
+= max
+
+ξ, (N 2 + 1)Eloc(N)
+2
+√
+2
++ (N + 2)(N −1)PtrD
+4
+√
+2Rtr
+
+.
+(59)
+Proof of Proposition 1 is completed.
+REFERENCES
+[1] F. Liu, Y. Cui, C. Masouros, J. Xu, T. X. Han, Y. C. Eldar, and S. Buzzi,
+“Integrated sensing and communications: Toward dual-functional wire-
+less networks for 6g and beyond,” IEEE J. Sel. Areas Commun., vol. 40,
+no. 6, pp. 1728–1767, 2022.
+[2] Q. Zeng, Z. Wang, Y. Zhou, H. Wu, L. Yang, and K. Huang,
+“Knowledge-based
+ultra-low-latency
+semantic
+communications
+for
+robotic edge intelligence,” IEEE Trans. Commun., 2024.
+[3] Z. Wang, K. Huang, and Y. C. Eldar, “Spectrum breathing: Protecting
+over-the-air federated learning against interference,” IEEE Trans. Wire-
+less Commun., 2024.
+[4] E. Li, L. Zeng, Z. Zhou, and X. Chen, “Edge ai: On-demand acceler-
+ating deep neural network inference via edge computing,” IEEE Trans.
+Wireless Commun., vol. 19, no. 1, pp. 447–457, 2019.
+[5] J. Yan, S. Bi, and Y.-J. A. Zhang, “Optimal model placement and online
+model splitting for device-edge co-inference,” IEEE Trans. Wireless
+Commun., vol. 21, no. 10, pp. 8354–8367, 2022.
+[6] Z. Wang, A. E. Kalør, Y. Zhou, P. Popovski, and K. Huang, “Ultra-
+low-latency edge inference for distributed sensing,” arXiv preprint
+arXiv:2407.13360, 2024.
+[7] J. Lee, H. Lee, and W. Choi, “Wireless channel adaptive dnn split
+inference for resource-constrained edge devices,” IEEE Commun. Lett.,
+vol. 27, no. 6, pp. 1520–1524, 2023.
+[8] J. Shao and J. Zhang, “Bottlenet++: An end-to-end approach for feature
+compression in device-edge co-inference systems,” in IEEE Int. Conf.
+on Commun. Workshops (ICC Workshops).
+IEEE, 2020, pp. 1–6.
+[9] M. Jankowski, D. G¨und¨uz, and K. Mikolajczyk, “Joint device-edge
+inference over wireless links with pruning,” in IEEE Int. Workshop
+Signal Process. Adv. Wireless Commun. (SPAWC).
+IEEE, 2020, pp.
+1–5.
+[10] D. Wen, P. Liu, G. Zhu, Y. Shi, J. Xu, Y. C. Eldar, and S. Cui, “Task-
+oriented sensing, computation, and communication integration for multi-
+device edge ai,” IEEE Trans. Wireless Commun., 2023.
+[11] D. Wen, X. Jiao, P. Liu, G. Zhu, Y. Shi, and K. Huang, “Task-oriented
+over-the-air computation for multi-device edge ai,” IEEE Trans. Wireless
+Commun., 2023.
+[12] Z. Liu, Q. Lan, and K. Huang, “Resource allocation for multiuser edge
+inference with batching and early exiting,” IEEE J. Sel. Areas Commun.,
+vol. 41, no. 4, pp. 1186–1200, 2023.
+[13] Y. Mao, C. You, J. Zhang, K. Huang, and K. B. Letaief, “A survey
+on mobile edge computing: The communication perspective,” IEEE
+Commun. Surv. Tut, vol. 19, no. 4, pp. 2322–2358, 2017.
+[14] J. Yan, S. Bi, Y. J. Zhang, and M. Tao, “Optimal task offloading
+and resource allocation in mobile-edge computing with inter-user task
+dependency,” IEEE Trans. Wireless Commun., vol. 19, no. 1, pp. 235–
+250, 2019.
+[15] C. You, Y. Zeng, R. Zhang, and K. Huang, “Asynchronous mobile-edge
+computation offloading: Energy-efficient resource management,” IEEE
+Trans. Wireless Commun., vol. 17, no. 11, pp. 7590–7605, 2018.
+[16] C. Ding, J.-B. Wang, H. Zhang, M. Lin, and G. Y. Li, “Joint optimization
+of transmission and computation resources for satellite and high altitude
+platform assisted edge computing,” IEEE Trans. Wireless Commun.,
+vol. 21, no. 2, pp. 1362–1377, 2021.
+[17] Y. Wang, M. Sheng, X. Wang, L. Wang, and J. Li, “Mobile-edge com-
+puting: Partial computation offloading using dynamic voltage scaling,”
+IEEE Trans. Commun., vol. 64, no. 10, pp. 4268–4282, 2016.
+[18] Y. Mao, J. Zhang, and K. B. Letaief, “Dynamic computation offloading
+for mobile-edge computing with energy harvesting devices,” IEEE J.
+Sel. Areas Commun., vol. 34, no. 12, pp. 3590–3605, 2016.
+[19] Q. Hu, Y. Cai, G. Yu, Z. Qin, M. Zhao, and G. Y. Li, “Joint offloading
+and trajectory design for uav-enabled mobile edge computing systems,”
+IEEE Int. Things J., vol. 6, no. 2, pp. 1879–1892, 2018.
+[20] A. Asheralieva and D. Niyato, “Fast and secure computational offload-
+ing with lagrange coded mobile edge computing,” IEEE Trans. Veh.
+Technol., vol. 70, no. 5, pp. 4924–4942, 2021.
+[21] X. Cao, F. Wang, J. Xu, R. Zhang, and S. Cui, “Joint computation and
+communication cooperation for energy-efficient mobile edge comput-
+ing,” IEEE Int. Things J., vol. 6, no. 3, pp. 4188–4200, 2018.
+[22] L. Liu and W. Yu, “Massive connectivity with massive mimo—part i:
+Device activity detection and channel estimation,” IEEE Trans. Signal
+Process., vol. 66, no. 11, pp. 2933–2946, 2018.
+[23] Z. Qin, J. Fan, Y. Liu, Y. Gao, and G. Y. Li, “Sparse representation
+for wireless communications: A compressive sensing approach,” IEEE
+Signal Process. Mag., vol. 35, no. 3, pp. 40–58, 2018.
+[24] L. Liu, E. G. Larsson, W. Yu, P. Popovski, C. Stefanovic, and E. De Car-
+valho, “Sparse signal processing for grant-free massive connectivity: A
+future paradigm for random access protocols in the internet of things,”
+IEEE Signal Process. Mag., vol. 35, no. 5, pp. 88–99, 2018.
+[25] F. Peng, Z. Jiang, S. Zhou, Z. Niu, and S. Zhang, “Sensing and
+communication co-design for status update in multiaccess wireless
+networks,” IEEE Trans. Mobile Comput., 2021.
+[26] M. V. Ngo, T. Luo, and T. Q. Quek, “Adaptive anomaly detection for
+internet of things in hierarchical edge computing: A contextual-bandit
+approach,” ACM Trans. Int. of Things, vol. 3, no. 1, pp. 1–23, 2021.
+[27] E. W. Dereszynski and T. G. Dietterich, “Spatiotemporal models for
+data-anomaly detection in dynamic environmental monitoring cam-
+paigns,” ACM Trans. Sensor Netw. (TOSN), vol. 8, no. 1, pp. 1–36,
+2011.
+[28] G. Zhu, Z. Lyu, X. Jiao, P. Liu, M. Chen, J. Xu, S. Cui, and P. Zhang,
+“Pushing ai to wireless network edge: An overview on integrated
+sensing, communication, and computation towards 6g,” Science China
+Inf. Sciences, vol. 66, no. 3, p. 130301, 2023.
+[29] M. Bojarski, D. Del Testa, D. Dworakowski, B. Firner, B. Flepp,
+P. Goyal, L. D. Jackel, M. Monfort, U. Muller, J. Zhang et al., “End
+to end learning for self-driving cars,” arXiv preprint arXiv:1604.07316,
+2016.
+[30] S. Teerapittayanon, B. McDanel, and H.-T. Kung, “Branchynet: Fast
+inference via early exiting from deep neural networks,” in Int. Conf.
+Pattern Recognit. (ICPR).
+IEEE, 2016, pp. 2464–2469.
+[31] N. Ma, X. Zhang, H.-T. Zheng, and J. Sun, “Shufflenet v2: Practical
+guidelines for efficient cnn architecture design,” in Proc. of the Eur.
+Conf. Comput. Vision (ECCV), 2018, pp. 116–131.
+[32] M. Sandler, A. Howard, M. Zhu, A. Zhmoginov, and L.-C. Chen, “Mo-
+bilenetv2: Inverted residuals and linear bottlenecks,” in Proc. IEEE/CVF
+Conf. Comput. Vision Pattern Recogn.(CVPR), 2018, pp. 4510–4520.
+[33] Y. Zhang, B. Kang, B. Hooi, S. Yan, and J. Feng, “Deep long-tailed
+learning: A survey,” arXiv preprint arXiv:2110.04596, 2021.
+[34] D. Gao, M. Madden, D. Chambers, and G. Lyons, “Bayesian ann
+classifier for ecg arrhythmia diagnostic system: A comparison study,”
+in Proc. IEEE Int. Joint Conf. Neural Netw., vol. 4.
+IEEE, 2005, pp.
+2383–2388.
+[35] Z. Zhang and M. Tao, “Learning-based branch-and-bound for non-
+convex complex modulus constrained problems with applications in
+wireless communications,” IEEE Trans. Wireless Commun., vol. 21,
+no. 6, pp. 3752–3763, 2021.
+[36] X. Tan, H. Li, L. Wang, X. Huang, and Z. Xu, “Empowering adaptive
+early-exit inference with latency awareness,” in Proc. AAAI Conf. Artif.
+Intell., vol. 35, no. 11, 2021, pp. 9825–9833.
+[37] Q. Lin, R. Ma, and Y. Xu, “Complexity of an inexact proximal-
+point penalty method for constrained smooth non-convex optimization,”
+Computational optimization and applications, vol. 82, no. 1, pp. 175–
+224, 2022.
+[38] Y. You, Z. Zhang, C.-J. Hsieh, J. Demmel, and K. Keutzer, “Imagenet
+training in minutes,” in Proc. of the 47th Int. Conf. on Parallel Process.,
+2018, pp. 1–10.
+[39] E. Korot, Z. Guan, D. Ferraz, S. K. Wagner, G. Zhang, X. Liu, L. Faes,
+N. Pontikos, S. G. Finlayson, H. Khalid et al., “Code-free deep learning
+for multi-modality medical image classification,” Nature Machine Intell.,
+vol. 3, no. 4, pp. 288–298, 2021.
+[40] A. Krizhevsky, I. Sutskever, and G. E. Hinton, “Imagenet classification
+with deep convolutional neural networks,” Adv. Neural Inf. Process. Syst.
+(NIPS), vol. 25, 2012.
+[41] Y. Nesterov et al., Lectures on convex optimization.
+Springer, 2018,
+vol. 137.

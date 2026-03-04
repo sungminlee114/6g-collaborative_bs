@@ -1,0 +1,2116 @@
+arXiv:2505.09214v1  [cs.LG]  14 May 2025
+1
+The Larger the Merrier? Efﬁcient Large AI Model
+Inference in Wireless Edge Networks
+Zhonghao Lyu, Ming Xiao, Senior Member, IEEE, Jie Xu, Fellow, IEEE,
+Mikael Skoglund, Fellow, IEEE, and Marco Di Renzo, Fellow, IEEE
+Abstract—The growing demand for large artiﬁcial intelli-
+gence model (LAIM) services is driving a paradigm shift
+from traditional cloud-based inference to edge-based inference
+for low-latency, privacy-preserving applications. In particular,
+edge-device co-inference, which partitions LAIMs between edge
+devices and servers, has emerged as a promising strategy
+for resource-efﬁcient LAIM execution in wireless networks. In
+this paper, we investigate a pruning-aware LAIM co-inference
+scheme, where a pre-trained LAIM is pruned and partitioned
+into on-device and on-server sub-models for deployment. For
+analysis, we ﬁrst prove that the LAIM output distortion is upper
+bounded by its parameter distortion. Then, we derive a lower
+bound on parameter distortion via rate-distortion theory, analyt-
+ically capturing the relationship between pruning ratio and co-
+inference performance. Next, based on the analytical results, we
+formulate an LAIM co-inference distortion bound minimization
+problem by jointly optimizing the pruning ratio, transmit power,
+and computation frequency under system latency, energy, and
+available resource constraints. Moreover, we propose an efﬁcient
+algorithm to tackle the considered highly non-convex problem.
+Finally, extensive simulations demonstrate the effectiveness of
+the proposed design. In particular, model parameter distortion is
+shown to provide a reliable bound on output distortion. Also, the
+proposed joint pruning ratio and resource management design
+achieves superior performance in balancing trade-offs among
+inference performance, system latency, and energy consumption
+compared with benchmark schemes, such as fully on-device
+and on-server inference. Moreover, the split point is shown to
+play a critical role in system performance optimization under
+heterogeneous and resource-limited edge environments.
+Index
+Terms—Large
+AI
+model
+(LAIM),
+edge-device
+co-
+inference, model pruning, edge intelligence, joint communication
+and computation design.
+I. INTRODUCTION
+A. Backgrounds and Related Works
+The rapid advancement of large artiﬁcial intelligence mod-
+els (LAIMs) has marked a signiﬁcant breakthrough in AI,
+drawing increasing attention from academia, industry, and
+the public. Built upon the transformer architecture, LAIMs
+Z. Lyu, M. Xiao, and M. Skoglund are with the Department of Information
+Science and Engineering, KTH Royal Institute of Technology, Stockholm,
+Sweden (e-mail: lzhon@kth.se, mingx@kth.se, skoglund@kth.se).
+J. Xu is with the School of Science and Engineering, the Shenzhen Future
+Network of Intelligence Institute, and the Guangdong Provincial Key Labo-
+ratory of Future Networks of Intelligence, The Chinese University of Hong
+Kong (Shenzhen), Guangdong 518172, China (e-mail: xujie@cuhk.edu.cn).
+(Corresponding author: M. Xiao and J. Xu.)
+M. Di Renzo is with Universit´e Paris-Saclay, CNRS, CentraleSup´elec, Lab-
+oratoire des Signaux et Syst`emes, 3 Rue Joliot-Curie, 91192 Gif-sur-Yvette,
+France. (marco.di-renzo@universite-paris-saclay.fr), and with King’s College
+London, Centre for Telecommunications Research – Department of Engineer-
+ing, WC2R 2LS London, United Kingdom (marco.di renzo@kcl.ac.uk).
+leverage massive-scale parameters and extensive training data
+to achieve remarkable ability in understanding, reasoning,
+and generating human-like content [1], [2]. Representative
+examples, such as OpenAI’s GPT-4 [3], have transcended
+conventional AI limitations to tackle complex tasks across
+diverse domains, such as multi-modal data processing. Their
+widespread adoption has led to transformative applications,
+ranging from AI-powered virtual assistants to autonomous
+control systems.
+However, the massive model size and high computational
+complexity of LAIMs pose signiﬁcant challenges for efﬁ-
+cient inference, particularly for latency-sensitive services in
+resource-limited scenarios [4]. Currently, most LAIM infer-
+ence is conducted through centralized cloud-based paradigms
+(i.e., on-server inference), where user data is transmitted to
+remote cloud servers for processing. Although efforts such as
+graphic processing unit (GPU) scheduling optimization have
+been proposed to accelerate cloud-based LAIM inference [5],
+this paradigm still suffers from inherent limitations, such as
+high communication latency and potential privacy risks.
+Alternatively, with the surging of edge computing for future
+mobile networks, e.g., the sixth-generation (6G) networks,
+the computation capability of edge servers and devices has
+continuously grown [6], making edge-based LAIM deploy-
+ments increasingly feasible [7], [8]. A few recent works have
+investigated on-device inference. For example, EdgeMoE [9]
+and LiteMoE [10] are memory- and computation-efﬁcient
+solutions for deploying LAIMs directly on edge devices for
+mobile applications. However, on-device inference is severely
+constrained by the limited memory, computation, and battery
+capacity of edge devices. For example, an inference task
+on GPT 6.7B (with FP16 precision, batch size 64, and
+input/output sequence length 512/32) requires 41.84 GB of
+running memory [11], far beyond what most existing edge
+devices can support.
+To address these limitations, collaborative inference (co-
+inference), also known as split inference, has emerged as a
+promising solution, where LAIMs are partitioned into sub-
+models executed across edge devices and edge/cloud servers
+[12]. Early works on co-inference have mainly focused on
+regular-scale AI models, exploring two primary strategies:
+task-oriented intermediate feature encoding and joint task
+ofﬂoading and resource allocation. For task-oriented interme-
+diate feature encoding, raw data is encoded into compressed
+semantic features to reduce communication overhead. For
+instance, leveraging deep neural networks (DNNs) as pow-
+erful encoders has inspired the ﬁeld of semantic/task-oriented
+2
+communications [13], enabling various applications such as
+data reconstruction [14], [15], intelligent task execution [16],
+[17], and multi-task services [18]. For joint task-ofﬂoading
+and resource allocation, AI inference workloads are parti-
+tioned and allocated across distributed processing ends based
+on available communication and computation resources [19].
+For example, [20]–[22] have considered model splitting and
+placement optimization in edge-device co-inference systems.
+Moreover, the authors of [23], [24] have further studied
+multi-user co-inference systems with joint communication and
+computation resource management.
+However, directly applying the mentioned strategies to
+LAIMs is highly challenging. LAIM co-inference should con-
+sider their unique challenges of massive parameter scales and
+computation intensity. To this end, recent efforts have consid-
+ered large-scale joint task-ofﬂoading and resource manage-
+ment, and model compression for efﬁcient LAIM co-inference.
+For instance, [25] has explored cloud-edge active co-inference
+for LAIMs but underutilized the abundant computation poten-
+tial of edge devices. To exploit this potential, [26]–[28] have
+studied LAIM co-inference between edge devices and servers.
+Speciﬁcally, [26] has analyzed the impact of different model
+splitting points under dynamic wireless channels. Also, [27]
+has introduced a hybrid architecture involving a small model
+on the device and a full LAIM on the server, with local output
+quality-aware collaboration. Different from these single-device
+settings, [28] has extended to a general multi-device multi-
+server co-inference framework with joint device selection and
+model partitioning.
+Complementary to large-scale joint task-ofﬂoading and re-
+source management, model compression is another crucial
+technique for reducing the computation and memory burden
+of LAIM inference. Key methods include model pruning [29]–
+[31], quantization [32], and knowledge distillation [33]. Model
+pruning removes redundant parameters based on random [30]
+or magnitude-based [31] criteria, quantization reduces numer-
+ical precision using low-bit representations [32], and knowl-
+edge distillation trains compact student models to replicate full
+LAIM outputs [33]. These techniques can be integrated within
+LAIM co-inference systems to further enhance feasibility and
+performance at resource-limited edge environments.
+B. Motivations and Contributions
+Despite the progress, most existing works on LAIM infer-
+ence adopt empirical or heuristic approaches to model com-
+pression for fast inference, lacking theoretical foundations on
+inference performance or resource efﬁciency. A fundamental
+research challenge remains unresolved: To what extent should
+LAIMs be compressed to well balance model complexity and
+inference quality? The challenge becomes particularly critical
+in resource-limited edge inference systems, where improper
+compression can severely affect system performance. Speciﬁ-
+cally, overly aggressive compression may signiﬁcantly degrade
+inference quality, while under-compression may make the
+system infeasible, violating quality-of-service (QoS) require-
+ments. However, theoretically characterizing the relationship
+between the compression ratio and inference performance is
+highly non-trivial. LAIMs are composed of complex, deeply
+stacked non-linear layers, which make the analysis of model
+compression induced distortion analytically elusive.
+Furthermore, under practical QoS requirements, there gen-
+erally exist inherent trade-offs among inference performance,
+system delay, and energy consumption. To effectively bal-
+ance these trade-offs, it is essential to jointly optimize the
+compression strategies together with the communication and
+computation resource allocation. However, for LAIM edge
+co-inference, different model segments are executed across
+heterogeneous devices and servers with asymmetric communi-
+cation and computation capabilities. Such heterogeneity makes
+the LAIM co-inference design even more challenging, which
+have not been investigated in the existing literature yet.
+To tackle the above challenges, in this work, we inves-
+tigate a pruning-aware LAIM co-inference system from the
+theoretical and design aspects. Speciﬁcally, the pre-trained
+LAIM is partitioned into two sub-models deployed on the
+edge device and server, respectively. The device performs
+partial inference to extract intermediate embeddings, which
+are then transmitted to the edge server for ﬁnal inference.
+To alleviate the computation and storage burden, we adopt
+model compression, particularly model pruning, to reduce the
+complexity of both the on-device and on-server models prior to
+deployment. We then theoretically characterize the relationship
+between the pruning ratio and inference distortion, which
+provides a useful guideline for the LAIM co-inference system
+design. The main contributions are summarized as follows.
+• To address the analytical intractability of LAIM output
+distortion by model pruning, we ﬁrst prove that the
+inference output distortion is upper bounded by the model
+parameter distortion, starting with fully-connected (FC)
+DNNs and extending to general AI models. We then
+derive a lower bound on inference quality distortion based
+on rate-distortion theory, which captures the inﬂuence of
+various important system parameters (such as pruning
+ratio and model entropy) on inference distortion.
+• Building upon the theoretical distortion bound, we formu-
+late an inference distortion bound minimization problem
+by jointly optimizing the pruning ratio, transmit power,
+and computation frequency, subject to various constraints
+on the system resources (i.e., the maximum transmission
+power and computation clock frequency), latency, and
+energy consumption. However, the considered problem
+is highly non-convex and hard to solve due to the close
+coupling between the model pruning ratio and the compu-
+tation/communication variables. To address the problem,
+we develop an efﬁcient algorithm to obtain a high-quality
+sub-optimal solution.
+• Extensive simulations demonstrate the superiority of
+the proposed joint model pruning and communication-
+computation resource allocation design. Firstly, we show
+that LAIM parameter distortion is a reliable performance
+upper bound for the output distortion. Secondly, it is
+shown that the proposed design achieves improved infer-
+ence quality compared with various benchmark schemes,
+effectively balancing the trade-offs between inference
+performance, system latency, and energy consumption via
+3
+better leveraging system resources with adaptive pruning
+strategies. Finally, we show that the proposed LAIM
+co-inference design outperforms conventional paradigms
+such as fully on-device and on-server inference, and the
+split point plays an important role in the optimized system
+performance under heterogeneous and resource-limited
+edge environments.
+The remainder of this paper is organized as follows. Section
+II introduces the system model for LAIM co-inference. Section
+III presents the approximation of LAIM output distortion. Sec-
+tion IV provides the rate-distortion analysis for model pruning.
+Section V formulates the joint pruning ratio, communication,
+and computation design problem, and develops an efﬁcient
+algorithm to solve it. Section VI presents numerical results to
+validate the effectiveness of the proposed LAIM co-inference
+design. Section VII concludes the paper.
+!"#$%&$'($'
+!"#$%"$()*$
++,-"$()*$%./"$0
+1$234'$%$53'2*3)/,
+6$&403&%7$$"82*9
+:/&)3)/,20%$,*/"),#
+1$$"
+1/';2'"
+<""%=%>/'.
+?,@43&
+!.8$""),#
+A403)-B$2"
+<33$,3)/,
+<""%=%>/'.
+!
+"
+#
+A403)-B$2"
+<33$,3)/,
+<""%=%>/'.
+1$$"
+1/';2'"
+<""%=%>/'.
+!
+"
+#
+C),$2'
+D/73.25
++43@43&
+A2&9$"%
+A403)-B$2"
+<33$,3)/,
+<""%=%>/'.
++,-$"#$%./"$0
+>!
+>!
+#
+!
+"
+!.8$""),#
+Figure 1. Illustration of the considered LAIM co-inference system.
+II. SYSTEM MODEL
+We consider an LAIM co-inference system with one edge
+server and one device as shown in Fig. 1, where the edge de-
+vice and server cooperatively perform LAIM inference based
+on pre-trained LAIMs. This setup corresponds to many real-
+world application scenarios, such as users submitting multi-
+modal prompts to access LAIM services at the network edge.
+Speciﬁcally, the pre-trained LAIM is partitioned into two
+segments (i.e., on-device and on-server models), each com-
+posed of several functional modules. Let the pre-trained LAIM
+be represented by a parameter vector wp ∈Rqp, where qp
+denotes the total number of model parameters. Each parameter
+of wp is assumed to be quantized with b bits for storage. We
+split wp into two parts, and denote the parameters of on-device
+and on-server sub-models as w ∈Rq and v ∈Rs, respectively,
+such that q + s = qp and wp = {w; v}.
+Then, we deploy them on the edge device and server,
+respectively. Under this setup, the inference process involves
+two stages. The ﬁrst stage is on-device inference, where the
+device computes intermediate embeddings via the on-device
+model from the input and transmits them to the server. The
+second stage is on-server inference, where the edge server
+completes the remaining inference task via the on-server
+model and returns the ﬁnal results.
+A. On-device Inference and Embeddings Transmission
+We ﬁrst introduce the on-device inference process per-
+formed at the edge device during forward propagation. For
+efﬁcient inference, we further prune w to obtain a lightweight
+model ˆw ∈Rˆq. The pruning ratio is deﬁned as ρ = ˆq/q1.
+Denote φ as the input data, then the output intermediate
+embeddings generated by the on-device model are given by
+o = f(φ, ˆw), where f(·) denotes the computation process of
+the on-device model.
+Next, the intermediate embeddings o are transmitted to
+the edge server for on-server processing. Let x represent the
+transmitted signal, and we assume each element xi of x has
+normalized power, i.e., E[|xi|2] = 1, without loss of generality.
+Then, let p denote the transmit power, which satisﬁes the
+maximum power constraint, i.e.,
+0 ≤p ≤Pmax.
+(1)
+Furthermore, let g denote the uplink channel power gain
+from the edge device to the server, which is assumed to be
+unchanged during each transmission period. Then the achiev-
+able uplink communication rate (in bits-per-second (bps)) is
+r(p) = B log2
+
+1 +
+gp
+BN0
+
+,
+(2)
+where B is the uplink bandwidth, and N0 is the power
+spectrum density (PSD) of the additive white Gaussian noise
+(AWGN) at the receiver of the edge server.
+B. On-server Inference and Final Results Feedback
+We now introduce the on-server inference process to acquire
+the ﬁnal LAIM inference results. The edge server also prunes
+its sub-model v to obtain a lightweight version ˆv ∈Rˆs, where
+the pruning ratio is deﬁned as ˜ρ = ˆs/s. It is worth noting that
+the overall model (with on-device and on-server parts) size (in
+bits) is (ρq + ˜ρs)b.
+Upon receiving the intermediate embeddings o from the
+edge device, the server then completes the inference task and
+generates the ﬁnal output as
+˜o = ˜f(o, ˆv),
+(3)
+where ˜f(·) denotes the processing function of the on-server
+model with pruned parameters ˆv. Finally, the edge server sends
+the ﬁnal inference result ˜o back to the edge device to complete
+the whole co-inference process.
+C. Inference Delay and Energy Consumption Analysis
+We analyze the end-to-end inference delay and energy
+consumption of the considered LAIM co-inference system.
+1) On-device inference: Denote the original on-device com-
+putational workload (in FLOPs) as NFLOP. After model com-
+pression, we assume the remaining workload is proportional
+to the pruning ratio ρ, resulting in a compressed workload
+of ρNFLOP. Denote f and c as the clock frequency and the
+number of FLOPs per cycle of the processor at the edge device,
+respectively. Then, the delay for on-device inference is
+tI(ρ, f) = ρNFLOP
+fc
+.
+(4)
+1For ease of exposition, we deﬁne the pruning ratio as the remaining
+parameter ratio.
+4
+Moreover, the corresponding energy consumption is
+eI(ρ, f) = η ρNFLOP
+c
+φf 2,
+(5)
+where η and φ represent the power usage effectiveness (PUE)
+and a chip-speciﬁc power coefﬁcient of the edge device.
+2) Embeddings uploading: Let θ denote the size of the
+intermediate embeddings o (in bits)2. According to the uplink
+communication rate deﬁned in (2), the uploading duration of
+the embeddings o is
+tU(p) =
+θ
+r(p),
+(6)
+and the energy consumption for uploading embeddings is
+eU(p) = pθ
+r(p).
+(7)
+3) On-server inference: Let ˜NFLOP denote the total on-
+server computational workload before pruning. After compres-
+sion with pruning ratio ˜ρ, the workload becomes ˜ρ ˜NFLOP.
+Denote ˜f and ˜c as the clock frequency and FLOPs per cycle of
+the processor at the edge server, respectively. Then, the delay
+and energy consumption for on-server inference are given by
+˜tI(˜ρ, ˜f) = ˜ρ ˜NFLOP
+˜f˜c
+,
+(8)
+˜eI(˜ρ, ˜f) = ˜η ˜ρ ˜NFLOP
+˜c
+˜φ ˜f 2,
+(9)
+where ˜η and ˜φ denote the PUE and power coefﬁcient of
+the edge server, respectively. Generally, since the size of the
+ﬁnal inference results is typically small and the downlink is
+less resource-constrained, we neglect the feedback delay and
+energy consumption from the server to the device.
+4) Total delay and energy consumption: The total end-to-end
+inference delay including on-device embeddings computing,
+uploading, and ﬁnal results obtaining is
+T (ρ, f, p, ˜ρ, ˜f) = tI(ρ, f) + tU(p) + ˜tI(˜ρ, ˜f),
+(10)
+while the total energy consumption is
+E(ρ, f, p, ˜ρ, ˜f) = eI(ρ, f) + eU(p) + ˜eI(˜ρ, ˜f).
+(11)
+III. MODEL OUTPUT DISTORTION APPROXIMATION
+Due to the highly non-linear nature of AI models, it is
+generally hard to directly characterize the output distortion
+introduced by model pruning. To address this challenge, we
+ﬁrst approximate the output distortion of FC DNNs, which
+provides useful insights on how pruning-induced model pa-
+rameter distortion relates to the output distortion. Then, we
+extend the analysis to more general AI models to further
+examine the feasibility of the approximation.
+2Note that in this work, we focus on analyzing the inference distortion
+induced by model pruning, and do not consider the quantization noise in the
+transmission of embeddings.
+A. Approximation of Model Output Distortion on FC DNNs
+To approximate the output distortion of an L-layer FC DNN
+under the co-inference paradigm, we ﬁrst model the FC DNN
+explicitly. Speciﬁcally, the on-device model is given by
+f(φ, W ) = W (LD)σ
+ W (LD−1)σ(· · · W (1)φ)
+
+,
+(12)
+and the on-server model is given as
+˜f(φ, W , V )=V (LE)σ
+ V (LE−1)σ(· · ·V (1)f(φ, W ))
+
+, (13)
+where LD and LE denote the total numbers of layers of on-
+device and on-edge models, W = {W (1), · · · , W (LD)} and
+V = {V (1), · · · , V (LE)} denote the sets of model parameters,
+and σ(·) represents the activation function.
+To facilitate the FC DNN output distortion analysis under
+the co-inference paradigm, we consider the following assump-
+tions on the input data and activation function.
+Assumption 1 (Normalized input data): The input data are
+normalized as ∥φ∥2 ≤1 before being fed into DNNs.
+Assumption 2 (Smoothness of the activation function): The
+activation function σ(·) is 1-Lipschitz, i.e.,
+∥σ(x) −σ(y)∥≤∥x −y∥.
+(14)
+Furthermore, we assume σ(0) = 0. Such assumptions corre-
+spond to various well-acknowledged activation functions such
+as tanh, ReLu, and LeakyReLu.
+Based on these assumptions, we formulate the following
+lemma on the output of the l-th layer of the FC DNN.
+Lemma 3.1: Denote the l-th layer of the FC DNN W as
+W (l), and the ﬁrst l layers of W as W (1:l), then we have
+∥f(φ, W (1:l))∥≤
+lY
+j=1
+∥W (j)∥F.
+(15)
+Proof: From the Cauchy-Schwarz inequality, we have
+∥f(φ, W (1:l))∥≤∥W (l)∥F∥σ
+ f(φ, W (1:l−1))
+
+∥
+≤∥W (l)∥F∥f(φ, W (1:l−1))∥,
+(16)
+where the last inequality follows from Assumption 2. Then,
+we apply the same inequality to ∥f(φ, W (1:l−1))∥repeatedly.
+With normalized input data (as in Assumption 1), the proof is
+thus concluded.
+Based on Lemma 3.1, we obtain the following lemma on
+the output distortion of the l-th layer of the FC DNN.
+Lemma 3.2: The output distortion of the l-th layer of an FC
+DNN model W is upper bounded by
+∥f(φ, W (1:l)) −f(φ, ˆ
+W
+(1:l))∥
+≤∥W (l) −ˆ
+W
+(l)∥F
+l−1
+Y
+j=1
+∥W (j)∥F
++ ∥W (l)∥F∥f(φ, W (1:l−1)) −f(φ, ˆ
+W
+(1:l−1))∥. (17)
+Proof: See Appendix A.
+We apply (17) to ∥f(φ, W (1:l−1)) −f(φ, ˆ
+W
+(1:l−1))∥re-
+peatedly, which, using some algebraic manipulations, leads to
+the following proposition for the output embedding distortion
+of the on-device model.
+5
+Proposition 3.1: An upper bound on the output embedding
+distortion of the on-device model is
+∥f(φ, W ) −f(φ, ˆ
+W )∥≤
+LD
+X
+l=1
+A(l)∥W (l) −ˆ
+W
+(l)∥F,
+(18)
+where A(l) = QLD
+i=1,i̸=l ∥W (i)∥F.
+Finally, by denoting the total number of on-device and on-
+server layers as L = LD + LE, the whole parameter set as
+Ω= {W , V }, and the pruned model as ˆΩ, we have the
+following theorem about the overall output distortion of FC
+DNNs under the co-inference paradigm.
+Theorem 3.1: The upper bound on the output distortion for
+FC DNN co-inference is
+∥f(φ, W , V ) −f(φ, ˆ
+W , ˆV )∥
+≤
+LE
+X
+l=1
+˜A(l)∥V (l) −ˆV
+(l)∥F + ∥f(x, W) −f(x, ˆ
+W )∥
+=
+L
+X
+l=1
+ˆA(l)∥Ω(l) −ˆΩ
+(l)∥F,
+(19)
+where
+˜A(l)
+=
+QLE
+i=1,i̸=l ∥W (i)∥F
+and
+ˆA(l)
+=
+QL
+i=1,i̸=l ∥Ω(i)∥F.
+Remark 3.1: Theorem 3.1 indicates that the distortion of the
+model output ∥f(φ, W , V )−f(φ, ˆ
+W , ˆV )∥is upper bounded
+by the distortion of the model parameters ∥Ω−ˆΩ∥2
+F. Theorem
+3.1 bridges model-level pruning with task-level performance
+distortion. It provides a theoretical foundation on the design
+of a distortion function to facilitate rate-distortion analysis in
+Section IV. Speciﬁcally, since ˆA(l) of (19) is independent of
+the pruning operation, we exclude it from the design of the
+distortion function. Consequently, a natural form of distortion
+function arising from (19) is
+d(Ω, ˆΩ) = ∥Ω−ˆΩ∥F.
+(20)
+In the following, we show that the distortion function in (20)
+is also applicable to other general AI models (such as LAIMs),
+where it effectively approximates the output distortion (mea-
+sured by the ℓ2 norm) introduced by model pruning.
+B. Approximation of Model Output Distortion on General AI
+Models
+For a general AI model, let Ω′ and
+ˆ
+Ω′ denote the
+original and pruned models. The explicit expression of the
+model output f(φ, Ω′), as well as the distortion measurement
+∥f(φ, Ω′) −f(φ, ˆΩ
+′)∥, is generally difﬁcult to obtain due to
+the model’s high non-linearity and structural complexity.
+To overcome this, we approximate the output distortion
+using the ﬁrst-order Taylor expansion, i.e.,
+f(φ, ˆΩ
+′) ≈f(φ, Ω′) + ∇Ω′f(φ, Ω′) :
+
+ˆΩ
+′ −Ω′
+,
+(21)
+where : denotes the tensor contraction operation.
+To further quantify this approximation, we make the fol-
+lowing assumption on the gradient.
+Assumption 3 (Gradient bound): The Frobenius norm of
+the gradient is bounded by a positive constant G, i.e.,
+∥∇Ω′f(φ, Ω′)∥F ≤G.
+(22)
+Under this assumption, the output distortion caused by
+pruning can be upper bounded as follows.
+Proposition 3.2: From (21) and Assumption 3, the upper
+bound on the output distortion of any general AI model Ω′ is
+approximated as
+∥f(φ, ˆΩ
+′) −f(φ, Ω′)∥≈∥∇Ω′f(φ, Ω′) : (Ω′ −ˆΩ
+′)∥
+= ∥˜∇Ω′f(φ, Ω′) · vec(Ω′ −ˆΩ
+′)∥
+≤G∥Ω′ −ˆΩ
+′∥F ,
+(23)
+where ˜∇Ω′f(φ, Ω′) is the matrix form of ∇Ω′f(φ, Ω′) and
+vec(·) denotes the matrix vectorization operation.
+Remark 3.2: Proposition 3.2 demonstrates that, for general
+AI models including transformer-based LAIMs, the output
+distortion caused by model pruning can be approximately
+upper bounded by the parameter distortion. This validates the
+use of the distortion function in (20) for broader model classes.
+Moreover, it provides theoretical justiﬁcation for applying d(·)
+in (20) as a distortion function in our subsequent rate-distortion
+analysis in section IV, which characterizes the relationship
+between pruning ratio and LAIM co-inference performance.
+IV. RATE-DISTORTION ANALYSIS FOR MODEL PRUNING
+To analyze the relationship between the model pruning ratio
+and inference performance, we aim to derive the rate-distortion
+function for LAIM co-inference. This characterization could
+serve as a theoretical guidance on the design of pruning-aware
+LAIM co-inference systems. However, such analysis is quite
+challenging. On one hand, as discussed in Section III, the
+output distortion of LAIMs is analytically intractable. Inspired
+by the results in Propositions 3.1 and 3.2, we instead analyze
+the rate-distortion function of its upper bound, i.e., the model
+parameter distortion, under the distortion function in (20) and
+the weight distribution in Assumption 4. On the other hand,
+deriving the exact form of the rate-distortion function is also
+highly non-trivial, especially for high-dimensional data, such
+as LAIM parameters. To this end, we derive a lower bound,
+which provides a tractable approximation that effectively cap-
+tures the relationship between the pruning ratio and model
+parameter distortion, and thereby reﬂects the expected output
+distortion in co-inference systems.
+A. Preliminaries of Rate-distortion Analysis for Pruning
+Before proceeding, we introduce the following deﬁnitions
+and assumptions for rate-distortion analysis.
+Deﬁnition 4.1 (Achievable rate-distortion pair) [34] : Con-
+sider a source sequence W n
+=
+{w1, · · · , wn}, which
+is a sequence of independent and identically distributed
+(i.i.d.) real-valued q-dimensional random vectors accord-
+ing to distribution Pw. If there exists a series of en-
+coder and decoder
+ en(·), gn(·)
+
+, such that the alphabet of
+code-word has size 2nR, and the expected distortion con-
+straint D is met under certain distortion function d(·), i.e.,
+6
+ 
+ 	
+ 
+ 
+
+
+
+	
+
+
+
+
+
+
+
+
+  
+
+
+
+(a) ResNet-152
+ 
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+	
+
+
+(b) BERT
+ 
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+	
+
+
+(c) BART
+ 
+ 
+ 
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	
+(d) GPT-3
+Figure 2. Distribution of weights of various pre-trained models.
+limn→∞E[d(W n, gn(en(W n)))] ≤D, then a rate-distortion
+pair (R, D) is achievable.
+Deﬁnition 4.2 (Rate-distortion function) [34] : The rate-
+distortion function R(D) equals to the inﬁmum of rate R,
+such that rate-distortion pair (R, D) is achievable.
+Deﬁnition
+4.3
+(Distortion-rate
+function)
+[34]
+:
+The
+distortion-rate function D(R) is the inﬁmum of all distortions,
+such that (R, D) is achievable for a given rate R.
+Remark
+4.1:
+The
+rate-distortion
+function
+R(D)
+and
+distortion-rate function D(R) are two equivalent approaches
+to depict the boundary of the rate-distortion region, which is
+the set of all achievable rate-distortion pairs.
+Accordingly, we deﬁne the rate-distortion function for
+model pruning as follows.
+Deﬁnition 4.4 (R(D) for model pruning): Assume that the
+set of model parameters w follows the distribution Pw, based
+on the distortion function deﬁned in (20), the rate-distortion
+function for model pruning is deﬁned as
+R(D) =
+min
+P ˆ
+w|w:Ew, ˆ
+w[∥w−ˆ
+w∥]≤D I(w; ˆw).
+(24)
+Before deriving the rate-distortion function R(D) for model
+pruning, we ﬁrst introduce a source distribution that character-
+izes the statistical properties of the pre-trained model weights.
+Assumption 4 (Parameter Distribution): The parameter
+vector w ∈Rq of the pre-trained model is assumed to follow
+a multivariate Laplacian distribution with mean vector µ and
+scale parameter λ. The probability density function (PDF) is
+given by [35]
+Pw(w) =
+1
+(2π)q/2 · 2
+λ ·
+K(q/2)−1
+q
+2
+λy(w)
+
+q
+λ
+2 y(w)
+(q/2)−1 ,
+(25)
+where Kα(·) denotes the modiﬁed Bessel function of the
+second kind of order α, y(w) = (w −µ)TΓ −1(w −µ),
+and Γ is the covariance matrix of the distribution.
+Remark 4.2: The assumption that the model parameters
+follow a Laplacian-type distribution is empirically supported.
+As shown in Fig. 2, we analyze the empirical distributions of
+weights from various pre-trained models. It is observed that the
+Laplacian distribution provides a better ﬁt than the commonly
+assumed Gaussian distribution. Nonetheless, the multivariate
+Laplacian distribution offers a more general modeling, as it
+captures the intrinsic correlations among model parameters.
+Such an assumption is more theoretically desirable for rate-
+distortion analysis in the subsequent section.
+B. A Lower Bound on Rate-distortion Function for Pruning
+In the following, we derive a lower bound on the rate-
+distortion function to analyze the relationship between the
+pruning ratio and model parameter distortion. First, we in-
+troduce the following lemma on a lower bound of the rate-
+distortion function.
+Lemma 4.1: Deﬁne z = w −ˆw as the pruning error
+following from a distribution Pz. The rate-distortion function
+R(D) of model weights is lower bounded by
+R(D) ≥h(w) −Φ(D),
+(26)
+where
+Φ(D) ≜
+sup
+Pz:E[∥z∥]≤D
+h(z),
+(27)
+and h(w) is the differential entropy of w, i.e.,
+h(w) = −
+Z
+Rq
+Pw(w) log
+ Pw(w)
+
+dw.
+(28)
+Proof: The lower bound of the mutual information is
+I(w, ˆw) = h(w) −h(w| ˆw)
+≥h(w) −h(w −ˆw| ˆw)
+(29)
+≥h(w) −h(w −ˆw)
+(30)
+≥h(w) −
+sup
+Pz:E[∥z∥]≤D
+h(z),
+(31)
+where (29) follows from the fact that shifting the mean
+does not change differential entropy, and (30) follows from
+condition entropy being no larger than the entropy.
+Next, we proceed with deriving Φ(D) in (26). Speciﬁcally,
+scaling z to ˜z = z/D such that E[∥˜z∥] ≤1, we have
+Φ(D) =
+sup
+Pz:E[∥z∥]≤D
+h(z)
+=
+sup
+Pz:E[∥z∥]≤D
+−
+Z
+Rq
+dF˜z(z/D)
+dz
+log
+dF˜z(z/D)
+dz
+
+dz
+=
+sup
+P˜
+z:E[∥˜z∥]≤1
+−
+Z
+Rq
+P˜z(˜z)log
+ 1
+Dq P˜z(˜z)
+
+d˜z
+=
+sup
+P˜
+z:E[∥˜z∥2]≤1
+h(˜z) + log(Dq)
+= Φ(1) + qlog(D),
+(32)
+where F˜z(·) is the cumulative distribution function of ˜z.
+Then, we have the following lemma on Φ(1),
+7
+Lemma 4.2: The value of Φ(1) in (32) is given by
+Φ(1)=
+sup
+Pz:E[∥z∥2]≤1
+h(z)=qlog
+√πe
+q
+
++log
+ 2Γ(q)
+Γ(q/2)
+
+. (33)
+Proof: First, we deﬁne
+Qβ(z) = e−β∥z∥
+B(β) , (β > 0),
+(34)
+where B(β) is deﬁned as
+B(β) =
+Z
+Rq
+e−β∥z∥dz =
+Z
+Rq
+Z ∞
+∥z∥
+βe−βxdxdz
+=
+Z ∞
+0
+βe−βx
+Z
+∥z∥≤x
+dzdx
+(35)
+= β
+πq/2
+Γ( q
+2 + 1)
+Z ∞
+0
+xqe−βxdx
+(36)
+= 2Γ(q)πq/2
+Γ(q/2)βq ,
+(37)
+where (35) follows from Fubini’s theorem, (36) follows
+from the properties of the Gamma function, where Γ(x) =
+R ∞
+0
+tx−1e−tdt. With the deﬁned Qβ(z), we have
+Φ(1) =
+sup
+Pz:E[∥z∥]≤1
+h(z)
+=
+sup
+Pz:E[∥z∥]≤1
+−DKL
+ Pz(z)∥Qβ(z)
+
++ E
+
+log
+1
+Qβ(z)
+
+≤log B(β) + β/ ln 2,
+(38)
+where the last inequality follows from the fact that the
+Kullback-Leibler (KL) divergence DKL
+ Pz(z)∥Qβ(z)
+
+is
+non-negative. Moreover, the lower bound is achievable if we
+set Pz(z) = Qβ(z) such that DKL
+ Pz(z)∥Qβ(z)
+
+= 0.
+Finally, we minimize (38) by setting its derivative with
+respect to (w.r.t.) β equal to 0, i.e.,
+d
+ log B(β) + β/ ln 2
+
+dβ
+= 0,
+(39)
+and then substitute the obtained optimal β into (38). This
+completes the proof.
+Finally, by substituting (32) and (33) into (26), we have the
+following theorem.
+Theorem 4.1: Consider a multivariate Laplacian source. Un-
+der the distortion function in (20), its rate-distortion function
+is lower bounded by
+R(D) ≥h(w) + qlog
+
+q
+√πeD
+
++ log
+Γ(q/2)
+2Γ(q)
+
+.
+(40)
+Accordingly, for the considered co-inference system, with the
+original parameter dimension as qp = q + s and the pruned
+model rate (size) as (ρq + ˜ρs)b, we have the lower bound of
+its distortion-rate function as
+D(R)≥q + s
+√πe 2−(ρq+˜
+ρs)b−h(w)
+q+s
+ 
+Γ( q+s
+2 )
+2Γ(q + s)
+!
+1
+q+s
+≜ˆD(ρ, ˜ρ). (41)
+Remark 4.3 : From Theorem 4.1, we have the following
+observations. First, D(R) and R(D) are inverse functions.
+Such duality relationship characterizes the inherent trade-
+off between model pruning and inference quality. Second,
+Theorem 4.1 explicitly shows the inﬂuence of key system
+parameters on the inference distortion, including the pruning
+ratios ρ and ˜ρ, the model quantization level b, and the
+differential entropy h(w). In particular, smaller pruning ratios
+ρ and ˜ρ lead to reduced distortion, but at the cost of increased
+delay and energy consumption for additional computation
+workloads. To this end, it is crucial to properly design pruning
+ratios, jointly with other communication and computation
+resources to balance the trade-offs among inference accuracy,
+latency, and energy consumption. Finally, the bound shows that
+for the same pruning ratio, models with higher entropy (i.e.,
+larger h(w)) experience a larger distortion after pruning. This
+implies that LAIMs with more information-rich parameters are
+more sensitive to pruning. Thus, task-oriented model selection
+is also beneﬁcial for inference quality in resource-limited edge
+environments.
+Remark 4.4 (Special-case on parallel Laplacian sources):
+Here we further assume that the weights follow a parallel
+(independent but not necessarily identical) Laplacian distribu-
+tion. Speciﬁcally, each parameter wi ∈w follows a Laplacian
+distribution with zero-mean and scale factor λi, i.e.,
+Pw(wi) = λi
+2 e−λi|wi|.
+(42)
+Based on this, we analyze the rate-distortion function in the
+following Proposition.
+Proposition 4.1: Consider a parallel Laplacian source w,
+where each parameter wi ∈w follows a Laplacian distribution
+with zero-mean and scale factor λi. Under the distortion metric
+in (20), the rate-distortion function is lower bounded by
+R(D) ≥
+q
+X
+i=1
+max{−log(λiµ), 0},
+(43)
+where µ is chosen as P
+i:µ< 1
+λi
+µ
+√q + P
+i:µ≥1
+λi
+1
+λi√q = D.
+Proof: See Appendix B.
+V. JOINT PRUNING RATIO, COMMUNICATION, AND
+COMPUTATION DESIGN FOR LAIM CO-INFERENCE
+A. Problem Formulation
+This section jointly designs the pruning ratio, communi-
+cation, and computation resource management for LAIM co-
+inference. Speciﬁcally, we aim to jointly optimize the pruning
+ratios ρ and ˜ρ, the computational frequencies f and ˜f, and the
+transmit power p, to minimize the lower bound of the LAIM
+co-inference distortion in Theorem 4.1. The optimization is
+performed under the constraints of inference delay and energy
+consumption, as well as available system resource constraints
+(such as the maximum transmission power and computation
+clock frequency). Accordingly, the problem is formulated as
+(P1) :
+min
+{ρ,f,p,˜ρ, ˜f}
+ˆD(ρ, ˜ρ)
+s.t. T (ρ, f, p, ˜ρ, ˜f) ≤T0
+(44a)
+E(ρ, f, p, ˜ρ, ˜f) ≤E0
+(44b)
+0 ≤ρ ≤1
+(44c)
+8
+0 ≤˜ρ ≤1
+(44d)
+0 ≤f ≤f max
+(44e)
+0 ≤˜f ≤˜f max
+(44f)
+(1),
+where (44a) and (44b) indicate that the total inference delay
+and energy consumption should not exceed the given thresh-
+olds T0 and E0. By properly adjusting T0 and E0, we can
+balance the trade-offs among the inference quality, as well
+as the delay and energy consumption. Moreover, (44c) ∼
+(44f) specify the domains of the optimization variables, where
+f max
+k
+and f max
+m
+denote the maximum clock frequencies of
+the processors on the edge device and server. However, in
+problem (P1), the constraints in (44a) and (44b) are non-
+convex, due to the close coupling of variables ρ, f, p, ˜ρ, and ˜f.
+Therefore, problem (P1) is highly non-convex and non-trivial
+to be optimally solved in general.
+B. Proposed Solution of Problem (P1)
+We propose an effective algorithm to solve problem (P1).
+Speciﬁcally, the objective of problem (P1) is convex w.r.t the
+pruning ratios ρ and ˜ρ. To deal with the non-convex constraints
+in (44a) and (44b), we ﬁrst introduce the auxiliary variables
+ρ′ and ˜ρ′. Then problem (P1) is reformulated as
+(P2) :
+min
+{ρ,f,p,˜ρ, ˜
+f,ρ′,˜ρ′}
+ˆD(ρ, ˜ρ)
+s.t. NFLOP
+ρ′fc
++
+θ
+B log2
+
+1 +
+gp
+BN0
+
++ NFLOP
+˜ρ′ ˜f˜c
+≤T0
+(45a)
+η NFLOP
+ρ′c
+φf 2 +
+pθ
+B log2
+
+1 +
+gp
+BN0
+
++ ˜η
+˜NFLOP
+˜ρ′˜c
+˜φ ˜f 2 ≤E0
+(45b)
+ρ ≤1
+ρ′
+(45c)
+˜ρ ≤1
+˜ρ′
+(45d)
+(1), (44c) ∼(44f).
+It is worth noticing that the constraint (45a) is convex w.r.t.
+ρ′, f, p, ˜ρ′, and ˜f. However, problem (P2) is still non-convex
+considering the non-convex constraints (45b) ∼(45d). To
+address them, we use the successive convex approximation
+(SCA) technique by approximating the non-convex terms with
+the ﬁrst-order Taylor expansion in an iterative manner. For
+each iteration k ≥1, denote the local points as p(k), ρ′(k), and
+˜ρ′(k). Then, the second term of the left-hand-side of (45b) is
+upper bounded by
+pθ
+B log2
+
+1 +
+gp
+BN0
+
+≤
+p(k)θ
+B log2
+
+1 + gp(k)
+BN0
+ + u(p(k))(p −p(k))
+∆= ζ(k)(p), (46)
+where
+u(p(k)) =
+θ
+B log2
+
+1 + gp(k)
+BN0
+−
+p(k)θg
+B log2
+
+1 + gp(k)
+BN0
+2
+(BN0 + gp(k)) ln 2
+.
+(47)
+Also, for the non-convex constraints in (45c) and (45d), we
+approximate them based on their ﬁrst-order Taylor expansions,
+ρ −1
+ρ′ ≤ρ −
+1
+ρ′(k) +
+1
+ρ′(k)2 (ρ′ −ρ′(k)) ≤0,
+(48)
+˜ρ −1
+˜ρ′ ≤˜ρ −
+1
+˜ρ′(k) +
+1
+˜ρ′(k)2 (˜ρ′ −˜ρ′(k)) ≤0.
+(49)
+Finally, for the k-th iteration, we obtain the approximate
+convex version of problem (P2) in problem (P3.k), via sub-
+stituting ζ(k)(p) in (46) into the second term of the left hand
+side of (45b), and replacing (45c) and (45d) as (48) and (49).
+Problem (P3.k) can be solved by standard convex optimization
+tools efﬁciently, such as CVX.
+(P3.k) :
+min
+{ρ,f,p,
+˜
+ρ, ˜
+f,ρ′,˜
+ρ′}
+q + s
+√πe 2−(ρq+˜
+ρs)b−h(w)
+q+s
+ 
+Γ( q+s
+2 )
+2Γ(q + s)
+!
+1
+q+s
+s.t. η NFLOP
+ρ′c
+φf 2 + ζ(k)(p) + ˜η
+˜NFLOP
+˜ρ′˜c
+˜φ ˜f 2 ≤E0
+(50a)
+ρ −
+1
+ρ′(k) +
+1
+ρ′(k)2 (ρ′ −ρ′(k)) ≤0
+(50b)
+˜ρ −
+1
+˜ρ′(k) +
+1
+˜ρ′(k)2 (˜ρ′ −˜ρ′(k)) ≤0
+(50c)
+(1), (45a), (44c) ∼(44f).
+By iteratively solving problem (P3.k), we obtain a series of
+solutions, leading to monotonically non-increasing objective
+values of problem (P1). This guarantees the convergence of
+the proposed SCA-based algorithm for problem (P1). The
+iterative process stops when the decrease of the objective value
+is smaller than a given threshold ǫ.
+VI. NUMERICAL RESULTS
+We presents numerical results to validate the performance
+of the proposed joint pruning ratio, communication, and com-
+putation design for LAIM co-inference. All experiments were
+conducted with PyTorch on NVIDIA RTX 3090 GPUs.
+A. Veriﬁcation of Model Output Distortion Approximation
+We ﬁrst verify the approximation for the model output in
+Section III. Speciﬁcally, we start with verifying the approxi-
+mated upper bound on FC DNNs with 8 and 16 hidden layers,
+denoted as FCDNN-8 and FCDNN-16, respectively. Then,
+we further validate the approximation on Google’s BERT
+[36] and Facebook’s BART [37], which are two powerful
+widely-adopted LAIMs for natural language processing (NLP).
+Moreover, the adopted pruning strategy follows a widely-used
+magnitude-based criterion [31], which prioritizes the removal
+9
+
+
+
+	
+
+ 
+
+
+
+
+
+
+
+
+
+ 
+ 
+ 
+(a) FCDNN-8
+
+
+
+	
+
+ 
+
+
+
+
+
+
+
+ 
+ 
+ 
+(b) FCDNN-16
+
+
+
+
+
+ 
+
+
+
+
+
+	 
+
+ 
+ 
+(c) BERT
+
+
+
+
+
+
+ 
+
+
+
+
+
+ 
+	 
+
+ 
+(d) BART
+Figure 3. Distortions of model outputs and parameters w.r.t. pruning ratios.
+of weights with smaller magnitudes. We introduce the models
+in the following.
+• FCDNN-8 adopts an auto-encoder architecture with 8
+hidden layers trained on the MNIST dataset. The encoder
+has hidden sizes of [64, 128, 256, 32], and the decoder
+has a symmetric structure. All layers employ the ReLU
+activation function.
+• FCDNN-16 is an auto-encoder with 16 hidden layers and
+ReLU activation functions. The encoder has 8 layers with
+sizes [64, 128, 256, 512, 256, 128, 64, 32], and the decoder
+is symmetric. The deeper structure helps to evaluate
+the generality of the distortion approximation on more
+complex FC DNNs.
+• Bidirectional Encoder Representations from Trans-
+formers (BERT) is a transformer-based model that
+leverages masked language modeling and next sentence
+prediction for pre-training. We adopt the base version
+(BERT-base) with 12 transformer encoder blocks, each
+with a hidden size of 768 and 12 attention heads. The
+model contains 109.48 million parameters and requires
+approximately 21.77 GFLOPs for a single inference pass.
+• Bidirectional
+and
+Auto-Regressive
+Transformers
+(BART) combines a bidirectional encoder with an auto-
+regressive decoder, making it suitable for text generation
+and summarization tasks. It is trained as a denoising
+autoencoder, where the model reconstructs the original
+text from corrupted inputs. This allows BART to ef-
+fectively learn both language understanding and gener-
+ation capabilities. We use the base version (BART-base)
+with 6 transformer encoder blocks and decoder blocks,
+respectively, each with a hidden size of 1024. BART-
+base contains 139.42 million parameters and requires 6.44
+GFLOPs per inference.
+Fig. 3 shows the gap between the model output distortion
+and the parameter distortion w.r.t. different pruning ratios
+across various model architectures. From Figs. 3(a) and 3(b),
+even for highly non-linear models, such as FCDNN-8 and
+FCDNN-16, the parameter distortion serves as a reliable upper
+bound for the output distortion. In particular, when the pruning
+ratio is above 0.5, the gap becomes notably small, indicating
+that the parameter distortion can effectively approximate the
+output distortion.
+For LAIMs like BERT and BART in Figs. 3(c) and 3(d),
+the gaps between the two distortions increase. This is mainly
+due to the structural complexity of LAIMs, which makes
+the output distortion more difﬁcult to approximate, thereby
+leading to relatively larger approximation errors. Nevertheless,
+the distortion bound still remains tight when the pruning
+ratio is larger than 0.7. These observations conﬁrm that the
+parameter distortion provides a practical and useful estimate
+of the output distortion for LAIMs, validating the generality
+of our analytical results on complex model architectures.
+B. Performance of the Proposed Joint Pruning Ratio, Com-
+munication, and Computation Design
+We evaluate the proposed joint pruning ratio, communi-
+cation, and computation design for LAIM co-inference on
+BART and BERT models under different system delay and
+energy consumption requirements. Besides the magnitude-
+based pruning strategy, we additionally consider a random
+pruning scheme [30]. Two widely used NLP datasets are em-
+ployed for evaluation, i.e., CNN/DailyMail [38] and SQuAD
+[39]. The datasets and corresponding performance metrics are
+summarized as follows.
+• CNN/DailyMail is widely used for text summarization
+tasks. It contains online news articles from CNN and Dai-
+lyMail. The dataset consists of 286,817 training samples,
+13,368 validation samples, and 11,487 test samples. The
+evaluation metric is the ROUGE score, which measures
+the n-gram overlap between generated and reference sum-
+maries. Speciﬁcally, we consider ROUGE-1, ROUGE-
+2, and ROUGE-L, which evaluate unigram overlap, bi-
+gram overlap, and the longest common subsequence,
+respectively. We utilize the average ROUGE score as
+performance indicator.
+• Stanford
+Question
+Answering
+Dataset
+(SQuAD)
+is a reading comprehension dataset constructed from
+Wikipedia articles. Each question is paired with a para-
+graph that contains the corresponding answer. The dataset
+includes 18,572 question-answer pairs for training and
+2,322 samples for both development and testing. The
+performance metric is the F1 score, which measures the
+harmonic mean of precision and recall scores, deﬁned as
+F1 = 2 × precision × recall
+precision + recall.
+(51)
+We consider simulation parameters similar to those in [40].
+We set the maximum clock frequencies to f max = 1 GHz
+and ˜f max = 4 GHz, and the number of FLOPs per cycle
+to c = 32 and ˜c = 128. We set the split point at the 4-th
+layer. For the wireless channel, we adopt a distance-dependent
+path-loss model as K0(d/d0)−α, where K0 = −30 dB is the
+10
+0.11
+0.12
+0.13
+0.14
+0.15
+Delay threshold (s)
+0.05
+0.1
+0.15
+0.25
+ROUGE Score
+//
+//
+Proposed design
+Fixed power
+Fixed frequency
+Pruning device only
+Pruning server only
+Upper bound
+0.2744
+(a) BART-Magnitude
+0.21
+0.215
+0.22
+0.225
+0.23
+Delay threshold (s)
+0
+0.114
+0.164
+0.214
+0.264
+ROUGE Score
+//
+//
+Proposed design
+Fixed power
+Fixed frequency
+Pruning device only
+Pruning server only
+Upper bound
+0.2744
+(b) BART-Random
+0.22
+0.23
+0.24
+0.25
+0.26
+Delay threshold (s)
+0.2
+0.7
+F1 Score
+//
+//
+Proposed design
+Fixed power
+Fixed frequency
+Pruning device only
+Pruning server only
+Upper bound
+0.8126
+(c) BERT-Magnitude
+0.21
+0.212
+0.214
+0.216
+0.218
+Delay threshold (s)
+0.425
+0.625
+F1 Score
+//
+//
+//
+//
+Proposed design
+Fixed power
+Fixed frequency
+Pruning device only
+Pruning server only
+Upper bound
+0.8126
+(d) BERT-Random
+Figure 4.
+System performance w.r.t. different delay thresholds. (a) Pruning BART with the magnitude paradigm under the inference energy consumption
+threshold E0 = 0.0225 J. (b) Pruning BART with the random paradigm under the inference energy consumption threshold E0 = 0.0225 J. (c) Pruning
+BERT with the magnitude paradigm under the inference energy consumption threshold E0 = 0.0150 J. (d) Pruning BERT with the random paradigm under
+the inference energy consumption threshold E0 = 0.0011 J.
+reference path loss at distance d0 = 1 m, α = 2.8 is the
+path-loss exponent, and the distance between the device and
+server is d = 500 m. Moreover, we set the bandwidth to
+B = 5 MHz, the maximum transmit power to Pmax = 0.5 W,
+and the PSD of the AWGN to N0 = 2 × 10−19 W/Hz (i.e.,
+−187 dB), resulting in a noise power of −120 dBm. For
+energy modeling, we set the PUEs to η = 1 and ˜η = 2,
+and the power coefﬁcients to φ = 5 × 10−29 W/(cycle/s)3
+and ˜φ = 1 × 10−28 W/(cycle/s)3. The following benchmark
+schemes are considered for performance comparison.
+• Fixed power design: We ﬁx the transmit power as the
+maximum value, i.e., p = Pmax, and then solve problem
+(P1) for the remaining variables.
+• Fixed clock frequency design: We ﬁx the clock frequen-
+cies to f = f max and ˜f = ˜f max, and then optimize the
+remaining variables in problem (P1).
+• Pruning on-device model only: We only prune the on-
+device model with the full on-server model, i.e., solving
+problem (P1) by setting ˜ρ = 1.
+• Pruning on-server model only: We only prune the on-
+server model with the full on-device model, i.e., solving
+problem (P1) by setting ρ = 1.
+Fig. 4 shows the system performance w.r.t. varying delay
+thresholds for both BART and BERT models, evaluated with
+magnitude-based and random pruning strategies. First, it is
+observed that the overall performance improves as the delay
+thresholds increases. This is because higher delay thresholds
+allow for more complex computations and lower pruning
+intensity, thereby enhancing the inference performance. Sec-
+ond, it is also observed that the proposed design outperforms
+all benchmark schemes, validating the effectiveness of joint
+optimization on pruning ratios, communication, and compu-
+tation resources in LAIM co-inference. Moreover, as shown
+in Figs. 4(a) and 4(c), under stringent delay constraints, the
+pruning server only scheme becomes infeasible. This is due to
+the relatively limited computational capacity of edge devices,
+which leads to excessive latency when performing full on-
+device model inference. When the delay threshold becomes
+11
+5
+6
+7
+8
+9
+Energy threshold (J)
+10-3
+0
+0.141
+0.191
+0.241
+ROUGE Score
+//
+//
+Proposed design
+Fixed power
+Fixed frequency
+Pruning device only
+Pruning server only
+Upper bound
+0.2744
+(a) BART-Magnitude
+0.022
+0.023
+0.024
+0.025
+0.026
+Energy threshold (J)
+0.175
+0.225
+ROUGE Score
+//
+//
+Proposed design
+Fixed power
+Fixed frequency
+Pruning device only
+Pruning server only
+Upper bound
+0.2744
+(b) BART-Random
+6
+7
+8
+9
+10
+Energy threshold (J)
+10-3
+0.15
+0.3
+0.75
+F1 Score
+//
+//
+Proposed design
+Fixed power
+Fixed frequency
+Pruning device only
+Pruning server only
+Upper bound
+0.8126
+(c) BERT-Magnitude
+1.12
+1.14
+1.16
+1.18
+1.2
+Energy threshold (J)
+10-3
+0.375
+0.525
+0.675
+F1 Score
+//
+//
+//
+//
+Proposed design
+Fixed power
+Fixed frequency
+Pruning device only
+Pruning server only
+Upper bound
+0.8126
+(d) BERT-Random
+Figure 5.
+System performance w.r.t. different energy consumption thresholds. (a) Pruning BART with the magnitude paradigm under the inference delay
+threshold T0 = 0.22 s. (b) Pruning BART with the random paradigm under the inference delay threshold T0 = 0.22 s. (c) Pruning BERT with the magnitude
+paradigm under the inference delay threshold T0 = 0.35 s. (d) Pruning BERT with the random paradigm under the inference delay threshold T0 = 0.21 s.
+the dominant system bottleneck, executing the entire on-device
+model fails to meet real-time QoS requirements. In contrast,
+the proposed LAIM co-inference framework, with adaptive
+pruning and resource allocation, effectively accommodates
+tight latency requirements in edge scenarios.
+Fig. 5 shows the system performance under different energy
+consumption thresholds. It is observed that the proposed
+design signiﬁcantly outperforms the benchmark schemes. This
+demonstrates its efﬁciency in balancing the trade-offs between
+LAIM co-inference performance, system delay, and energy
+consumption. Furthermore, under stringent energy budgets,
+the pruning device only scheme becomes infeasible (e.g., in
+Fig. 5(a)). This is because server-side processing generally
+consumes more energy due to some additional costs. When
+the energy becomes the dominant system bottleneck, executing
+the full on-server model may easily exceed the energy budget.
+In such cases, pruning only the on-device model is insufﬁcient
+to meet the system’s energy QoS requirements.
+C. Impact of Split Point
+Fig. 6 shows the system performance w.r.t. different split
+points in LAIM co-inference. Particularly, a split point of 0
+corresponds to the on-server inference paradigm, where raw
+data samples are transmitted to the edge server for processing.
+In this case, only the server-side pruning ratio, clock frequency,
+and transmit power are optimized in problem (P1). A split
+point of 12 represents the on-device inference paradigm,
+where the entire inference process is conducted on the edge
+device locally, and only the device-side pruning ratio and
+clock frequency are optimized. Note that for BART-based co-
+inference, we split only the encoder, to avoid excessive back-
+and-forth transmission during token generation.
+From Fig. 6, it is shown that the inference performance
+varies signiﬁcantly across different split points, indicating the
+critical impact of split layer selection in co-inference system.
+Speciﬁcally, a small split point (i.e., few layers being deployed
+on the device) leads to underutilizing of the device computa-
+tion resources. In contrast, when the split point is large, the
+12
+0
+3
+6
+9
+12
+Split point
+0
+0.05
+0.1
+0.15
+0.2
+0.25
+0.3
+BART - ROUGE Score
+0
+10
+20
+30
+40
+50
+60
+70
+80
+BERT - F1 Score
+BART-Magnitude
+BART-Random
+BERT-Magnitude
+BERT-Random
+On-server inference
+On-device inference
+Figure 6. System performance w.r.t. different split points.
+limited processing capability of the device cannot efﬁciently
+handle the heavy computation workload, causing a dramatic
+performance drop. Therefore, it is important to properly set
+the split point for balancing the trade-offs among inference
+quality, system delay, and energy consumption. Finally, it is
+also shown that co-inference with a properly selected split
+point outperforms both on-device and on-server inference.
+This is because co-inference could better leverage the hetero-
+geneous communication and computation resources of both the
+device and server, also with reduced communication overhead
+compared to transmitting raw data in on-server inference.
+VII. CONCLUSIONS
+We proposed a pruning-aware LAIM co-inference system,
+where a pre-trained LAIM is partitioned into on-device and
+on-server sub-models, and model pruning is applied to enable
+efﬁcient inference under resource-constrained edge environ-
+ments. For the proposed system, we ﬁrst established that
+the output distortion of LAIMs is upper bounded by the
+parameter distortion, and then derived a lower bound on the
+parameter distortion via rate-distortion theory. Next, building
+upon the analytical result, we jointly optimized the pruning
+ratio, transmit power, and computation frequency to minimize
+the inference distortion bound, subject to constraints on system
+available resources, latency, and energy consumption. Then
+we developed an efﬁcient algorithm to tackle the considered
+highly non-convex optimization problem. Finally, simulation
+results veriﬁed that our design signiﬁcantly outperforms other
+benchmark schemes.
+APPENDIX
+A. Proof of Lemma 3.2
+The output distortion of the l-th layer of the FC DNN is
+upper bounded by
+∥f(φ, W (1:l)) −f(φ, ˆ
+W
+(1:l))∥
+= ∥W (l)σ
+ f(φ, W (1:l−1))
+
+−ˆ
+W
+(l)σ
+ f(φ, ˆ
+W
+(1:l−1))
+
+∥
+= ∥W (l)σ
+ f(φ, W (1:l−1))
+
+−ˆ
+W
+(l)σ
+ f(W , W (1:l−1))
+
++ ˆ
+W
+(l)σ
+ f(φ, W (1:l−1))
+
+−ˆ
+W
+(l)σ
+ f(φ, ˆ
+W
+(1:l−1))
+
+∥
+≤∥W (l)σ
+ f(φ, W (1:l−1))
+
+−ˆ
+W
+(l)σ
+ f(φ, W (1:l−1))
+
+∥
++ ∥ˆ
+W
+(l)σ
+ f(φ, W (1:l−1))
+
+−ˆ
+W
+(l)σ
+ f(φ, ˆ
+W
+(1:l−1))
+
+∥
+(52)
+≤∥W (l) −ˆ
+W
+(l)∥F∥f(φ, W (1:l−1))∥
++ ∥ˆ
+W
+(l)∥F∥f(φ, W (1:l−1)) −f(φ, ˆ
+W
+(1:l−1))∥
+(53)
+≤∥W (l) −ˆ
+W
+(l)∥F
+l−1
+Y
+j=1
+∥W (j)∥F
++ ∥W (l)∥F∥f(φ, W (1:l−1)) −f(φ, ˆ
+W
+(1:l−1))∥, (54)
+where (52) follows from the triangle inequality, (53) follows
+from the Cauchy-Schwarz inequality and Assumption 2, (54)
+follows from Lemma 3.1 and the fact that the Fobenius norm
+of pruned model parameters is always larger than it of the
+original model.
+B. Proof of Proposition 4.1
+To start with, we introduce a lemma on the rate-distortion
+function on a Laplacian source under the distortion function
+d(w, ˆw) = |w −ˆw|.
+Lemma A.1: The rate-distortion function for a Laplacian
+source with zero-mean and scale factor of λ under distortion
+function d(w, ˆw) = |w −ˆw| is given by
+R(D) =
+(
+−log(λD),
+0 ≤D < 1
+λ
+0,
+D ≥1
+λ
+(55)
+Proof: Please refer to [34] for more details.
+Next, we provide a lower bound on the rate-distortion
+function of a parallel Laplacian source w. Speciﬁcally, the
+mutual information is lower bounded by
+I(w, ˆw) =
+q
+X
+i=1
+h(wi) −
+q
+X
+i=1
+h(wi|w1, · · · , wi−1, ˆw)
+=
+q
+X
+i=1
+h(wi) −
+q
+X
+i=1
+h(wi| ˆwi)
+=
+q
+X
+i=1
+I(wi| ˆwi).
+(56)
+Then the rate-distortion function is lower bounded by
+R(D) =
+min
+E
+h√Pq
+i=1(wi−ˆ
+wi)2
+i
+≤D
+q
+X
+i=1
+I(wi| ˆwi)
+≥
+min
+Pq
+i=1 Di
+√q
+≤D
+q
+X
+i=1
+R(Di)
+(57)
+=
+min
+Pq
+i=1 Di≤√qD
+q
+X
+i=1
+max
+
+−log(λiDi), 0
+	
+,
+(58)
+where Di = E[|wi −ˆwi|], (57) follows from the deﬁnition of
+the rate-distortion function and the fact that
+Pq
+i xi
+q
+≤
+q Pq
+i x2
+i
+q
+,
+13
+and (58) follows from Lemma A.1. Then we construct La-
+grangian function of the problem as
+L({Di}, µ) =
+q
+X
+i=1
+max
+
+−log(λiDi), 0
+	
++ µDi,
+(59)
+By setting the derivative w.r.t. Di equal to 0, we obtain the
+ﬁnal solution as
+R(D) ≥
+q
+X
+i=1
+max{−log(λiµ), 0},
+(60)
+where µ is chosen as P
+i:µ< 1
+λi
+µ
+√q + P
+i:µ≥1
+λi
+1
+λi√q = D.
+Moreover, the corresponding distortion-rate function is
+D(R) ≥
+q
+X
+i=1
+min{ µ
+√q ,
+1
+λi√q },
+(61)
+where P
+i:µ< 1
+λi −log(λiµ) = R.
+REFERENCES
+[1] L. Bariah, Q. Zhao, H. Zou, Y. Tian, F. Bader, and M. Debbah, “Large
+generative AI models for telecom: The next big thing?,” IEEE Commun.
+Mag., vol. 62, no. 11, pp. 84-90, Nov. 2024.
+[2] L. Dong, F. Jiang, Y. Peng, K. Wang, K. Yang, C. Pan, and R. Schober,
+“LAMBO: Large AI model empowered edge intelligence,” IEEE Com-
+mun. Mag., vol. 63, no. 4, pp. 88-94, Apr. 2025.
+[3] J. Achiam, et al., “Gpt-4 technical report,” 2023. [Online]. Available:
+https://arxiv.org/pdf/2303.08774
+[4] Y. Dong, H. Zhang, C. Li, S. Guo, V. C. M. Leung, and X. Hu, “Fine-
+tuning and deploying large language models over edges: Issues and
+approaches,” 2024. [Online]. Available: https://arxiv.org/pdf/2408.10691
+[5] T. Griggs, X. Liu, J. Yu, D. Kim, W. L. Chiang, A. Cheung,
+and I. Stoica, “M´elange: Cost efﬁcient large language model serv-
+ing by exploiting
+GPU heterogeneity,”
+2024. [Online].
+Available:
+https://arxiv.org/pdf/2404.14527
+[6] M. Chen, D. G¨und¨uz, K. Huang, W. Saad, M. Bennis, A. V. Feljan, and
+H. V. Poor, “Distributed learning in wireless networks: recent progress
+and future challenges,” IEEE J. Sel. Areas Commun., vol. 39, no. 12, pp.
+3579-3605, Dec. 2021.
+[7] H. Zhou, C. Hu, Y. Yuan, Y. Cui, Y. Jin, C. Chen, H. Wu, D. Yuan,
+L. Jiang, D. Wu, X. Liu, C. Zhang, X. Wang, and J. Liu, “Large
+language model (LLM) for telecommunications: A comprehensive survey
+on principles, key techniques, and opportunities,” IEEE Commun. Surv.
+Tutor., early access.
+[8] K. B. Letaief, Y. Shi, J. Lu, and J. Lu, “Edge artiﬁcial intelligence for 6G:
+Vision, enabling technologies, and applications,” IEEE J. Select. Areas
+Commun., vol. 40, no. 1, pp. 5-36, Nov. 2022.
+[9] R. Yi, L. Guo, S. Wei, A. Zhou, S. Wang, and M. Xu, “EdgeMoE:
+Empowering sparse large language models on mobile devices,” IEEE
+Trans. Mob. Comput., early access.
+[10] Y. Zhuang, Z. Zheng, F. Wu, and G. Chen, “LiteMoE: Customizing on-
+device LLM serving via proxy submodel tuning,” in Proc. the 22nd ACM
+Conference on Embedded Networked Sensor Systems, 2024, pp. 521-534.
+[11] Nvidia,
+“Fastertransformer,”
+2023.
+[Online].
+Available:
+https://github.com/NVIDIA/FasterTransformer
+[12] G. Zhu, Z. Lyu, X. Jiao, P. Liu, M. Chen, J. Xu, S. Cui, and P. Zhang,
+“Pushing AI to wireless network edge: An overview on integrated sensing,
+communication, and computation towards 6G,” Sci. China Inf. Sci., vol.
+66, no. 130301, pp. 1-19, Feb. 2023.
+[13] Z. Qin, L. Liang, Z. Wang, S. Jin, X. Tao, W. Tong, and G. Y. Li, “AI
+empowered wireless communications: From bits to semantics,” in Proc.
+IEEE, vol. 112, no. 7, pp. 621-652, Jul. 2024.
+[14] J. Dai, S. Wang, K. Tan, Z. Si, X. Qin, K. Niu, and P. Zhang, “Nonlinear
+transform source-channel coding for semantic communications,” IEEE J.
+Select. Areas Commun., vol. 40, no. 8, pp. 2300-2316, Aug. 2022.
+[15] H. Du, J. Wang, D. Niyato, J. Kang, Z. Xiong, J. Zhang, and X. Shen,
+“Semantic communications for wireless sensing: RIS-aided encoding and
+self-supervised decoding,” IEEE J. Select. Areas Commun., vol. 41, no.
+8, pp. 2547-2562, Aug. 2023.
+[16] J. Shao, Y. Mao, and J. Zhang, “Task-oriented communication for multi-
+device cooperative edge inference,” IEEE Trans. Wireless Commun., vol.
+22, no. 1, pp. 73-87, Jan. 2023.
+[17] H. Zhou, Y. Deng, X. Liu, N. Pappas, and A. Nallanathan, “Goal-
+oriented semantic communications for 6G networks,” IEEE Internet
+Things Mag., vol. 7, no. 5, pp. 104-110, Sep. 2024.
+[18] Z. Lyu, G. Zhu, J. Xu, B. Ai, and S. Cui, “Semantic communications
+for image recovery and classiﬁcation via deep joint source and channel
+coding,” IEEE Trans. Wireless Commun., vol. 23, no. 8, pp. 8388-8404,
+Aug. 2024.
+[19] W. Ren, Y. Qu, C. Dong, Y. Jing, H. Sun, Q. Wu, and S. Guo, “A Survey
+on collaborative DNN inference for edge intelligence,” Mach. Intell. Res.,
+vol. 20, no. 3, pp. 370-395, Jun. 2023.
+[20] E. Li, L. Zeng, Z. Zhou, and X. Chen, “Edge AI: On-demand acceler-
+ating deep neural network inference via edge computing,” IEEE Trans.
+Wireless Commun., vol. 19, no. 1, pp. 447-457, Jan. 2020.
+[21] J. Yan, S. Bi, and Y. J. A. Zhang, “Optimal model placement and online
+model splitting for device-edge co-inference,” IEEE Trans. Wireless
+Commun., vol. 21, no. 10, pp. 8354-8367, Oct. 2022.
+[22] W. Shi, Y. Hou, S. Zhou, Z. Niu, Y. Zhang, and L. Geng, “Improving
+device-edge cooperative inference of deep learning via 2-step pruning,”
+in Proc. IEEE INFOCOM Workshops, 2019, pp. 1-6.
+[23] Z. Liu, Q. Lan, and K. Huang, “Resource allocation for multiuser
+edge inference with batching and early exiting,” IEEE J. Select. Areas
+Commun., vol. 41, no. 4, pp. 1186-1200, Apr. 2023.
+[24] S. F. Yilmaz, B. Hasircio˘glu, L. Qiao, and D. G¨und¨uz, “Private collab-
+orative edge inference via over-the-air computation,” IEEE Trans. Mach.
+Learn. Commun. Netw., vol. 3, pp. 215-231, Jan. 2025.
+[25] Y. He, J. Fang, F. R. Yu, and V. C. Leung, “Large language models
+(LLMs) inference ofﬂoading and resource allocation in cloud-edge com-
+puting: An active inference approach,” IEEE Trans. Mob. Comput., vol.
+23, no. 12, pp. 11253-11264, Dec. 2024.
+[26] Y. Chen, R. Li, X. Yu, Z. Zhao, and H. Zhang, “Adaptive layer
+splitting for wireless LLM inference in edge computing: A model-
+based reinforcement learning approach,” 2024. [Online]. Available:
+http://arxiv.org/pdf/2406.02616
+[27] S. Oh, J. Kim, J. Park, S. Ko, T. Q. S. Quek, and S. Kim, “Uncertainty-
+aware hybrid inference with on-Device small and remote large language
+models,” 2024. [Online]. Available: https://arxiv.org/pdf/2412.12687
+[28] M. Zhang, X. Shen, J. Cao, Z. Cui, and S. Jiang, “EdgeShard: Efﬁcient
+LLM inference via collaborative edge computing,” IEEE Internet Things
+J., early access.
+[29] B. Isik, T. Weissman, and A. No, “An Information-theoretic justiﬁcation
+for model pruning,” in Proc. AISTATS, pp.3821-3846, 2022.
+[30] A. H. Gadhikar, S. M., and R. Burkholz , “Why random pruning is all
+we need to start sparse,” in Proc. PMLR, 2023, pp. 10542-10570.
+[31] J. Lee, S. Park, S. Mo, S. Ahn, and J. Shin, “Layer-adaptive sparsity for
+the magnitude-based pruning,” in Proc. ICLR, 2021.
+[32] G. Xiao, J. Lin, M. Seznec, H. Wu, J. Demouth, and S. Han,
+“SmoothQuant: Accurate and efﬁcient post-training quantization for large
+language models,” in Proc. PMLR, 2023, pp. 38087-38099.
+[33] Y. Gu, L. Dong, F. Wei, and M. Huang, “MiniLLM: Knowledge
+distillation of large language models”, in Proc. ICLR, 2024.
+[34] T. Berger, Rate-distortion theory, Wiley Encyclopedia of Telecommuni-
+cations, 2003.
+[35] T. Eltoft, Taesu Kim, and Te-Won Lee, “On the multivariate Laplace
+distribution,” IEEE Signal Process. Lett., vol. 13, no. 5, pp. 300-303,
+May 2006.
+[36] J. Devlin, M. Chang, K. Lee, and K. Toutanova, “BERT: Pre-training
+of deep bidirectional transformers for language understanding,” in Proc.
+NAACL, 2019, pp. 4171–4186.
+[37] M. Lewis, Y. Liu, N. Goyal, M. Ghazvininejad, A. Mohamed, O.
+Levy, V. Stoyanov, and L. Zettlemoyer, “BART: Denoising sequence-
+to-sequence pre-training for natural language generation, translation, and
+comprehension,” in Proc. ACL, 2020, pp. 7871–7880.
+[38] A. See, P. J. Liu, and C. D. Manning, “Get to the point: Sum-
+marization with pointer-generator networks,” 2017. [Online]. Available:
+https://arxiv.org/pdf/1704.04368
+[39] P. Rajpurkar, J. Zhang, K. Lopyrev, and P. Liang, “SQuAD: 100,000+
+questions for machine comprehension of text,” 2016. [Online]. Available:
+https://arxiv.org/pdf/1606.05250
+[40] Z. Lyu, Y. Li, G. Zhu, J. Xu, H. Vincent Poor, and S. Cui, “Rethinking
+resource management in edge learning: A joint pre-training and ﬁne-
+tuning design paradigm,” IEEE Trans. Wireless Commun., vol. 24, no. 2,
+pp. 1584-1601, Feb. 2025.

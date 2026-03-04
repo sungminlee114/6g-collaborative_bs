@@ -1,0 +1,1587 @@
+1
+Federated Learning Strategies for Coordinated
+Beamforming in Multicell ISAC
+Lai Jiang, Student Member, IEEE, Kaitao Meng, Member, IEEE, Murat Temiz, Member, IEEE, Jiaming
+Hu, Student Member, IEEE, and Christos Masouros, Fellow, IEEE,
+Abstract—We propose two cooperative beamforming frame-
+works based on federated learning (FL) for multi-cell integrated
+sensing and communications (ISAC) systems. Our objective is to
+address the following dilemma in multicell ISAC: 1) Beamforming
+strategies that rely solely on local channel information risk
+generating significant inter-cell interference (ICI), which de-
+grades network performance for both communication users and
+sensing receivers in neighboring cells; 2) conversely centralized
+beamforming strategies can mitigate ICI by leveraging global
+channel information, but they come with substantial transmission
+overhead and latency that can be prohibitive for latency-sensitive
+and source-constrained applications. To tackle these challenges,
+we first propose a partially decentralized training framework mo-
+tivated by the vertical federated learning (VFL) paradigm. In this
+framework, the participating base stations (BSs) collaboratively
+design beamforming matrices under the guidance of a central
+server. The central server aggregates local information from the
+BSs and provides feedback, allowing BSs to implicitly manage ICI
+without accessing the global channel information. To make the
+solution scalable for densely deployed wireless networks, we take
+further steps to reduce communication overhead by presenting
+a fully decentralized design based on the horizontal federated
+learning (HFL). Specifically, we develop a novel loss function to
+control the interference leakage power, enabling a more efficient
+training process by entirely eliminating local channel information
+exchange. Numerical results show that the proposed solutions
+can achieve significant performance improvements comparable
+to the benchmarks in terms of both communication and radar
+information rates.
+Index Terms—Integrated sensing and communication, multi-
+cell ISAC, federated learning, coordinated beamforming.
+I. INTRODUCTION
+Integrated sensing and communications (ISAC) has emerged
+as a key technology for the next-generation wireless networks
+[1], [2]. As a promising solution to address the challenge of
+limited wireless resources, ISAC systems unify both radar and
+communication functions on a shared spectrum, waveform,
+and platform, enabling more efficient and innovative use of
+available resources. In addition, by simultaneously integrating
+sensing and reliable communication service, ISAC paves the
+way for advanced applications such as autonomous vehicles,
+smart cities, and enhanced security systems, making it a
+cornerstone technology for future networks [3]. In the cellular
+domain, the ultimate goal of deploying ISAC solutions would
+be to enable coordinated sensing of unprecedented scale. This
+The authors are with the Department of Electronic and Electrical En-
+gineering, University College London, London, UK (emails: {lai.jiang.22,
+kaitao.meng, m.temiz, jiaming.hu.19, c.masouros}ucl.ac.uk).
+will inevitably require network level coordination to address
+interference and enable efficient use of resources [4].
+With the deployment of multi-antenna arrays on the base
+stations (BSs), transmit beamforming becomes a critical tech-
+nique in the downlink transmission, as it can enable flexible
+tradeoffs and mutual benefits between the communication
+and sensing by leveraging the available spatial degrees of
+freedom (DoFs) [5]. Numerous works have studied transmit
+waveforms/beamforming design to enhance both S&C perfor-
+mance at the link level [6]–[11], focusing on optimizing the
+communication and sensing performance for users and targets
+within a single cell. However, in practical multi-cell systems
+where multiple BSs may share the same time and frequency
+resources, users experience not only intra-cell interference
+caused from unintended signals in the same cell but also
+inter-cell interference (ICI) from surrounding cells, which
+results in reduced received signal-to-interference-plus-noise
+ratio (SINR). In fact, ICI has been proven detrimental to both
+network-level S&C performance in dense deployed cellular
+networks [12], with sensing being particularly sensitive due to
+the round-trip path loss of echo signals. Consequently, per-cell
+beamforming strategies that overlook the effect of ICI can not
+be directly applied in practical multi-cell ISAC systems.
+A potential solution for ICI management in cellular systems
+is to either enable distributed coordinated beamforming by
+exchanging local information between multiple BSs or to
+gather global information for designing the optimal transmit
+waveform or beamforming matrices in a centralized manner
+[13]. Specifically, the authors in [4] proposed a framework
+where BSs cooperatively serve the users and localize each
+target for enhancing the ICI management and S&C per-
+formance. Moreover, in [14], a coordinated beamforming
+(CBF) framework is developed to optimize target parameter
+estimation and communication performance while managing
+the ICI power, where precoders are centrally designed and
+subsequently allocated to individual BSs for local execution.
+Nevertheless, the strategies that rely on information exchange
+inevitably incur excessive transmission overhead and latency,
+particularly in the large-scale densely deployed networks.
+Therefore, it is crucial to develop decentralized beamforming
+strategies that can effectively manage ICI while minimizing
+the need for frequent information exchange.
+In addition to minimizing communication overhead, com-
+putational complexity is a significant concern in the realm of
+beamforming design [15]. In the literature, the majority of
+0000–0000/00$00.00 © 2021 IEEE
+arXiv:2501.16951v1  [eess.SP]  28 Jan 2025
+2
+existing beamforming methods, whether for communication-
+only systems or ISAC systems [6]–[11], [16] are developed
+based on optimization techniques. For instance, the authors
+in [6], [10] formulated the optimization problem with the
+objective of maximizing the radar sensing performance while
+guaranteeing the SINR for each communication user exceeds
+a predefined threshold, and the optimal beamforming matrices
+can then be obtained by solving the problem using semidefinite
+relaxation (SDR) technique. In [17], the authors extended the
+WMMSE [16] framework to ISAC systems to address the
+proposed problem of maximizing the weighted S&C sum rate.
+However, optimization-based algorithms often rely heavily on
+iterative procedures and complex matrix operations, which
+introduce substantial computational complexity and latency
+[18]. This makes the implementation of these algorithms in
+real-world systems challenging, particularly in time-sensitive
+scenarios or those with limited processing resources.
+Building on the above discussion, deep learning techniques
+provide an efficient alternative to tackle the optimization prob-
+lems through a data-driven strategy [19]–[23]. The deep neural
+networks (DNNs) exhibit a remarkable capacity for automat-
+ically extracting features from large amounts of raw data and
+gradually abstracting high-level representations through multi-
+ple layers of interconnected nodes or computational units [24].
+In contrast to methods based on rigorous mathematical mod-
+els, an offline-trained DNN can efficiently handle large-scale
+matrix multiplications and additions, with the exploitation of
+its parallel computation capabilities. Up to now, extensive
+studies have investigated the application of DNN to find the
+optimal beamformer/precoder using channel state information
+(CSI) for both conventional communication-only systems and
+ISAC systems. For example, the authors in [20] proposed a
+DNN-based framework for downlink beamforming, training
+the network to minimize the mean square error (MSE) between
+the output and the desired beamforming matrix. Furthermore,
+to avoid excessive computation required in supervised learning
+methods, the authors in [21] introduced an unsupervised
+approach, training the DNN to directly maximize the sum
+rate under transmit power constraints, which can achieve
+the performance comparable to WMMSE algorithm [16]. In
+[25], an neural network was developed for ISAC precoders
+design, aiming to maximize target illumination power while
+maintaining the quality of service (QoS) for communication
+users. Despite achieving low computational complexity, the
+aforementioned references often fall short in effectively man-
+aging ICI. This is primarily due to their reliance on per-cell
+beamforming strategies, which overlook the effects of ICI from
+adjacent cells.
+The above discussion motivates us to adopt the federated
+learning (FL) paradigm for beamforming design in multi-
+cell ISAC systems, as it provides a framework that integrates
+distributed local information while minimizing the overhead
+associated with information exchange. As a paradigm of dis-
+tributed learning framework, FL enables multiple local clients
+to collaboratively train a DNN model under coordination of
+a central server [26]. Unlike centralized learning schemes,
+during the training process in FL, each client only transmits
+the gradients or model parameters, rather than the entire
+dataset. This significantly reduces the transmission overhead,
+while at the same time preserving privacy. Thus, the jointly
+trained model leverages the datasets spread across numerous
+local nodes without explicitly exchanging them, which aligns
+well with the needs for transmission/computation efficiency
+in practical multi-cell systems [27]. To leverage the decen-
+tralized nature of FL, recent research efforts are applying FL
+framework for the physical layer design in massive MIMO
+systems [28]–[31]. Specifically, the authors in [28] applied
+the FL framework for hybrid beamforming design using the
+gradients data collected from distributed edge users, which
+achieved the performance comparable to that of the centralized
+learning scheme [32]. Subsequently in [33], the authors first
+investigated a decentralized precoding framework for cell-
+free systems based on horizontal federated learning (HFL).
+The results showed that integrating different channel datasets
+with the same feature space can enhance the model per-
+formance. Subsequently, they proposed a vertical federated
+learning (VFL)-based approach to integrate the feature-level
+information at local devices, which eliminates the communi-
+cation cost associated with exchanging local CSI during the
+online precoding stage. Notably, to the best of our knowledge,
+there are limited research focused on developing FL-based
+beamforming schemes for multi-cell ISAC systems.
+In this work, our primary objective is to develop an effi-
+cient decentralized beamforming method tailored for multi-
+cell ISAC systems. By leveraging the distributed nature of
+FL, we propose two coordinated beamforming frameworks
+that utilize channel data collected from distributed BSs to
+jointly train a DNN. The first VFL-based solution successfully
+eliminates the need to exchange local channel information
+during online deployment, enabling the participating BSs to
+achieve cooperative beamforming design. To enhance scala-
+bility and adaptability for practical deployment, we propose a
+second solution that integrates the concept of HFL with a novel
+loss function for controlling leakage power. This approach
+achieves global interference control using only local channel
+information, enabling fully distributed beamforming during
+both training and online deployment. The main contributions
+of this paper are summarized as follows:
+• We propose a partially decentralized beamforming frame-
+work based on VFL. During the offline training phase,
+multiple dual-functional BSs use their local datasets to
+train the individual DNN models, guided by the global
+loss function that is computed by a central server. The
+trained models then design the optimal beamforming ma-
+trices with low computational overhead when deployed
+online.
+• We propose a fully decentralized beamforming frame-
+work based on HFL. In this framework, we propose
+a novel loss function to enable a fully decentralized
+implementation, which aims at maximizing the weighted
+sum of communication rate and radar information rate
+while mitigating interference leakage to undesired re-
+3
+Fig. 1. The considered multi-cell ISAC system.
+ceivers. Therefore, the loss function can be independently
+optimized at each BS, which eliminates the need for
+exchanging channel information during both training and
+online beamforming stages. This characteristic enhances
+data privacy and significantly reduces communication
+overhead, making the approach more adaptable and ef-
+ficient for multi-cell systems.
+• Through numerical simulations, we validate the effective-
+ness of our proposed approaches in eliminating ICI by
+comparing them with traditional per-cell beamforming
+strategies. The results highlight the performance im-
+provements achieved by effectively controlling ICI in
+multi-cell systems. Moreover, our solutions can achieve
+performance comparable to those of centralized methods,
+and strike a good tradeoff between communications and
+sensing performance. Finally, we apply the model pruning
+technique to further reduce the computational complexity
+of proposed methods, offering substantial improvements
+in efficiency and feasibility for practical deployments.
+Notations: We use the following mathematical notations
+throughout this paper. Boldface upper-case letters denote the
+matrices, boldface lower-case letters denote the vectors, and
+normal font denotes the scalars. (·)T , (·)H, ℜ(·), ℑ(·) are
+transpose, conjugate transpose, the real part and the imaginary
+part of a matrix/vector respectively. tr(·) is the trace of a matrix
+and ∥·∥refers to the Euclidean norm. The complex space and
+real space are represented by C and R. IK is the identity
+matrix of rank K.
+II. SYSTEM MODEL
+As shown in Fig. 1, the proposed framework is carried out
+by M BSs and a central server. The dual-functional BS m,
+m = 1, 2, .., M is equipped with a half-wavelength spaced
+uniform linear array (ULA) of NT transmit antennas and NR
+receive antennas, serving Km downlink single-antenna users
+while sensing a target simultaneously. During the training
+stage, the model parameters are exchanged via the backhual
+links between the participating BSs and the server. The index
+sets of the communication users and BSs are denoted by
+Km
+△= [1, 2, ..., Km] and M
+△= [1, 2, ..., M], respectively.
+A. Communication model
+In the downlink, a unit-power data stream Sm ∈CKm×L
+with L being the number of timeslots in a frame is transmitted
+by the mth BS to the Km communication users (CUs) which
+are uniformly distributed within the coverage area of each
+cell. Without loss of generality, we assume Km
+=
+K,
+m = 1, 2, ..., M for consistency. The baseband transmitted
+symbol matrix Xm ∈CNT ×L at the mth BS is denoted by
+Xm = WmSm =
+K
+X
+k=1
+wm,ksm,k,
+(1)
+where Wm
+= [wm,1, wm,2, ...wm,K] ∈CNT ×K is the
+beamforming matrix to be designed, and sH
+m,k ∈CL×1 denotes
+the data stream intended for the kth user in the mth cell. We
+assume the data streams are orthogonal when L is sufficiently
+large so that: (1/L)SmSH
+m = IK. In this case, the received
+signal at the kth user in the mth cell is the summation of the
+intended signal and both intra-cell and inter-cell interference,
+given by
+yc
+m,k = hH
+m,m,kwm,ksm,k
+|
+{z
+}
+intended signal
++
+K
+X
+l̸=k
+hH
+m,m,kwm,lsm,l
+|
+{z
+}
+intra−cell interference
++
+M
+X
+n̸=m
+K
+X
+i=1
+hH
+n,m,kwn,isn,i
+|
+{z
+}
+inter−cell interference
++zm,k,
+(2)
+where hm,n,k ∈CNT ×1 denotes the block fading channel
+vector from the mth BS to the kth user in the nth cell, and
+zm,k is the additive white Gaussian noise (AWGN) vector, i.e.,
+each element is independent and identically distributed and
+follows the Gaussian distribution with zero mean and variance
+σ2
+c. The received SINR of user k is
+γc
+m,k =
+|hH
+m,m,kwm,k|2
+PK
+l̸=k |hH
+m,m,kwm,l|2 + PM
+n̸=m
+PK
+i=1 |hH
+n,m,kwn,i|2 + σ2c
+.
+(3)
+The first two terms in the denominator of (3) represent
+the power of intra-cell interference and inter-cell interference,
+respectively, which are to be minimized to improve the system-
+level performance. Then, the achievable sum communication
+rate of the multicell ISAC is written as
+Rc =
+M
+X
+m=1
+K
+X
+k=1
+log2(1 + γc
+m,k).
+(4)
+B. Sensing model
+As commonly adopted in the literature [9], [14], [34], we
+consider a point target located in the far field of each cell
+and sensed by its nearest BS. For multi-target scenarios, the
+BS serves a single target at a given moment to maximize the
+utilization of its transmission power and avoid sensing intra-
+cell interference between the targets. As the BS works as a
+mono-static radar mode, the angle of departure (AoD) and
+angle of arrival (AoA) are the same. Following the network-
+level sensing interference model in [12], it is the ICI channels
+from neighboring BSs to the serving BS that impact the
+4
+reception of the target echoes and therefore dominate the
+network’s sensing performance. The received signal at the mth
+serving BS is the summation of the echo signal reflected by
+the target and ICI from the surrounding BSs, given by
+ys
+m = αmb(θm)aH(θm)Wmsm(t −2τm)
+|
+{z
+}
+target echo signal
++
+M
+X
+n̸=m
+Gn,mWnsn(t −τn,m)
+|
+{z
+}
+inter−cell inteference
++ Gm,mWmsm(t)
+|
+{z
+}
+self−interference
++zm,
+(5)
+where Gn,m ∈CNR×NT represents the interference chan-
+nel from the nth BS to the mth BS, and Gm,m
+is
+the self-interference channel from the transmit antennas to
+the receive antennas of BS m. In (5), αm models the
+round-trip pathloss and the radar cross section (RCS) of
+the target, τ is the delay experienced by the signal. The
+transmit and receive steering vectors are represented by
+a(θm) = [1, ..., ejπ(NT −1) sin(θm)]T ∈CNT ×1 and b(θm) =
+[1, ..., ejπ(NR−1) sin(θm)]T
+∈CNR×1 respectively, and θm
+denotes the angle of the target in the mth cell with respect to its
+serving BS, which is assumed to be estimated from a previous
+crude observation. To maximize the received SINR and ensure
+computational efficiency, the mth BS applies the maximum-
+ratio combining (MRC) beamformer vH
+m = bH(θm) ∈C1×NR
+to process the received signal, the echo signal after processing
+is given by
+˜ys
+m = vH
+mys
+m
+= NRαmaH(θm)Wmsm(t −2τm)
++
+M
+X
+n̸=m
+gH
+n,mWnsn(t −τn,m)
++ vH
+mGm,mWmsm(t) + ˜zm,
+(6)
+where gH
+n,m = vH
+mGn,m ∈C1×NT is the equivalent interfer-
+ence channel, and ˜zm is the equivalent AWGN with variance
+σ2
+s. As Gm,m can be obtained from previous measurements,
+we assume the sensing self-interference can be canceled by BS
+m as in [12]. Let gH
+m,m = αmaH(θm) denote the equivalent
+sensing channel from the mth BS to the intended target, the
+SINR of received signal at the mth BS can be denoted by
+γs
+m = NR
+PK
+k=1 |gH
+m,mwm,k|2
+PM
+n̸=m
+PK
+l=1 |gH
+n,mwn,l|2 + σ2s
+,
+(7)
+In (7), the numerator represents the illumination power for
+the intended target, which is expected to be maximized for
+achieving better sensing performance [35]. The achievable
+sum radar information rate is used to evaluate the network-
+level sensing performance. Indeed, the accuracy of parameter
+estimation is proportional to the information rate [36], which
+is given by
+Rs =
+M
+X
+m=1
+log2(1 + γs
+m).
+(8)
+C. Problem Description
+To achieve the performance tradeoff between communi-
+cations and sensing, we aim to solve the following global
+optimization problem
+max
+[W1,..,WM]
+ρRc + (1 −ρ)Rs
+s.t.
+tr(WmWH
+m) ≤PT ,
+∀m,
+(9)
+where ρ ∈[0, 1] is the weighting factor to select between the
+communication metric and sensing metric, and PT denotes the
+transmit power constraint at each BS. Apparently, to maximize
+the S&C performance from the network perspective, we need
+to eliminate the ICI to unintended receivers. However, finding
+the optimal solution of problem (9) is challenging not only due
+to its non-convexity but also because it requires the knowledge
+of global channel information, e.g. the communication chan-
+nels and sensing channels between all the transceivers across
+the interfering cells. To address the problem mentioned above,
+we propose two beamforming frameworks with different levels
+of decentralization and coordination to solve the problem (9)
+based on the VFL and HFL frameworks respectively in Section
+III and IV.
+III. VFL-BASED BEAMFORMING FRAMEWORK
+In the scenario considered, the knowledge of each BS is
+limited to the channels between itself and all the receivers,
+i.e., the mth BS has the information of local communication
+channels Hm = {hm,n,k}n∈M,k∈K and local sensing channels
+Gm = {gm,n}n∈M. The global communication and sensing
+channel information is defined as H = [H1, H2, ...HM] ∈
+CNT ×M 2K and G = [G1, G2, ...GM] ∈CNT ×M 2, which can
+be viewed as the aggregation of the local channel information.
+In other words, the channel datasets collected by the BSs
+share the same sample space, consisting of the the MK users
+and M targets in the network, but each BS possesses distinct
+local channel information related to these users/targets. This
+aligns well with the application scenario of the VFL frame-
+work, which is designed for situations where partial channel
+information is available but full global channel information is
+inaccessible. Leveraging its nature of feature aggregation, we
+propose using the VFL framework to train local DNNs for the
+coordinated design of optimal dual-functional beamforming
+matrices.
+A. Training Samples Generation
+Before the training phase, we introduce a channel sample
+collection stage where each BS collects its own local channel
+information to prepare the training datasets. This step is to
+ensure that the BSs have sufficient data for training the decen-
+tralized beamforming framework. Without loss of generality,
+we assume a time-division duplex (TDD) system so that CSI
+can be estimated via pilot symbols. First, each BS transmits
+an orthogonal pilot signal ˜X for channel estimation and initial
+detection, the covariance matrix of the probing signal is given
+by:
+R ˜X = PT
+NT
+INT .
+(10)
+5
+The omnidirectional signals are received by both intended
+users and targets, as well as by interference devices. BS m can
+obtain a first crude estimate of the direction θm of the target in
+its cell based on the echo signal. Once received the pilots, the
+users and neighboring BSs feed the estimated channel data
+back to the transmitting BS. Each BS gathers the received
+channel information and compiles it to form a single channel
+sample. Finally, BS m obtains a collection of channel samples
+Hm and Gm, and the overall local dataset is represented by
+D(m) =
+
+Hm, Gm
+	
+. Specifically, it is reasonable to assume
+that BSs can obtain accurate channel estimation as DNNs have
+strong robustness toward input data as in [22], [33].
+B. DNN architecture
+Multilayer perceptrons (MLP) are recognized as universal
+funcion approximators [37] and widely used in approaching
+complex nonlinear functions. As shown in Fig. 2, we use a
+MLP network composed of the following units:
+1) Input layer: For the DNN deployed at the mth BS, its
+first layer takes the communication channel Hm ∈CNT ×MK
+and sensing channel Gm ∈CNT ×M acquired at the local
+site as the input. As complex number operations are not
+supported by the current DNN software, the channel vector
+is transformed to real-valued coefficients before feeding it
+into the input layer through a R2C block. Specifically, the
+communication channel matrix Hm is split into the real part
+ℜ(Hm) and imaginary part ℑ(Hm), which are then stacked
+to form the real-valued input vector ˜Hm = [ℜ(Hm), ℑ(Hm)].
+Similarly, we process the sensing channel matrix Gm using
+the same pipeline and get ˜Gm = [ℜ(Gm), ℑ(Gm)]. The
+concatenated matrix [ ˜Hm, ˜Gm] is then flattened and fed into
+the first layer of the neural network for forward propagation.
+2) Hidden layers: The MLP network contains NH fully-
+connected hidden layers with dH neurons in each layer. The
+depth of it impacts the nonlinearity and ability to extract
+feature information. Each hidden layer is followed by an
+activation layer and a dropout layer. As some elements of
+the beamforming matrix can be negative, the LeakyReLu [38]
+function is adopted as the activation function which provides
+a non-zero slope to negative values. The dropout layer with
+probability factor ζ = 0.15 can help to alleviate overfitting by
+randomly setting input units to zero. The process of hidden
+layers can be described as:
+˜
+W = f([ ˜Hm, ˜Gm]; ω) = f NH−1(f NH−2(...f 1([ ˜Hm, ˜Gm])))
+|
+{z
+}
+NH layers
+.
+(11)
+where ω is the model parameters set.
+3) Output layer: The output layer is of size NT × K × 2
+and followed by a normalization layer to scale the output so
+that the power constraint in (9) can be satisfied, which can be
+denoted by
+ˆ
+W =
+s
+PT
+tr( ˜
+W ˜
+WH)
+˜
+W.
+(12)
+Finally, we split the output
+ˆ
+W ∈RNT ×K×2 in the last
+dimension to obtain the real and imaginary parts, and process
+Fig. 2. The proposed beamforming DNN structure.
+the output with a C2R block, which recovers the complex
+beamformer W∗of size NT × K by combining the real and
+imaginary parts in the following way
+W∗= ˆ
+W[:, :, 1] + j ˆ
+W[:, :, 2].
+(13)
+where the two terms on the right-hand side are the first and
+second elements along the third dimension of ˆ
+W.
+C. Learning-based Formulation and Training
+Due to the issue of local BSs lacking global information,
+it is difficult for them to directly calculate and optimize the
+local communication and sensing performance metrics for the
+intended users/targets as in [6]–[11], [25]. Traditional cooper-
+ative beamforming schemes [13], [14] require the collection of
+global channel information to design beamformers/precoders
+while managing inter-cell interference, which inevitably results
+in considerable communication overhead and increased latency
+during online beamforming stage. In contrast, our approach
+prioritizes minimizing information exchange and reducing the
+associated overhead. To achieve this, during the training phase,
+it is the central server that is responsible for calculating the
+global communication and sensing loss
+ℓc(W) = −
+M
+X
+m=1
+K
+X
+k=1
+log2(1 + γc
+m,k),
+(14)
+ℓs(W) = −
+M
+X
+m=1
+log2(1 + γs
+m),
+(15)
+where W = [W1, W2, .., WM] ∈CNT ×KM is the collection
+of locally designed beamforming matrices. Since the global
+loss functions (14) (15) are defined as the negative sum
+communication rate and radar information rate, the global
+optimization problem becomes minimizing the weighted sum
+of (14) and (15)
+min
+[W1,..,WM]
+ρℓc(W) + (1 −ρ)ℓs(W)
+s.t.
+tr(WmWH
+m) ≤PT ,
+∀m.
+(16)
+For the CUs, the complete feature space of the ith sample is the
+global channel information H(i) = [H(i)
+1 , H(i)
+2 , ...H(i)
+M ], with
+H(i)
+m being the ith partial feature available at BS m. Similarly,
+G(i) = [G(i)
+1 , G(i)
+2 , ...G(i)
+M ] denotes the ith complete feature
+space of sensing, which is the collection of local sensing
+channel samples. Under the VFL framework, each BS learns
+to design the local beamformer W∗
+m, ∀m ∈M through the
+following steps.
+6
+Fig. 3. VFL training framework.
+1) Forward propagation: In the global round T, the local
+BSs use the ith local channel sample to design the beamform-
+ing matrices, the process can be given by
+Wm = f([H(i)
+m , G(i)
+m ]; ω(T )
+m ),
+(17)
+where ω(T )
+m
+is the model parameter set of the mth BS at the
+Tth global round.
+2) Local uploading: Each BS uploads its independently
+designed beamforming matrices and the corresponding input
+channel sample [H(i)
+m , G(i)
+m ] to the central server.
+3) Features aggregation:
+Upon receiving the designed
+beamformers and partial channel information from the BSs,
+the central server can aggregate them into the global channel
+information H(i), G(i) and calculate the communication loss
+(14) and sensing loss (15). The global loss is then fed back to
+the local BSs for model updates.
+4) Backward propagation: With the global loss informa-
+tion, each BS can perform individual backward propagation
+using the chain rule, propagating the error from the output
+layer back to the input layer of its own model. In this work,
+we adopt the stochastic gradient descent (SGD) algorithm [39]
+to update the model parameters, which is given by
+ω(T +1)
+m
+= w(T )
+m −η∇ℓ
+ W; ω(T )
+m
+
+,
+(18)
+where η represents the learning rate.
+Fig. 3 shows the proposed VFL-based beamforming frame-
+work for cooperative beamforming design. Notably, the pro-
+posed network can be equivalently viewed as an overall multi-
+branch multi-output neural network, with each local model
+serving as one branch of the network and the server being
+the output layer. Through the backhual links, the central
+server guides the local models to control the ICI by implicitly
+providing the global channel information. The framework is
+summarized in Algorithm 1.
+D. Complexity Analysis of VFL-based beamforming
+Compared to traditional methods, in addition to the com-
+putational overhead during online beamforming stage, deep
+learning-based algorithms also involve the offline training
+costs. In the training phase, the total computational overhead
+can be generally represented as the sum of forward propa-
+gation and backward propagation, which is associated with
+the arithmetic operations in each fully connected layer and
+the data processing blocks. Specifically, the proposed MLP
+Algorithm 1 Vertical Federated learning framework
+Offline Training:
+Input : concatenated channel [H(i)
+m , G(i)
+m ]
+Output : beamformer W∗
+Initialize ω(0)
+1 , ω(0)
+2 , ..., ω(0)
+M
+for global round T = 1, 2, ... do
+Forward Propagation: each BS designs the respective
+beamforming matrix with local channel information;
+Features Aggregation: the central server calculates the
+weighted global loss (14) and (15) based on collected
+local information;
+Backward Propagation: each BS updates local param-
+eters with the global loss provided by the server (18).
+end for
+Online Beamforming:
+W∗
+m = f([H(i)
+m , G(i)
+m ]; ω∗), ∀m ⊂M
+network consists of NH hidden layers, each with a dimension
+of dH, while the input and output dimensions are related
+to the system configuration. Bsed on the Big-O notation,
+the computational complexity due to the linear transforma-
+tion in the forward propagation stage can be denoted by
+O((MK + M + K)NT dH + NHd2
+H). Since the activation
+layers involve element-wise operations, their complexity is
+given by O((NH + 1)dH). Besides, the input and output
+of the neural network are processed by the R2C and C2R
+blocks respectively, which results in the computational cost of
+O((M + 1)KNT ). Correspondingly, the computational cost
+of backward propagation is generally about twice that of
+forward propagation, as it involves similar matrix operations
+as in forward propagation, but with the additional gradient
+computation. Based on this, the total overhead associated
+with the computation during the training phase is given by
+O(3((MK + M + K)NT dH + NHd2
+H)).
+Furthermore, unlike traditional single-node deep learning,
+multi-node federated learning requires additional consideration
+of communication overhead during the training phase, in
+addition to the aforementioned computational costs. In a single
+training iteration of the VFL framework, the participating BSs
+need to upload their output matrices and the corresponding
+input channel samples to the central server for calculating
+the global loss after completing one forward propagation,
+7
+Fig. 4. HFL training framework.
+which results in a total communication cost of (M + 1)KNT
+for each local BS. As for the online deployment phase, the
+computational overhead is primarily attributed to forward
+propagation, which scales linearly with the number of cells
+M, communication users K and transmit antennas NT . As
+a comparison, the computational complexity of WMMSE is
+in the order of O(Lω(K2N 2
+T + KN 3
+T )) according to [40],
+where Lω denotes the number of iterations. This indicates
+the inefficiency of conventional optimization algorithms for
+practical use due to their complexity and reliance on multiple
+iterations for convergence, which limits parallelization. In con-
+trast, neural networks leverage GPUs for parallel computing,
+greatly enhancing training and inference speeds.
+IV. HFL-BASED BEAMFORMING FRAMEWORK
+As discussed in the previous section, the proposed VFL
+framework eliminates the need for local channel information
+collection during online deployment, and addresses the issue
+of local BSs being unable to compute their local loss due to in-
+sufficient global channel information by calculating the global
+loss function at the central server. However, during the training
+phase, local channel samples still need to be uploaded to the
+central server at each iteration, and the training is conducted
+in a partially centralized manner. Besides, uploading large
+datasets incurs significant communication overhead and raises
+privacy concerns, which is is not conducive to the subsequent
+fine-tuning of the model. To further reduce the communication
+overhead in the absence of global channel information, we
+propose a fully decentralized beamforming framework based
+on HFL, which leverages the knowledge from all participating
+BSs while maintaining decentralized local datasets throughout
+both training and online deployment phases.
+A. The proposed loss function
+As mentioned in the previous discussion, it is essential to
+understand the inherent complexity for calculating the ICI
+experienced by the local users and intended target at each BS
+due to the lack of global channel information. In conclusion,
+the problem (9) cannot be solved directly in a distributed
+manner. Given the constraint of local channel information, we
+aim at designing a loss function for controlling the ICI that
+does not rely on direct access to global channel information
+from other BSs. Based on real-world conditions, we consider
+the following two cases.
+1) Interference-dominant scenario: Interference-dominant
+scenario typically arises as the useful signal power increases,
+or when more users/targets move closer to the cell edges.
+At this point, the ICI becomes a more significant factor in
+affecting the network performance [13]. Therefore, our goal
+is to minimize ICI to enhance both the user experience at
+the cell edges and the sensing performance. Following the
+workaround in [41], we define the communication interference
+leakage (CIL)
+Φc
+m(Wm) =
+M
+X
+n̸=m
+K
+X
+i=1
+|hH
+m,n,iWm|2.
+(19)
+Specifically, the aim is to minimize the interference caused
+to undesired receivers via generating the beamforming matrix
+from the null space spanned by the interfered channels. Sim-
+ilarly, each BS should also avoid the interference it causes to
+other BSs when sensing the target to enhance the network-level
+sensing performance, which can be accomplished by imposing
+constraints on the power of the sensing interference leakage
+(SIL)
+Φs
+m(Wm) =
+M
+X
+n̸=m
+|gH
+m,nWm|2.
+(20)
+Employing the concept of CIL minimization allows us to
+ignore the ICI in the communication rate. Accordingly, the
+communication loss function Lc(Wm) is formulated by com-
+bining the negative communication rate without considering
+communication ICI, and the CIL (19) as the penalty term to
+be minimized. This is given in (21), where α is the weighting
+factor affecting the importance of CIL management. Also, we
+formulate the sensing loss function Ls(Wm) as the summation
+of negative radar information rate without sensing ICI, and
+the SIL (20) term weighted by β, which is given in (22).
+It can be verified through simulations that optimizing loss
+function (21) and (22) can achieve a good performance when
+the interference caused to the mth cell is eliminated by other
+BSs, as shown in Section V. Obviously, both (21) and (22)
+can be calculated using local channel information, thus a fully
+decentralized training framework can be implemented.
+2) Noise-dominant scenario: In this case, the power of
+noise is much greater than that of the interference signal,
+which could be due to the low transmission power of the BS
+8
+Lc(Wm) = −
+K
+X
+k=1
+ 
+log2(1 +
+|hH
+m,m,kwm,k|2
+PK
+l̸=k |hH
+m,m,kwm,l|2 + σ2c
+) −α
+M
+X
+n̸=m
+K
+X
+i=1
+|hH
+m,n,iwm,k|2
+!
+.
+(21)
+Ls(Wm) = −
+ 
+log2
+
+1 +
+PK
+k=1 |gH
+m,mwm,k|2
+σ2s
+
+−β
+M
+X
+n̸=m
+K
+X
+k=1
+|gH
+m,nwm,k|2
+!
+.
+(22)
+or because the users/targets are concentrated near the BSs,
+away from the cell edges. When the above conditions are
+satisfied, managing ICI becomes less important and BSs can
+focus on serving the intended users/targets by employing all
+available spatial resources to achieve the multiplexing gain. At
+this stage, the weighting factors of interference leakage term in
+(21) and (22) can be set to α = β = 0, and the corresponding
+local loss function at the mth BS is simplified into
+Lc(Wm) = −
+K
+X
+k=1
+log2
+
+1 +
+|hH
+m,m,kwm,k|2
+PK
+l̸=k |hH
+m,m,kwm,l|2 + σ2c
+
+,
+(23)
+Ls(Wm) = −log2
+
+1 +
+PK
+k=1 |gH
+m,mwm,k|2
+σ2s
+
+,
+(24)
+which suggests the cooperative strategy degrades to the per-
+cell learning-based beamforming scheme as in [21], [25].
+B. Learning-based Formulation and Training
+Based on the interference leakage-based loss functions
+(21) and (22), we aim at solving the following global op-
+timization problem corresponding to fit the whole dataset
+D = {D(m)}∀m across the BSs
+min
+W
+M
+X
+m=1
+
+ρLc(Wm) + (1 −ρ)Ls(Wm)
+
+s.t.
+tr(WmWH
+m) ≤PT ,
+∀m.
+(25)
+With the HFL framework, the above problem can be solved
+in a decentralized manner with each BS solving the following
+local loss minimization problem
+min
+Wm
+ρLc(Wm) + (1 −ρ)Ls(Wm)
+s.t.
+tr(WmWH
+m) ≤PT .
+(26)
+Before the offline training phase, each BS collects the local
+channel samples using the method described in Section III-A.
+During the training stage, the participating BSs will receive
+the global model from the central server, and train the model
+for multiple iterations. In this work, we adopt the algorithm
+FedAvg [26] to aggregate the global model, the details of
+offline training are as follows.
+1) Global broadcast: At the beginning, the central server
+initializes a global model, and broadcasts it to all the partici-
+pating BSs through the backhual link.
+2) Local training: Upon receiving the newest global model
+ω(T ) at the Tth global iteration, each local BS m performs
+forward propagation using the local channel dataset D(m) to
+obtain a beamforming matrix Wm and computes the local loss
+function at the tth local iteration, which is the weighted sum
+of local communication loss (21) and sensing loss (22)
+L
+ Wm; ω(T )(t)
+m
+
+= ρLc
+ Wm; ω(T )(t)
+m
+
++ (1 −ρ)Ls
+ Wm; ω(T )(t)
+m
+
+.
+(27)
+Then, the SGD algorithm is applied to update the local model
+ω(T )(t+1)
+m
+= w(T )(t)
+m
+−η∇L
+ Wm; ω(T )(t)
+.
+(28)
+After multiple iterations of local training, the updated local
+model parameters w(T +1) are obtained for model aggregation.
+3) Local uploading: After the parallel local training, the up-
+dated model parameters ω(T +1)
+m
+, m = 1, 2, ...M are uploaded
+to the server through the backhaul link.
+4) Global aggregation: Upon receiving the updated model
+parameters, the server performs global aggregation by aver-
+aging the received parameters [26] to get the newest global
+model ω(T +1), then it decides whether to proceed with the
+next iteration of training depending on the current state.
+The above procedure repeats until convergence is reached
+or a predefined number of iterations is completed. The key
+concept is that minimizing all local loss functions will lead to
+the minimization of the global loss function, thereby solving
+the problem (25). The HFL-based training framework is shown
+in Fig. 4. Once the training is completed, the local BSs can
+use the trained network in real-time to design the beamforming
+matrix. Notably, during both training and deployment phases,
+the local datasets remain at the local site, which significantly
+reduces the communication overhead. The HFL framework is
+summarized in Algorithm 2.
+Algorithm 2 Horizontal Federated learning framework
+Offline Training:
+Input : concatenated channel [H(i)
+m , G(i)
+m ]
+Output : beamformer W∗
+Initialize ω(0)
+for global round T = 1, 2, ... do
+the server broadcasts model parameters ω(T );
+for local round t = 1, 2, ... do
+BSs minimize the local loss (27) and perform backward
+propagation (28);
+end for
+BSs upload model parameters to the server;
+Global aggregation: ω(T +1) ←
+1
+M
+PM
+m=1 ω(T )
+m
+end for
+trained model ω∗feed back for local use;
+Online Beamforming:
+W∗
+m = f([H(i)
+m , G(i)
+m ]; ω∗), ∀m ⊂M
+C. Complexity Analysis of HFL-based beamforming
+Similar to the VFL-based method, the overhead of imple-
+menting HFL framework also consists of communication and
+computational costs during the training phase, as well as com-
+putational costs during the deployment phase. Since we are
+9
+TABLE I
+COMPARISON OF COMMUNICATION OVERHEAD
+Algorithm
+Training Phase
+Beamforming Phase
+WMMSE[16]
+\
+M2KNT
+VFL
+(M2 + M)TKNT
+\
+HFL
+2MBT
+\
+TABLE II
+COMPARISON OF COMPUTATIONAL COMPLEXITY
+Algorithm
+Training Phase
+Beamforming Phase
+WMMSE[16]
+\
+O(Lω(K2N2
+T + KN3
+T ))
+VFL
+O(3(MK + M + K)NT dH + NHd2
+H)
+O((MK + M + K)NT dH + NHd2
+H)
+HFL
+using the neural network of the same structure as in Section III,
+the computational cost during the deployment phase for HFL-
+based framework, specifically the computation involved in the
+forward propagation, is identical to that of VFL-based frame-
+work and is given by O((MK + M + K)NT dH + NHd2
+H).
+While in the offline phase, accounting for the backward
+propagation, the computational overhead arising from model
+training in HFL-based method can also be approximated as
+three times that of a single forward propagation.
+In contrast to VFL-based method, the framework in this sec-
+tion significantly reduces communication overhead during the
+offline model training phase. Specifically, in a single training
+iteration of HFL, each BS only transmits the updated model
+parameters to the central server for global aggregation, instead
+of the training channel samples and designed beamforming
+matrices. As a result, the offline communication overhead
+arises from the model parameters broadcasting and uploading
+between local BSs and the server. This reduces the com-
+munication overhead as the memory occupied by the model
+parameters is much smaller compared to the training samples,
+and makes the framework to shift from feature aggregation to
+sample aggregation. Denoting the bits of the model parameters
+by B, the total bits to be uploaded and downloaded during
+distributed training is given by 2MBT, where T is the number
+of communication rounds to achieve a predefined performance
+ϵ. According to [42], the required number of communication
+rounds is given by O
+ 1
+ϵ
+ (1+ 1
+K )EG2+ Γ+G2
+E
++G2
+, where E
+is the number of local training rounds and G, Γ are problem-
+related constants. Besides, compared to Section III where
+the global loss function is computed at the central server,
+in HFL framework, the loss function will be entirely based
+on locally available channel information and calculated in a
+fully decentralized manner by each local BS, which leverages
+the computational power of the participating BSs and offloads
+the computation workload from the server. In conclusion,
+this scheme achieves full decentralization during the model
+training phase, which significantly reduces communication
+overhead, facilitating future online model updates. For practi-
+cal deployment, data compression techniques such as quanti-
+zation and model pruning can be applied to further reduce the
+communication overhead. The comparison of communication
+overhead and computational complexity between the methods
+TABLE III
+SYSTEM PARAMETERS
+Parameter
+Value
+Cell radius
+500(m)
+Communication path loss
+3.6
+Sensing path loss
+2
+Target RCS
+1.0(m2)
+Num of hidden layers NH
+4
+Num of neurons in hidden layers dH
+512
+is summarized in Table. I and II.
+V. PERFORMANCE EVALUATION
+In this section, we illustrate the performance of the proposed
+FL-based beamforming frameworks via numerical simulations.
+The proposed frameworks are both implemented in Python
+3.11.5 and Pytorch 2.1.0 on a PC with one NVIDIA RTX
+3060 GPU and 8 Intel i7-11800 CPU cores.
+Table III summarizes the major hyper-parameters used for
+simulation. Unless otherwise mentioned, we adopted the fol-
+lowing configurations adopted in the literature [20], [21], [43]:
+the number of cells M = 3, each BS is equipped with NT = 6
+transmit antennas and NR = 6 receive antennas, serving
+K = 2 users while sensing one point target. We produce
+channel samples by randomly generating the positions of users
+and targets. Specifically, the targets are assumed to be located
+within the range of [−π/2, π/2] in the angular domain with
+respect to each BS, while the CUs are randomly distributed
+within the cell. Moreover, both communication channels and
+sensing ICI channels are assumed to be Rician fading channel
+with the rician factor being 3. Each local training dataset
+and test dataset contains 20,000 and 2000 channel samples
+respectively. During training, we apply the Adam optimizer
+[44] to update the model parameters, and set weight decay
+factor to be 10−6 for further alleviating the risk of overfitting.
+A. Evaluation of Communication Performance
+First, we evaluate the performance of the proposed methods
+by comparing the achievable communication rate with that
+of traditional methods under varying signal-to-noise ratios
+(SNRs). In this paper, we adopt the optimization-based scheme
+WMMSE [16], the per-cell deep learning-based beamforming
+10
+(a) Communication rate Rc versus SNRs.
+(b) Radar information rate Rs versus SNRs.
+Fig. 5. Comparison of communication rate Rc and radar information rate Rs under different SNRs between the proposed methods and benchmarks.
+method [21], and the closed-form solutions maximum ratio
+transmission (MRT) [45] and the interference minimizing
+transmission (IMT) [46] as benchmarks. Fig. 5(a) shows the
+communication performance of our proposed methods when
+ρ = 0.99. Throughout the increasing SNR levels, the VFL
+method consistently outperforms the benchmark solutions in
+all scenarios, while the HFL method approaches the perfor-
+mance of the WMMSE algorithm, with only 12% performance
+gap comparing to VFL. This highlights the advantages of
+learning-based methods, as their computational complexity
+and latency are significantly lower than those of optimization-
+based approaches, while still surpassing the performance of
+closed-form solutions. It is worth noting that, the commu-
+nication rates achieved by per-cell DL method and MRT
+scheme exhibit saturation at high SNRs (i.e., when the SNR
+exceeds approximately 15 dB in this case), as the network is
+becoming interference-limited in this regime. In contrast, the
+other schemes, which accounts for managing ICI, shows a sig-
+nificant performance improvement in interference-dominated
+scenarios, and this is referred to as the interference nulling
+gain. For example, when SNR = 25dB, the HFL method
+achieves a 19% improvement over the per-cell DL method by
+effectively constraining the interference leakage power in (21).
+While with the aid of global channel information, the VFL
+method increases the performance improvement to 32%. As
+discussed in Section III-D and IV-C, the tradeoff between the
+proposed VFL method and HFL method in terms of training
+overhead and online performance suggests that they can be
+tailored to suit different scenarios.
+B. Evaluation of Sensing Performance
+Fig. 5(b) illustrates the sensing performance of the proposed
+methods when ρ is 0.01. We compare the achievable radar
+information rate of our methods with the closed-form scheme
+conjugate beamforming (CBF) [34], where the transmit beam-
+former of the mth BS is towards the direction θm of the target
+to directly maximize the sensing SNR. In addition, we adopt
+the concept of unsupervised learning in [21] and replaced its
+loss function from negative communication rate to negative
+radar information rate, using this as the benchmark for the per-
+cell DL-based method to highlight the impact of interference
+Fig. 6. Beampatterns for the scenario of point target at 15◦.
+elimination on sensing performance. It can be observed that
+the proposed FL methods outperform CBF by up to 67%
+and 30% respectively in terms of the information rate as
+SNR increases, and the benefits brought by ICI elimination
+is more evident compared to that in communications in low
+SNRs. The result indicates that sensing ICI becomes a more
+dominant factor than noises and useful signal which suffers
+from round-trip pathloss affecting the sensing performance,
+which aligns with the conclusion drawn in [12]. It is also
+worth noting that the curve of per-cell DL method overlaps
+with the curve of CBF. This is because when each BS is
+sensing only one target at the same time without considering
+the ICI, maximizing the illumination power will lead to the
+maximum radar information rate towards the target, at which
+point the principles of per-cell DL method and CBF are
+the same. Overall, these findings highlight the importance of
+incorporating ILM for optimizing both communication and
+sensing performance in multi-cell ISAC systems.
+The beampatterns obtained by different methods are shown
+in Figure. 6. We assume the serving BS is equipped with
+NT = NR = 16 antennas and senses a point target located at
+θ = 15◦, while two adjacent BSs are located at 0◦and 60◦.
+The result shows that the mainlobes of the transmit waveforms
+obtained by different methods align with the direction of the
+intended target, which can maximize the target illumination
+power. However, this cannot guarantee optimal network-level
+sensing performance, especially in the presence of ICI, as
+11
+(a) Communication rate Rc versus number of transmit
+antennas.
+(b) Radar information rate Rs versus number of trans-
+mit antennas.
+Fig. 7. Comparison of communication rate Rc and radar information rate Rs with respect to the number of antennas NT between the proposed methods
+and benchmarks.
+(a) S&C tradeoff under different SNRs.
+(b) S&C tradeoff under different numbers of transmit
+antennas.
+Fig. 8. Tradeoff betweem communication rate Rc and radar information rate Rs when ρ ranges from 0.1 to 0.9.
+the unintended signal power leaking to surrounding BSs can
+disrupt their sensing. It is observed that the beampattern of
+per-cell DL method closely resembles that obtained by CBF
+method, which disregards the effect of sensing ICI towards
+adjacent BSs. Therefore, these two methods achieve the lowest
+sum radar information rate. In contrast, the beampattern of
+the VFL method exhibits rapid sidelobe attenuation at both
+0◦and 60◦, leading to less power leakage to the directions
+of adjacent BSs. By leveraging global channel information to
+train the local DNNs, this method maximally eliminates ICI
+to enhance the sensing performance. Similarly, by controlling
+interference leakage power using local channel information,
+the HFL method also achieves sensing interference nulling and
+the radar information rate comparable to that of VFL method.
+C. Impact of the Number of Antennas
+In this section, we evaluate the S&C performance of the
+proposed beamforming designs when varying the number of
+transmit antennas NT ∈{2, 4, 6, 8, 10}. Fig. 7(a) and Fig. 7(b)
+show the achievable communication and radar information
+rate with respect to the number of antennas. This result
+demonstrates that our approaches exhibit good generalization
+capabilities across different antenna configurations. Besides, it
+is obvious that as the number of transmit antennas increases,
+the performance improvement of both VFL and HFL methods
+compared to per-cell DL method becomes more significant.
+This indicates that having access to global information and
+eliminating the ICI can greatly enhance both network-level
+S&C performance. Therefore, we can conclude that when the
+spatial degrees of freedom are sufficient, eliminating ICI can
+lead to significant overall performance improvements for the
+network. By optimizing the use of available spatial resources,
+interference nulling becomes more impactful, especially in
+dense networks or scenarios with multiple users/targets at the
+cell edges.
+D. Tradeoff Between Communication and Sensing
+The tradeoff profiles of the communication performance
+and sensing performance are shown in Fig. 8. First, Fig. 8(a)
+illustrates the S&C performance tradeoff under different SNRs,
+where each point represents the achievable communication
+rate Rc and radar information rate Rs as ρ in (9) ranges
+from 0.1 to 0.9. Time-sharing scheme is introduced to evaluate
+the performance of our methods, which is achieved based on
+the two corner points. The boundary of the (Rc, Rs) region
+is viewed as the Pareto front constituted by the achieved
+performance tradeoff. From Fig. 8(a), it can be observed that
+12
+(a) Effect of pruning to HFL method.
+(b) Effect of pruning to VFL method.
+Fig. 9. Performance vs complexity trade-off: effect of model pruning to the beamforming DNNs trained with different frameworks.
+the boundaries of both HFL method and VFL method exhibit a
+gradual expansion as SNR increases, and the (Rc, Rs) region
+of proposed methods increase noticeably compared to time-
+sharing scheme at a higher SNR. For instance, with SNR=
+20dB, HFL method and VFL method outperform the time-
+sharing scheme by up to 29% and 39% respectively, in terms
+of the radar information rate under the same communication
+rate. When SNR rises to 30dB, the improvements reach 33%
+50% respectively. This suggests that the S&C gain become
+more significant as more power is allocated and global channel
+information becomes available, leading to enhanced overall
+performance.
+Second, Fig. 8(b) shows the effectiveness and generalization
+of proposed methods under different numbers of transmit
+antennas when SNR= 30dB. Similar to the observed trend
+depicted in Fig. 8(a), the (Rc, Rs) regions of both methods
+expand gradually compared to the times-sharing scheme when
+more transmit antennas are available. Specifically, for the HFL
+method, when fixing the communication rate, the achievable
+information rate is 31% higher than that of the time-sharing
+scheme with NT
+= 8. While with NT
+= 12 deployed,
+this performance gap increases to 47%. Meanwhile, the VFL
+method can improve the radar information rate by up to 35%
+and 51% when NT
+= 8 and NT
+= 12 respectively as
+compared to the time-sharing scheme. This result demonstrates
+that our methods effectively leverage the available spatial
+DoFs, and the performance gain from eliminating ICI increases
+as the number of transmit antennas grows. The enhanced DoFs
+allow for more efficient interference management, leading to
+significant improvements in both network-level sensing and
+communication performance as antenna numbers scale up.
+E. A Scalable Perfromance vs Complexity Trade-off
+Considering the low latency and low overhead require-
+ments in practical deployments, we apply model pruning
+[47] technique to further improve the model’s efficiency. We
+compress the model size by removing less important weights
+and connections, with the amount removed controlled by the
+pruning factor. Fig. 9 shows that by selecting an appropriate
+pruning factor, the model’s complexity and memory usage can
+be significantly reduced while maintaining performance. For
+instance, the horizontal lines in the figures indicate the point
+at which the model performance drops to approximately 95%
+threshold, while both methods can maintain the performance
+above the threshold after removing 50%-60% of redundant
+nodes. At this point, the S&C performance of both methods
+still surpass the closed-form solutions, while computational
+efficiency has been greatly improved. This allows for flexible
+adjustment of the pruning factor in practical deployments,
+facilitating a dynamic balance between performance and com-
+putational complexity according to specific operational re-
+quirements.
+VI. CONCLUSION
+In this paper, we proposed two federated learning-based
+frameworks for the downlink beamforming design in multi-cell
+ISAC. We formulated the optimization problem to maximize
+the weighted sum of the system communication rate and
+radar information rate, and utilized the federated learning
+technique to find the optimal solutions efficiently. The first
+solution is based on the VFL framework, where the central
+server aggregates the channel information, and provides global
+information to train the local models. Considering the issue of
+deployment flexibility and training cost, we subsequently pro-
+posed the HFL method and the interference leakage-based loss
+function to enable a fully decentralized ICI management. The
+models trained under both frameworks can operate without
+global channel information. Through numerical simulations,
+we demonstrated that our solutions can achieve performance
+comparable to traditional centralized methods while offering
+significant improvements in computational efficiency and scal-
+ability, making it suitable for practical deployments. Our future
+work will involve advanced scenarios and individual target
+sensing requirements.
+REFERENCES
+[1] F. Liu, C. Masouros, A. P. Petropulu, H. Griffiths, and L. Hanzo, “Joint
+radar and communication design: Applications, state-of-the-art, and the
+road ahead,” IEEE Transactions on Communications, vol. 68, no. 6, pp.
+3834–3862, 2020.
+[2] J. A. Zhang, F. Liu, C. Masouros, R. W. Heath, Z. Feng, L. Zheng, and
+A. Petropulu, “An overview of signal processing techniques for joint
+communication and radar sensing,” IEEE Journal of Selected Topics in
+Signal Processing, vol. 15, no. 6, pp. 1295–1315, 2021.
+13
+[3] F. Liu, Y. Cui, C. Masouros, J. Xu, T. X. Han, Y. C. Eldar, and S. Buzzi,
+“Integrated sensing and communications: Toward dual-functional wire-
+less networks for 6g and beyond,” IEEE journal on selected areas in
+communications, vol. 40, no. 6, pp. 1728–1767, 2022.
+[4] K. Meng, C. Masouros, A. P. Petropulu, and L. Hanzo, “Cooperative
+ISAC networks: Performance analysis, scaling laws and optimization,”
+IEEE Transactions on Wireless Communications, 2024.
+[5] K. Meng, Q. Wu, W. Chen, and D. Li, “Sensing-assisted communication
+in vehicular networks with intelligent surface,” IEEE Transactions on
+Vehicular Technology, vol. 73, no. 1, pp. 876–893, 2024.
+[6] F. Liu, L. Zhou, C. Masouros, A. Li, W. Luo, and A. Petropulu, “To-
+ward dual-functional radar-communication systems: Optimal waveform
+design,” IEEE Transactions on Signal Processing, vol. 66, no. 16, pp.
+4264–4279, 2018.
+[7] X. Liu, T. Huang, N. Shlezinger, Y. Liu, J. Zhou, and Y. C. Eldar, “Joint
+transmit beamforming for multiuser MIMO communications and MIMO
+radar,” IEEE Transactions on Signal Processing, vol. 68, pp. 3929–3944,
+2020.
+[8] F. Dong, W. Wang, Z. Hu, and T. Hui, “Low-complexity beamformer
+design for joint radar and communications systems,” IEEE Communi-
+cations Letters, vol. 25, no. 1, pp. 259–263, 2020.
+[9] F. Liu, Y.-F. Liu, A. Li, C. Masouros, and Y. C. Eldar, “Cram´er-rao
+bound optimization for joint radar-communication beamforming,” IEEE
+Transactions on Signal Processing, vol. 70, pp. 240–253, 2021.
+[10] H. Hua, J. Xu, and T. X. Han, “Optimal transmit beamforming for
+integrated sensing and communication,” IEEE Transactions on Vehicular
+Technology, vol. 72, no. 8, pp. 10 588–10 603, 2023.
+[11] J. Li, G. Zhou, T. Gong, and N. Liu, “A framework for mutual
+information-based MIMO integrated sensing and communication beam-
+forming design,” IEEE Transactions on Vehicular Technology, 2024.
+[12] K. Meng, C. Masouros, G. Chen, and F. Liu, “Network-level inte-
+grated sensing and communication: Interference management and BS
+coordination using stochastic geometry,” IEEE Transactions on Wireless
+Communications, p. early access, 2024.
+[13] K. Meng, C. Masouros, A. P. Petropulu, and L. Hanzo, “Cooperative
+ISAC networks: Opportunities and challenges,” IEEE Wireless Commu-
+nications, 2024.
+[14] N. Babu, C. Masouros, C. B. Papadias, and Y. C. Eldar, “Precoding
+for multi-cell ISAC: from coordinated beamforming to coordinated
+multipoint and bi-static sensing,” arXiv preprint arXiv:2402.18387,
+2024.
+[15] K. Qian, W.-Q. Wang, and H. Shao, “Low-complexity transmit antenna
+selection and beamforming for large-scale MIMO communications,”
+International Journal of Antennas and Propagation, vol. 2014, no. 1,
+p. 159375, 2014.
+[16] Q. Shi, M. Razaviyayn, Z.-Q. Luo, and C. He, “An iteratively weighted
+mmse approach to distributed sum-utility maximization for a MIMO
+interfering broadcast channel,” IEEE Transactions on Signal Processing,
+vol. 59, no. 9, pp. 4331–4340, 2011.
+[17] Y. Peng, S. Yang, W. Lyu, Y. Li, H. He, Z. Zhang, and C. Assi, “Mutual
+information-based integrated sensing and communications: A wmmse
+framework,” IEEE Wireless Communications Letters, 2024.
+[18] A. M. Elbir, K. V. Mishra, S. A. Vorobyov, and R. W. Heath, “Twenty-
+five years of advances in beamforming: From convex and nonconvex
+optimization to learning techniques,” IEEE Signal Processing Magazine,
+vol. 40, no. 4, pp. 118–131, 2023.
+[19] H. Sun, X. Chen, Q. Shi, M. Hong, X. Fu, and N. D. Sidiropoulos,
+“Learning to optimize: Training deep neural networks for interference
+management,” IEEE Transactions on Signal Processing, vol. 66, no. 20,
+pp. 5438–5453, 2018.
+[20] W. Xia, G. Zheng, Y. Zhu, J. Zhang, J. Wang, and A. P. Petropulu,
+“A deep learning framework for optimization of MISO downlink beam-
+forming,” IEEE Transactions on Communications, vol. 68, no. 3, pp.
+1866–1880, 2019.
+[21] H. Huang, W. Xia, J. Xiong, J. Yang, G. Zheng, and X. Zhu, “Unsu-
+pervised learning-based fast beamforming design for downlink MIMO,”
+IEEE Access, vol. 7, pp. 7599–7605, 2018.
+[22] T. Lin and Y. Zhu, “Beamforming design for large-scale antenna arrays
+using deep learning,” IEEE Wireless Communications Letters, vol. 9,
+no. 1, pp. 103–107, 2019.
+[23] H. Hojatian, J. Nadal, J.-F. Frigon, and F. Leduc-Primeau, “Unsuper-
+vised deep learning for massive MIMO hybrid beamforming,” IEEE
+Transactions on Wireless Communications, vol. 20, no. 11, pp. 7086–
+7099, 2021.
+[24] F. Jia, Y. Lei, J. Lin, X. Zhou, and N. Lu, “Deep neural networks: A
+promising tool for fault characteristic mining and intelligent diagnosis of
+rotating machinery with massive data,” Mechanical systems and signal
+processing, vol. 72, pp. 303–315, 2016.
+[25] R. P. Sankar, S. S. Nair, S. Doshi, and S. P. Chepuri, “Learning to
+precode for integrated sensing and communication systems,” in 2023
+31st European Signal Processing Conference (EUSIPCO). IEEE, 2023,
+pp. 695–699.
+[26] B. McMahan, E. Moore, D. Ramage, S. Hampson, and B. A. y Arcas,
+“Communication-efficient learning of deep networks from decentralized
+data,” in Artificial intelligence and statistics.
+PMLR, 2017, pp. 1273–
+1282.
+[27] M. Chen, D. G¨und¨uz, K. Huang, W. Saad, M. Bennis, A. V. Feljan,
+and H. V. Poor, “Distributed learning in wireless networks: Recent
+progress and future challenges,” IEEE Journal on Selected Areas in
+Communications, vol. 39, no. 12, pp. 3579–3605, 2021.
+[28] A. M. Elbir and S. Coleri, “Federated learning for hybrid beamforming
+in mm-wave massive MIMO,” IEEE Communications Letters, vol. 24,
+no. 12, pp. 2795–2799, 2020.
+[29] ——, “Federated learning for channel estimation in conventional and
+ris-assisted massive MIMO,” IEEE transactions on wireless communi-
+cations, vol. 21, no. 6, pp. 4255–4268, 2021.
+[30] A. M. Elbir, A. K. Papazafeiropoulos, and S. Chatzinotas, “Federated
+learning for physical layer design,” IEEE Communications Magazine,
+vol. 59, no. 11, pp. 81–87, 2021.
+[31] Q. Yi, P. Yang, Z. Liu, Y. Huang, and S. Zammit, “Model-driven
+federated learning for channel estimation in millimeter-wave massive
+MIMO systems,” in 2024 IEEE Wireless Communications and Network-
+ing Conference (WCNC).
+IEEE, 2024, pp. 1–6.
+[32] H. Huang, Y. Peng, J. Yang, W. Xia, and G. Gui, “Fast beamforming
+design via deep learning,” IEEE Transactions on Vehicular Technology,
+vol. 69, no. 1, pp. 1065–1069, 2019.
+[33] D. Wang, M. Tao, X. Zeng, and J. Liang, “Federated learning for
+precoding design in cell-free massive MIMO systems,” IEEE Open
+Journal of the Communications Society, 2023.
+[34] U.
+Demirhan
+and
+A.
+Alkhateeb,
+“Cell-free
+ISAC
+MIMO
+sys-
+tems: Joint sensing and communication beamforming,” arXiv preprint
+arXiv:2301.11328, 2023.
+[35] P. Stoica, J. Li, and Y. Xie, “On probing signal design for MIMO radar,”
+IEEE Transactions on Signal Processing, vol. 55, no. 8, pp. 4151–4161,
+2007.
+[36] Y. Yang and R. S. Blum, “MIMO radar waveform design based on
+mutual information and minimum mean-square error estimation,” IEEE
+Transactions on Aerospace and electronic systems, vol. 43, no. 1, pp.
+330–343, 2007.
+[37] K. Hornik, M. Stinchcombe, and H. White, “Multilayer feedforward
+networks are universal approximators,” Neural networks, vol. 2, no. 5,
+pp. 359–366, 1989.
+[38] A. L. Maas, A. Y. Hannun, A. Y. Ng et al., “Rectifier nonlinearities
+improve neural network acoustic models,” in Proc. icml, vol. 30, no. 1.
+Atlanta, GA, 2013, p. 3.
+[39] S.-i. Amari, “Backpropagation and stochastic gradient descent method,”
+Neurocomputing, vol. 5, no. 4-5, pp. 185–196, 1993.
+[40] Q. Hu, Y. Cai, Q. Shi, K. Xu, G. Yu, and Z. Ding, “Iterative algorithm
+induced deep-unfolding neural networks: Precoding design for mul-
+tiuser MIMO systems,” IEEE Transactions on Wireless Communications,
+vol. 20, no. 2, pp. 1394–1410, 2020.
+[41] N. Babu and C. Masouros, “Multi-cell coordinated joint sensing and
+communications,” in 2023 57th Asilomar Conference on Signals, Sys-
+tems, and Computers.
+IEEE, 2023, pp. 763–767.
+[42] X. Li, K. Huang, W. Yang, S. Wang, and Z. Zhang, “On the convergence
+of fedavg on non-iid data,” arXiv preprint arXiv:1907.02189, 2019.
+[43] J. Kim, H. Lee, S.-E. Hong, and S.-H. Park, “Deep learning methods for
+universal miso beamforming,” IEEE Wireless Communications Letters,
+vol. 9, no. 11, pp. 1894–1898, 2020.
+[44] D. P. Kingma and J. Ba, “Adam: A method for stochastic optimization,”
+arXiv preprint arXiv:1412.6980, 2014.
+[45] N. Fatema, G. Hua, Y. Xiang, D. Peng, and I. Natgunanathan, “Massive
+MIMO linear precoding: A survey,” IEEE systems journal, vol. 12, no. 4,
+pp. 3920–3931, 2017.
+[46] R. Zakhour, Z. K. Ho, and D. Gesbert, “Distributed beamforming
+coordination in multicell MIMO channels,” in VTC Spring 2009-IEEE
+69th Vehicular Technology Conference.
+IEEE, 2009, pp. 1–5.
+[47] S. Han, J. Pool, J. Tran, and W. Dally, “Learning both weights and con-
+nections for efficient neural network,” Advances in neural information
+processing systems, vol. 28, 2015.
