@@ -1,0 +1,3 @@
+[submodule "sionna-rt"]
+	path = sionna-rt
+	url = https://github.com/sungminlee114/sionna-rt/
