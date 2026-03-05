@@ -86,7 +86,7 @@ RUN sudo update-alternatives --install /usr/bin/python python /usr/local/bin/pyt
 RUN python get-pip.py
 RUN rm *.py
 
-RUN pip install sionna-rt
+RUN pip install https://github.com/sungminlee114/sionna-rt/archive/refs/heads/main.zip
 
 RUN pip install torch
 

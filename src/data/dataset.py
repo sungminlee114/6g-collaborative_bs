@@ -42,10 +42,26 @@ class ChannelEstimationDataset(Dataset):
         if snapshot_ids is not None:
             meta = meta[meta["snapshot_id"].isin(snapshot_ids)]
 
-        self.meta = meta.reset_index(drop=True)
-
         # Pre-load all channels into memory for speed
         self._cache = {}
+
+        # Filter out NaN samples.
+        # Sionna RT produces NaN in CFR when a UE-BS pair has no valid propagation
+        # paths (complete NLOS blockage). cfr() with normalize=True divides by
+        # total path energy, which is 0 → NaN. Mainly affects high-altitude BSs
+        # (BS0-3) where some UEs are fully shadowed. ~3% of total samples.
+        valid_mask = []
+        for _, row in meta.iterrows():
+            cfr_all = self._load_snapshot(int(row["snapshot_id"]))
+            cfr_ue = cfr_all[int(row["ue_id"])]
+            valid_mask.append(not np.any(np.isnan(cfr_ue)))
+        n_before = len(meta)
+        meta = meta[valid_mask]
+        n_after = len(meta)
+        if n_before != n_after:
+            print(f"  Filtered {n_before - n_after}/{n_before} NaN samples")
+
+        self.meta = meta.reset_index(drop=True)
 
     def _load_snapshot(self, snapshot_id: int) -> np.ndarray:
         """Load and cache CFR for a snapshot."""

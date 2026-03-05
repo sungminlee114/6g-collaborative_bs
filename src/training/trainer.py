@@ -1,7 +1,46 @@
 """Common training utilities with proper optimization and regularization."""
+import json
+from pathlib import Path
+
 import torch
 from torch.utils.data import DataLoader
+from tqdm.auto import tqdm
 from src.data.utils import nmse
+
+
+CHECKPOINTS_DIR = Path("checkpoints")
+
+
+def save_checkpoint(model, name: str, meta: dict = None):
+    """Save model checkpoint with metadata.
+
+    Args:
+        model: PyTorch model
+        name: descriptive name, e.g. "phase0/reesnet_bs1_snr20"
+        meta: optional dict with training info (best_val, best_epoch, etc.)
+    """
+    path = CHECKPOINTS_DIR / f"{name}.pt"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"model_state_dict": model.state_dict()}
+    if meta:
+        payload["meta"] = meta
+    torch.save(payload, path)
+    print(f"  Saved: {path}")
+    return path
+
+
+def load_checkpoint(model, name: str, device="cuda"):
+    """Load model checkpoint. Returns meta dict (or None).
+
+    Args:
+        model: PyTorch model (same architecture)
+        name: checkpoint name used in save_checkpoint
+    """
+    path = CHECKPOINTS_DIR / f"{name}.pt"
+    payload = torch.load(path, map_location=device, weights_only=False)
+    model.load_state_dict(payload["model_state_dict"])
+    print(f"  Loaded: {path}")
+    return payload.get("meta")
 
 
 def train_epoch(model, loader, optimizer, device="cuda", grad_clip=1.0):
@@ -60,7 +99,7 @@ def evaluate_per_snr(model, dataset_cls, data_dir, bs_ids, snr_list,
 def train_local(model, train_loader, val_loader=None, epochs=200,
                 lr=1e-3, weight_decay=1e-4, patience=25, device="cuda",
                 verbose=True, grad_clip=1.0, warmup_epochs=5,
-                use_cosine=True):
+                use_cosine=True, save_as: str = None):
     """Full local training loop with proper optimization.
 
     Features:
@@ -68,6 +107,11 @@ def train_local(model, train_loader, val_loader=None, epochs=200,
     - Warmup + cosine annealing LR schedule
     - Gradient clipping
     - Early stopping with best model restore
+    - Optional checkpoint saving via save_as
+
+    Args:
+        save_as: checkpoint name, e.g. "phase0/reesnet_bs1_snr20".
+                 If given, saves best model to checkpoints/{save_as}.pt
 
     Returns: dict with 'train_losses', 'val_losses', 'best_epoch', 'best_val'
     """
@@ -95,7 +139,8 @@ def train_local(model, train_loader, val_loader=None, epochs=200,
     train_losses = []
     val_losses = []
 
-    for epoch in range(epochs):
+    pbar = tqdm(range(epochs), desc="Training", disable=not verbose)
+    for epoch in pbar:
         t_loss = train_epoch(model, train_loader, optimizer, device, grad_clip)
         train_losses.append(t_loss)
 
@@ -117,26 +162,35 @@ def train_local(model, train_loader, val_loader=None, epochs=200,
             else:
                 wait += 1
 
-            if verbose and (epoch + 1) % 10 == 0:
-                cur_lr = optimizer.param_groups[0]['lr']
-                print(f"  Epoch {epoch+1}: train_nmse={t_loss:.6f}, "
-                      f"val_nmse_db={v_db:.2f}, lr={cur_lr:.2e}")
+            best_db = 10 * torch.log10(torch.tensor(best_val)).item()
+            cur_lr = optimizer.param_groups[0]['lr']
+            pbar.set_postfix(train=f"{t_loss:.4f}", val_db=f"{v_db:.1f}",
+                             best=f"{best_db:.1f}", lr=f"{cur_lr:.1e}", wait=wait)
 
             if wait >= patience:
-                if verbose:
-                    print(f"  Early stopping at epoch {epoch+1}")
+                pbar.set_description(f"Early stop @ {epoch+1}")
                 break
         else:
             val_losses.append(t_loss)
-            if verbose and (epoch + 1) % 10 == 0:
-                print(f"  Epoch {epoch+1}: train_nmse={t_loss:.6f}")
+            t_db = 10 * torch.log10(torch.tensor(t_loss)).item()
+            pbar.set_postfix(train_db=f"{t_db:.1f}")
 
     if best_state is not None:
         model.load_state_dict(best_state)
 
-    return {
+    result = {
         "train_losses": train_losses,
         "val_losses": val_losses,
         "best_epoch": best_epoch,
         "best_val": best_val,
     }
+
+    if save_as:
+        save_checkpoint(model, save_as, meta={
+            "best_epoch": best_epoch,
+            "best_val": best_val,
+            "best_val_db": 10 * torch.log10(torch.tensor(best_val)).item(),
+            "epochs_run": len(train_losses),
+        })
+
+    return result
