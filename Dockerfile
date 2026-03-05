@@ -106,7 +106,8 @@ notebook \
 tensorboard \
 openpyxl \
 ipykernel \
-ipywidgets
+ipywidgets \
+pyarrow
 
 RUN apt install -y \
     libnvoptix

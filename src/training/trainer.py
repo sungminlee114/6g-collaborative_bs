@@ -1,9 +1,10 @@
-"""Common training utilities."""
+"""Common training utilities with proper optimization and regularization."""
 import torch
+from torch.utils.data import DataLoader
 from src.data.utils import nmse
 
 
-def train_epoch(model, loader, optimizer, device="cuda"):
+def train_epoch(model, loader, optimizer, device="cuda", grad_clip=1.0):
     """Train one epoch, returns average NMSE loss."""
     model.train()
     total_loss = 0.0
@@ -16,6 +17,10 @@ def train_epoch(model, loader, optimizer, device="cuda"):
         y_hat = model(x)
         loss = nmse(y_hat, y)
         loss.backward()
+
+        if grad_clip > 0:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+
         optimizer.step()
 
         total_loss += loss.item() * x.size(0)
@@ -52,20 +57,35 @@ def evaluate_per_snr(model, dataset_cls, data_dir, bs_ids, snr_list,
     return results
 
 
-def train_local(model, train_loader, val_loader=None, epochs=100,
-                lr=1e-3, weight_decay=1e-5, patience=15, device="cuda",
-                verbose=True):
-    """Full local training loop with early stopping.
+def train_local(model, train_loader, val_loader=None, epochs=200,
+                lr=1e-3, weight_decay=1e-4, patience=25, device="cuda",
+                verbose=True, grad_clip=1.0, warmup_epochs=5,
+                use_cosine=True):
+    """Full local training loop with proper optimization.
 
-    Returns: dict with 'train_losses', 'val_losses', 'best_epoch', 'best_state'
+    Features:
+    - AdamW optimizer (decoupled weight decay)
+    - Warmup + cosine annealing LR schedule
+    - Gradient clipping
+    - Early stopping with best model restore
+
+    Returns: dict with 'train_losses', 'val_losses', 'best_epoch', 'best_val'
     """
-    optimizer = torch.optim.Adam(
-        filter(lambda p: p.requires_grad, model.parameters()),
-        lr=lr, weight_decay=weight_decay,
-    )
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=patience // 3,
-    )
+    trainable_params = list(filter(lambda p: p.requires_grad, model.parameters()))
+    optimizer = torch.optim.AdamW(trainable_params, lr=lr, weight_decay=weight_decay)
+
+    # LR schedule: linear warmup + cosine annealing
+    if use_cosine:
+        def lr_lambda(epoch):
+            if epoch < warmup_epochs:
+                return (epoch + 1) / warmup_epochs
+            progress = (epoch - warmup_epochs) / max(epochs - warmup_epochs, 1)
+            return 0.5 * (1 + torch.cos(torch.tensor(progress * 3.14159)).item())
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+    else:
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode="min", factor=0.5, patience=patience // 3,
+        )
 
     best_val = float("inf")
     best_state = None
@@ -76,13 +96,18 @@ def train_local(model, train_loader, val_loader=None, epochs=100,
     val_losses = []
 
     for epoch in range(epochs):
-        t_loss = train_epoch(model, train_loader, optimizer, device)
+        t_loss = train_epoch(model, train_loader, optimizer, device, grad_clip)
         train_losses.append(t_loss)
+
+        if use_cosine:
+            scheduler.step()
 
         if val_loader is not None:
             v_nmse, v_db = evaluate(model, val_loader, device)
             val_losses.append(v_nmse)
-            scheduler.step(v_nmse)
+
+            if not use_cosine:
+                scheduler.step(v_nmse)
 
             if v_nmse < best_val:
                 best_val = v_nmse
@@ -93,7 +118,9 @@ def train_local(model, train_loader, val_loader=None, epochs=100,
                 wait += 1
 
             if verbose and (epoch + 1) % 10 == 0:
-                print(f"  Epoch {epoch+1}: train_nmse={t_loss:.6f}, val_nmse_db={v_db:.2f}")
+                cur_lr = optimizer.param_groups[0]['lr']
+                print(f"  Epoch {epoch+1}: train_nmse={t_loss:.6f}, "
+                      f"val_nmse_db={v_db:.2f}, lr={cur_lr:.2e}")
 
             if wait >= patience:
                 if verbose:

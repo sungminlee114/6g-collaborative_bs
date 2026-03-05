@@ -1,0 +1,26 @@
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(curl *)",
+      "Bash(wget *)",
+      "Bash(cd *)",
+      "Bash(mkdir *)",
+      "Bash(ls *)",
+      "Bash(pip install *)",
+      "Bash(python *)",
+      "Bash(jupyter *)",
+      "Bash(docker *)",
+      "Bash(docker compose *)",
+      "Bash(git *)",
+      "Bash(mv *)",
+      "Bash(cp *)",
+      "Bash(rm *)",
+      "Bash(cat *)",
+      "WebSearch(*)",
+      "WebFetch(*)"
+    ]
+  }
+}
