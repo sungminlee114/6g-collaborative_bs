@@ -10,12 +10,16 @@ Each Claude Code panel gets a unique session ID.
 
 ## Session ID
 
-Generate or reuse a per-panel session ID using a simple, crash-safe approach:
+Hook stdin의 `session_id` (앞 8자리)를 사용. Claude Code가 대화마다 부여하는 고유 UUID.
+표시/추적 전용 ("누가 시작/완료했는지"). Task 매칭에는 사용하지 않음.
 
-- Use `os.getpid()` of the current Python process as a seed to find a stable session file.
-- Walk `$PPID` once (no `/proc` traversal) — if `CLAUDE_SESSION_ID` env var exists, use it directly.
-- Fallback: hash the TTY or use a shared session file.
-- Session files expire after 24h.
+## Active Task Tracking
+
+No `/tmp` files for task ID. Instead, each backlog item has an `active_in` array of session IDs.
+- `start` → adds current session to `active_in`
+- `done`/`fail` → finds item where current session is in `active_in`, completes it
+- Any session can also close any task (cross-session recovery)
+- `active_in` is the source of truth for "which panel owns this task"
 
 ## User argument: $ARGUMENTS
 
@@ -25,9 +29,12 @@ Generate or reuse a per-panel session ID using a simple, crash-safe approach:
 - Example: `/task start implement/right-sidebar "Right sidebar for backlog"`
 
 ### `done [summary]`
-- Find the most recent `in_progress` item with matching session ID.
-- Update `status` to `"done"`, set `summary`.
+- Find `in_progress` item where current session is in `active_in`.
+- Update `status` to `"done"`, set `summary`, set `finished_by` to current session.
 - If no summary given, generate a one-line summary from context.
+
+### `done <task_id> [summary]`
+- Explicit task ID: close that specific task regardless of session (cross-session recovery).
 
 ### `log <name> [summary]`
 - One-shot: add item as `done` immediately with summary.
@@ -35,7 +42,8 @@ Generate or reuse a per-panel session ID using a simple, crash-safe approach:
 - Example: `/task log fix/chart-flicker "Fixed chart flicker on poll by splitting render"`
 
 ### `fail [reason]`
-- Mark current `in_progress` item (matching session) as `failed` with reason.
+- Find `in_progress` item where current session is in `active_in`.
+- Mark as `failed` with reason, set `finished_by` to current session.
 
 ## Implementation
 
@@ -56,45 +64,20 @@ Usage (called via Bash tool):
   python3 -c '<this script>' log 'fix/bar' 'summary here'
   python3 -c '<this script>' fail 'reason here'
 """
-import json, uuid, os, sys, time, fcntl, hashlib, shutil
+import json, uuid, os, sys, fcntl, shutil
 from pathlib import Path
 from datetime import datetime
 
 BACKLOG = Path("assets/backlog.json")
 
-# ── Session ID (crash-safe, no /proc walking) ──────────────────────
+# ── Session ID (display only, set by SessionStart hook) ────────────
 def _get_session_id():
-    # 1) Env var override (if Claude Code ever exposes one)
+    # SessionStart hook writes CLAUDE_SESSION_ID via CLAUDE_ENV_FILE
     env_id = os.environ.get("CLAUDE_SESSION_ID")
     if env_id:
-        return env_id
-
-    # 2) Derive a stable key from the TTY (unique per terminal/panel)
-    try:
-        tty = os.ttyname(sys.stdin.fileno())
-        key = hashlib.md5(tty.encode()).hexdigest()[:8]
-    except Exception:
-        # No TTY (piped execution) — fall back to parent PID
-        key = str(os.getppid())
-
-    session_file = Path(f"/tmp/claude_task_session_{key}")
-
-    # Reuse if fresh (<24h)
-    try:
-        if session_file.exists() and (time.time() - session_file.stat().st_mtime) < 86400:
-            content = session_file.read_text().strip()
-            if content:
-                return content
-    except OSError:
-        pass
-
-    # Generate new
-    sid = uuid.uuid4().hex[:6]
-    try:
-        session_file.write_text(sid)
-    except OSError:
-        pass  # non-fatal — we still have the ID in memory
-    return sid
+        return env_id[:8]
+    # Fallback: generate ephemeral ID (won't persist across sessions)
+    return uuid.uuid4().hex[:6]
 
 SESSION = _get_session_id()
 
@@ -178,6 +161,7 @@ def cmd_start(args):
             "status": "in_progress",
             "description": desc,
             "session": SESSION,
+            "active_in": [SESSION],
             "started_at": datetime.now().isoformat(),
             "script": None, "config": {}, "args": [],
         }
@@ -188,14 +172,39 @@ def cmd_start(args):
     print(f"✓ Started [{item['id']}] {name} (session: {SESSION})")
 
 def cmd_done(args):
-    summary = " ".join(args) if args else ""
+    # Check if first arg looks like a task ID (hex, 8 chars)
+    explicit_id = None
+    summary_args = args
+    if args and len(args[0]) == 8 and all(c in "0123456789abcdef" for c in args[0]):
+        explicit_id = args[0]
+        summary_args = args[1:]
+    summary = " ".join(summary_args) if summary_args else ""
 
     def modify(items):
-        # Find most recent in_progress for this session
+        # 1) Explicit task ID
+        if explicit_id:
+            for item in items:
+                if item["id"] == explicit_id and item.get("status") == "in_progress":
+                    item["status"] = "done"
+                    item["summary"] = summary or "(no summary)"
+                    item["finished_by"] = SESSION
+                    item["finished_at"] = datetime.now().isoformat()
+                    return item
+            return None
+        # 2) Find by active_in (current session in active_in list)
+        for item in reversed(items):
+            if item.get("status") == "in_progress" and SESSION in item.get("active_in", []):
+                item["status"] = "done"
+                item["summary"] = summary or "(no summary)"
+                item["finished_by"] = SESSION
+                item["finished_at"] = datetime.now().isoformat()
+                return item
+        # 3) Fallback: session field match (backward compat)
         for item in reversed(items):
             if item.get("status") == "in_progress" and item.get("session") == SESSION:
                 item["status"] = "done"
                 item["summary"] = summary or "(no summary)"
+                item["finished_by"] = SESSION
                 item["finished_at"] = datetime.now().isoformat()
                 return item
         return None
@@ -204,7 +213,16 @@ def cmd_done(args):
     if item:
         print(f"✓ Done [{item['id']}] {item.get('name', '?')}: {item.get('summary')}")
     else:
-        print(f"✗ No in_progress task found for session {SESSION}")
+        # Show open tasks for manual selection
+        open_tasks = [i for i in read_backlog() if i.get("status") == "in_progress"]
+        if open_tasks:
+            print(f"✗ No active task for session {SESSION}. Open tasks:")
+            for t in open_tasks:
+                sessions = ", ".join(t.get("active_in", [t.get("session", "?")]))
+                print(f"  [{t['id']}] {t['name']} (sessions: {sessions})")
+            print(f"  → /task done <task_id> \"summary\"")
+        else:
+            print(f"✗ No in_progress tasks found")
 
 def cmd_log(args):
     if not args:
@@ -233,13 +251,39 @@ def cmd_log(args):
     print(f"✓ Logged [{item['id']}] {name} (session: {SESSION})")
 
 def cmd_fail(args):
-    reason = " ".join(args) if args else ""
+    # Check if first arg looks like a task ID (hex, 8 chars)
+    explicit_id = None
+    reason_args = args
+    if args and len(args[0]) == 8 and all(c in "0123456789abcdef" for c in args[0]):
+        explicit_id = args[0]
+        reason_args = args[1:]
+    reason = " ".join(reason_args) if reason_args else ""
 
     def modify(items):
+        # 1) Explicit task ID
+        if explicit_id:
+            for item in items:
+                if item["id"] == explicit_id and item.get("status") == "in_progress":
+                    item["status"] = "failed"
+                    item["reason"] = reason or "(no reason)"
+                    item["finished_by"] = SESSION
+                    item["finished_at"] = datetime.now().isoformat()
+                    return item
+            return None
+        # 2) Find by active_in
+        for item in reversed(items):
+            if item.get("status") == "in_progress" and SESSION in item.get("active_in", []):
+                item["status"] = "failed"
+                item["reason"] = reason or "(no reason)"
+                item["finished_by"] = SESSION
+                item["finished_at"] = datetime.now().isoformat()
+                return item
+        # 3) Fallback: session field match
         for item in reversed(items):
             if item.get("status") == "in_progress" and item.get("session") == SESSION:
                 item["status"] = "failed"
                 item["reason"] = reason or "(no reason)"
+                item["finished_by"] = SESSION
                 item["finished_at"] = datetime.now().isoformat()
                 return item
         return None
@@ -248,7 +292,14 @@ def cmd_fail(args):
     if item:
         print(f"✓ Failed [{item['id']}] {item.get('name', '?')}: {item.get('reason')}")
     else:
-        print(f"✗ No in_progress task found for session {SESSION}")
+        open_tasks = [i for i in read_backlog() if i.get("status") == "in_progress"]
+        if open_tasks:
+            print(f"✗ No active task for session {SESSION}. Open tasks:")
+            for t in open_tasks:
+                print(f"  [{t['id']}] {t['name']}")
+            print(f"  → /task fail <task_id> \"reason\"")
+        else:
+            print(f"✗ No in_progress tasks found")
 
 # ── Main ───────────────────────────────────────────────────────────
 if __name__ == "__main__" or True:
@@ -266,6 +317,7 @@ if __name__ == "__main__" or True:
 ```
 
 ## Rules
+- **`done`/`log` 실행 전에 반드시 해당 작업 관련 변경사항을 git commit한다.** 커밋 없이 task를 완료 처리하지 말 것.
 - The `locked_update` function handles the entire read→modify→write cycle under a single lock — always use it, never read/write separately.
 - Keep JSON pretty-printed (indent=2).
 - Non-experiment items: `script=null`, `config={}`, `args=[]`.
