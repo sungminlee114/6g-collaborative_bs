@@ -1,6 +1,6 @@
 # Related Works: 6G O-RAN + On-device AI for Collaborative Base Stations
 
-> 88편 논문 목록 및 요약 (2023–2026.03). 연구 갭 분석/연구 방향 제안은 `research_and_experiments.md` §9-11 참조.
+> 99편 논문 목록 및 요약 (2023–2026.03). 연구 갭 분석/연구 방향 제안은 `research_and_experiments.md` §9-11 참조.
 
 ---
 
@@ -16,6 +16,7 @@
 9. [추가 발굴 논문](#4-추가-발굴-논문-18편-웹서치-기반)
 10. [UE Feature Vector / Representation 추출 관련 연구](#5-ue-feature-vector--representation-추출-관련-연구)
 11. [Site-Adaptive Channel Estimation & Attention in FL](#6-site-adaptive-channel-estimation--attention-in-fl-8편)
+12. [Cluster J: 6G ELAA / XL-MIMO 채널 추정](#cluster-j-6g-elaa--xl-mimo-채널-추정)
 
 ---
 
@@ -54,6 +55,13 @@ Cluster F: 시뮬레이션 & 데이터셋 (3편)
   ├─ F1: Sionna RT (NVIDIA)
   ├─ F2: DeepTelecom (Wang-ZJU)
   └─ F3: SpectrumFM Foundation Model (Zhou-Chae)
+
+Cluster J: 6G ELAA / XL-MIMO 채널 추정 (11편)
+  ├─ J1: 서베이 & 튜토리얼 (Lu, Long, Zeng, Xu-Larsson)
+  ├─ J2: DL 기반 CE (XLCNet, Deep Unrolling, LLM4XCE)
+  ├─ J3: Near-field 빔 훈련 (Ning-TMC)
+  ├─ J4: 분산/구조적 CE (Decentralized BB, Sub-array)
+  └─ J5: ISAC + ELAA (Wang-UESTC)
 ```
 
 **스토리라인 흐름:**
@@ -891,6 +899,116 @@ Cluster F: 시뮬레이션 & 데이터셋 (3편)
 
 ---
 
+## Cluster J: 6G ELAA / XL-MIMO 채널 추정
+
+> 6G의 핵심 기술인 ELAA(Extremely Large Aperture Array) / XL-MIMO의 근거리장(near-field) 채널 추정, 빔 훈련, 분산 처리 관련 논문. 수백~수천 안테나 배열에서 구형파(spherical wave) 전파, 공간 비정상성(spatial non-stationarity), polar-domain 표현 등 새로운 도전과제를 다룸.
+
+### J1: ELAA/XL-MIMO 서베이 & 튜토리얼
+
+#### [P89] A Tutorial on Near-Field XL-MIMO Communications Towards 6G ⭐
+- **저자**: Lu, Zeng, You, Han, Zhang, Wang, Dong, Jin, Wang, Jiang, You, Zhang
+- **연도**: 2024, IEEE Communications Surveys & Tutorials / arXiv:2310.11044
+- **PDF**: `papers/XL_MIMO_Tutorial_Near_Field_6G_2310.11044.pdf`
+- **핵심 기여**: **XL-MIMO 근거리장 통신 종합 튜토리얼**. Near-field beam codebook, beam training, channel estimation, DAM (Delay Alignment Modulation) 전송 설계 포괄. Rayleigh distance가 수십~수백m로 확대 → far-field 가정 깨짐.
+- **주요 결과**: XL-MIMO는 5G massive MIMO 대비 10배+ 안테나 → beamfocusing (3D 초점), near-field 영역에서 angle+distance 동시 추정 필요
+- **강점**: IEEE COMST 게재, XL-MIMO 분야 표준 참조 논문
+- **관련도**: ★★★★★ — **프로젝트의 ELAA 확장 방향의 기초 레퍼런스. P33 (Bjornson/Chae 6G MIMO 튜토리얼)의 근거리장 확장판.**
+
+#### [P90] Channel Estimation for 6G Near-Field Wireless Communications: A Comprehensive Survey
+- **저자**: Long, Ye, Moretti, Morelli, Sanguinetti, Chen, Wang
+- **연도**: 2025, arXiv:2507.23526
+- **PDF**: `papers/NF_CE_6G_Survey_2507.23526.pdf`
+- **핵심 기여**: **근거리장 채널 추정 기법 종합 서베이**. EM 파동 관점에서 근거리장/원거리장 경계 정의, 주류 근거리장 채널 모델 소개, 단일/다중 사용자 + 단일/다중 캐리어 시스템별 추정 기법 체계적 분류.
+- **강점**: 20+ 대표 논문 비교, 추정 정확도-복잡도-파일럿 오버헤드 trade-off 분석
+- **관련도**: ★★★★★ — **ELAA 채널 추정의 최신 종합 레퍼런스. 프로젝트가 ELAA로 확장 시 필수 인용.**
+
+#### [P91] Recent Advances in Near-Field Beam Training and Channel Estimation for XL-MIMO Systems
+- **저자**: Zeng, Wang, Li, Hao, Chu, Xie, Wang, Pham
+- **연도**: 2025, arXiv:2504.05578
+- **PDF**: `papers/NF_Beam_Training_CE_XL_MIMO_Survey_2504.05578.pdf`
+- **핵심 기여**: XL-MIMO 빔 훈련 + 채널 추정 최신 기법 종합 리뷰. Polar-domain codebook, hierarchical beam training, CS-based/DL-based CE 분류. 미해결 과제 제시.
+- **강점**: Beam training과 CE를 동시에 다루는 체계적 분류법
+- **관련도**: ★★★★☆ — 빔 훈련 + CE 통합 관점에서 프로젝트 확장 방향 참고
+
+#### [P92] Distributed Signal Processing for ELAA Systems: State-of-the-Art and Future Directions
+- **저자**: Xu, Larsson, Jorswieck, Li, Jin, Chang
+- **연도**: 2024-2025, IEEE JSTSP / arXiv:2407.16121
+- **PDF**: `papers/Distributed_SP_ELAA_2407.16121.pdf`
+- **핵심 기여**: **ELAA 분산 신호처리 종합 개관**. 안테나 수 증가에 따른 interconnection 비용 + 계산 복잡도 병목 → 분산 SP 알고리즘 필요. 분산 CE, 분산 빔포밍, 분산 검출 포괄.
+- **강점**: Larsson (Linköping) 공저, ELAA의 분산 처리 필요성을 체계적으로 정리
+- **관련도**: ★★★★★ — **ELAA에서 분산/협력 처리의 필요성 = 프로젝트의 FL + per-BS 프레임워크와 직접 연결. Sub-array 단위 로컬 처리 → 전역 집계 패턴이 FL aggregation과 구조적으로 동일.**
+
+### J2: DL 기반 XL-MIMO 채널 추정
+
+#### [P93] Lightweight DL-Based Channel Estimation for XL-MIMO (XLCNet)
+- **저자**: Dong et al. (NUAA)
+- **연도**: 2024, IEEE TVT / arXiv:2402.08916
+- **PDF**: `papers/XLCNet_Lightweight_CE_XL_MIMO_2402.08916.pdf`
+- **핵심 기여**: **XLCNet — near-field + far-field 모두 지원하는 경량 CE 네트워크**. 2D Conv + shortcut (ReEsNet 유사 구조). C-XLCNet: pruning + quantization으로 10x 복잡도 감소, 36x 모델 크기 감소.
+- **주요 결과**: XLCNet이 NMSE 및 spectral efficiency에서 기존 방법 능가, C-XLCNet은 제한적 성능 저하로 경량화
+- **관련도**: ★★★★★ — **ReEsNet 유사 구조 + near-field 대응 = 프로젝트의 estimator를 ELAA로 확장하는 직접적 참고. 경량화 기법도 on-device 배포에 활용 가능.**
+
+#### [P94] Channel Estimation for Wideband XL-MIMO: A Constrained Deep Unrolling Approach
+- **저자**: Zheng et al.
+- **연도**: 2025, arXiv:2505.07717
+- **PDF**: `papers/Wideband_XL_MIMO_CE_Deep_Unrolling_2505.07717.pdf`
+- **핵심 기여**: MAP 문제로 CE 정형화 → PGD 알고리즘을 deep unrolling. Learnable step sizes + NN proximal mapping으로 채널 prior 암묵적 학습. Wideband + near-field + beam squint 동시 처리.
+- **관련도**: ★★★★☆ — Model-driven DL 접근이 프로젝트의 data-driven 접근과 보완적
+
+#### [P95] LLM4XCE: Large Language Models for XL-MIMO Channel Estimation
+- **저자**: Li, Li, Dong (NUAA)
+- **연도**: 2025, arXiv:2512.08955
+- **PDF**: `papers/LLM4XCE_XL_MIMO_CE_2512.08955.pdf`
+- **핵심 기여**: **LLM의 semantic modeling 능력을 XL-MIMO CE에 활용**. Hybrid-field (near+far) 시나리오에서 spatial-channel representation 복원. Foundation model → CE 적용의 최신 사례.
+- **관련도**: ★★★★☆ — Foundation model 기반 CE의 최신 방향. P19 (Multi-task PHY LLM)의 XL-MIMO 확장판.
+
+### J3: Near-Field 빔 훈련
+
+#### [P96] Near-Field Beam Training for XL-MIMO Based on Deep Learning
+- **저자**: Ning et al.
+- **연도**: 2024, IEEE Transactions on Mobile Computing / arXiv:2406.03249
+- **PDF**: `papers/NF_Beam_Training_XL_MIMO_DL_2406.03249.pdf`
+- **핵심 기여**: CNN 기반 근거리장 빔 훈련. Polar-domain codebook에서 angle+distance 동시 추정. Historical data 활용으로 beam training overhead 대폭 감소.
+- **관련도**: ★★★★☆ — DL 빔 훈련이 P34 (SSBA)의 near-field 확장에 해당
+
+### J4: ELAA 분산/구조적 CE
+
+#### [P97] Channel Estimation for XL-MIMO with Decentralized Baseband Processing
+- **저자**: Tang, Wang, Pan, Zeng, Chen, Yu, Xiao, de Lamare, Wang (Southeast Univ / KTH / PUC-Rio)
+- **연도**: 2025, arXiv:2501.17059
+- **PDF**: `papers/Decentralized_CE_XL_MIMO_2501.17059.pdf`
+- **핵심 기여**: **Hybrid analog-digital XL-MIMO에서 분산 baseband 처리 기반 CE**. 2단계: (1) Local sparse reconstruction (SBL-GNN) per sub-array, (2) Global fusion + refinement (variational message passing). 로컬 추정 → 전역 집계 구조.
+- **주요 결과**: SBL-GNN이 기존 centralized/decentralized 방법 대비 우수한 추정 성능 + 낮은 복잡도
+- **강점**: **GNN으로 채널 계수 간 dependency 캡처, Bayesian 프레임워크**
+- **관련도**: ★★★★★ — **"Local reconstruction → Global refinement" = FL의 "Local training → Global aggregation"과 구조적으로 동일. 프로젝트의 FL 프레임워크를 ELAA sub-array 구조로 확장하는 핵심 참고.**
+
+#### [P98] A Novel Pilot Scheme for Sub-array Structured ELAA in XL-MIMO
+- **저자**: (arXiv:2512.10478)
+- **연도**: 2025, arXiv:2512.10478
+- **PDF**: `papers/Sub_Array_ELAA_Pilot_2512.10478.pdf`
+- **핵심 기여**: Sub-array 구조 ELAA에서의 다중 사용자 UL CE 파일럿 설계. 공간 비정상성 (spatial non-stationarity) — 각 sub-array가 서로 다른 user subset을 "볼" 수 있음 (visibility region).
+- **관련도**: ★★★★☆ — Sub-array별 다른 채널 통계 = BS별 다른 채널 통계와 유사한 구조
+
+### J5: ISAC + ELAA
+
+#### [P99] Integrated Channel Estimation and Sensing for Near-Field ELAA Systems
+- **저자**: Wang, Fang, Li, Ning (UESTC / Stevens Institute)
+- **연도**: 2026, arXiv:2601.18333
+- **PDF**: `papers/Integrated_CE_Sensing_NF_ELAA_2601.18333.pdf`
+- **핵심 기여**: ELAA 근거리장 OFDM에서 **CE + 센싱 통합**. Non-orthogonal pilot으로 다중 사용자 수용. Tensor decomposition (CPD/BTD)으로 채널 파라미터 + 사용자 위치 동시 추정.
+- **주요 결과**: 파일럿 수가 사용자 수보다 적어도 uniqueness 보장, CS 대비 우수한 CE 정확도
+- **관련도**: ★★★★☆ — ISAC + ELAA의 최신 연구. 후보 #5 (Sensing-Aided Cooperative CE)의 ELAA 확장 방향.
+
+### J 종합: 프로젝트와의 연결
+
+**ELAA/XL-MIMO가 프로젝트에 주는 시사점:**
+1. **Sub-array = Sub-BS**: ELAA의 sub-array 단위 로컬 처리 + 전역 집계 (P92, P97) ↔ FL의 per-BS 로컬 학습 + 전역 집계 — **구조적으로 동일한 프레임워크**
+2. **Spatial non-stationarity = Site heterogeneity**: ELAA에서 각 sub-array가 다른 채널 통계를 경험 (P98) ↔ 각 BS가 다른 전파 환경 — **같은 문제의 다른 스케일**
+3. **Near-field CE**: 기존 far-field LS/LMMSE가 깨짐 → DL 기반 CE의 가치가 더 커짐 (P93, P94)
+4. **경량화**: C-XLCNet (P93)의 pruning/quantization이 on-device 배포 (O-DU급)에 직접 활용 가능
+
+---
+
 ## 7. 미분류 추가 논문 (PDF 보유, 본문 미정리)
 
 #### [P87] Distributed AI Platform for the 6G RAN
@@ -912,4 +1030,4 @@ Cluster F: 시뮬레이션 & 데이터셋 (3편)
 
 ---
 
-*Updated: 2026-03-18 | 88 papers + 1 duplicate analyzed*
+*Updated: 2026-03-18 | 99 papers (88 previous + 11 ELAA/XL-MIMO) + 1 duplicate analyzed*
