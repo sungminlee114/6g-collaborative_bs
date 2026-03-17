@@ -191,8 +191,10 @@ tr:hover { background: var(--surface-hover); }
 .metric-box { text-align: center; padding: 20px 14px; }
 
 /* ── Chart container ── */
-.chart-wrap { position: relative; height: 260px; margin: 8px 0; max-width: 560px; }
-.grid-2 .chart-wrap { max-width: none; }
+.chart-wrap { position: relative; height: 240px; margin: 8px 0; }
+.chart-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px;
+}
 
 /* ── Empty state ── */
 .empty { color: var(--text-tertiary); text-align: center; padding: 48px 24px; font-size: 13px; }

@@ -8,6 +8,9 @@ let selectedExp = localStorage.getItem('dash_exp') || null;
 let selectedRunId = localStorage.getItem('dash_run') || null;
 let backlogItems = [];
 let metricsXAxis = 'epoch'; // 'epoch' | 'time'
+let _expDragging = false;
+const _expResizeHandle = document.createElement('div');
+_expResizeHandle.className = 'exp-resize';
 
 // ── Theme ──
 const CHART_TICK = '#4a5060';
@@ -86,9 +89,34 @@ function chartLegend() {
 function baseChartOpts() {
   return {
     responsive: true, maintainAspectRatio: false, animation: false,
-    interaction: { mode: 'index', intersect: false },
-    plugins: { legend: chartLegend(), tooltip: { backgroundColor: '#1f2328ee', titleFont: { size: 12 }, bodyFont: { size: 11 }, padding: 10, cornerRadius: 6 } },
+    interaction: { mode: 'nearest', intersect: true },
+    plugins: {
+      legend: chartLegend(),
+      tooltip: { backgroundColor: '#1f2328ee', titleFont: { size: 12 }, bodyFont: { size: 11 }, padding: 10, cornerRadius: 6 },
+      zoom: {
+        pan: { enabled: true, mode: 'x' },
+        zoom: { drag: { enabled: true, backgroundColor: 'rgba(9,105,218,0.08)', borderColor: 'var(--blue)', borderWidth: 1 }, mode: 'x' },
+      },
+    },
   };
+}
+
+// Metric grouping: keys sharing a unit go on the same chart
+const METRIC_UNITS = {
+  loss: { pattern: /loss/i, unit: 'Loss' },
+  nmse_db: { pattern: /nmse.*db|db.*nmse/i, unit: 'NMSE (dB)' },
+  db: { pattern: /db/i, unit: 'dB' },
+  acc: { pattern: /acc/i, unit: 'Accuracy' },
+  lr: { pattern: /^lr$|learning.rate/i, unit: 'Learning Rate' },
+  snr: { pattern: /snr/i, unit: 'SNR (dB)' },
+  pct: { pattern: /pct|percent/i, unit: '%' },
+};
+
+function _metricUnit(key) {
+  for (const [, v] of Object.entries(METRIC_UNITS)) {
+    if (v.pattern.test(key)) return v.unit;
+  }
+  return key; // fallback: use key name as unit
 }
 
 function groupMetricKeys(keys) {
@@ -97,16 +125,29 @@ function groupMetricKeys(keys) {
   const used = new Set();
   for (const k of keyList) {
     if (used.has(k)) continue;
+    const unit = _metricUnit(k);
     const group = [k]; used.add(k);
     for (const k2 of keyList) {
       if (used.has(k2)) continue;
-      if (k.includes('loss') && k2.includes('loss')) { group.push(k2); used.add(k2); }
-      else if (k.includes('db') && k2.includes('db')) { group.push(k2); used.add(k2); }
-      else if (k.includes('lr') && k2.includes('lr')) { group.push(k2); used.add(k2); }
+      if (_metricUnit(k2) === unit) { group.push(k2); used.add(k2); }
     }
     chartGroups.push(group);
   }
   return chartGroups;
+}
+
+function _groupYTitle(group, runMetricUnits) {
+  // 1. Check explicit metric_units from tracker (e.g. {"val_nmse_db": "NMSE (dB)"})
+  if (runMetricUnits) {
+    for (const k of group) {
+      if (runMetricUnits[k]) return runMetricUnits[k];
+    }
+  }
+  // 2. Auto-detect from key name patterns
+  const units = [...new Set(group.map(k => _metricUnit(k)))];
+  if (units.length === 1 && units[0] !== group[0]) return units[0];
+  if (group.length === 1) return group[0];
+  return units[0];
 }
 
 // ── Persist UI state ──
@@ -510,8 +551,9 @@ async function selectExp(exp) {
       <div class="chart-wrap" style="height:280px"><canvas id="exp-cmp"></canvas></div></div>`;
   }
   if (done.length >= 1) {
-    html += `<div class="card"><div class="card-header"><span class="card-title">Training Curves</span></div>
-      <div class="grid-2" id="exp-curves"></div></div>`;
+    html += `<div class="card"><div class="card-header"><span class="card-title">Training Curves</span>
+      <button class="btn" style="font-size:10px;padding:2px 8px" onclick="resetAllZoom()">Reset Zoom</button></div>
+      <div class="chart-grid" id="exp-curves"></div></div>`;
   }
   detail.innerHTML = html;
 
@@ -543,23 +585,33 @@ async function selectExp(exp) {
     Object.values(allMetrics).forEach(ms => ms.forEach(m => Object.keys(m).forEach(k => {
       if (!['t','step','epoch'].includes(k) && typeof m[k] === 'number') metricKeys.add(k);
     })));
-    curvesEl.innerHTML = [...metricKeys].map(k => `<div class="chart-wrap"><canvas id="expc-${k}"></canvas></div>`).join('');
-    [...metricKeys].forEach(k => {
-      const ctx = document.getElementById(`expc-${k}`);
+    const groups = groupMetricKeys(metricKeys);
+    curvesEl.innerHTML = groups.map((_, gi) => `<div class="chart-wrap"><canvas id="expc-${gi}"></canvas></div>`).join('');
+    groups.forEach((group, gi) => {
+      const ctx = document.getElementById(`expc-${gi}`);
       if (!ctx) return;
-      if (charts[`expc-${k}`]) charts[`expc-${k}`].destroy();
-      const datasets = done.slice(0, 8).map((r, ri) => {
-        const ms = allMetrics[r.info.id] || [];
-        return { label: r.info.name.split('/').pop(), data: ms.map(m => m[k] ?? null),
-          borderColor: COLORS[ri % COLORS.length], backgroundColor: 'transparent', tension: 0.3, pointRadius: 0, borderWidth: 2 };
-      }).filter(ds => ds.data.some(v => v !== null));
+      const ckey = `expc-${gi}`;
+      if (charts[ckey]) charts[ckey].destroy();
+      const datasets = [];
+      for (const k of group) {
+        done.slice(0, 8).forEach((r, ri) => {
+          const ms = allMetrics[r.info.id] || [];
+          const data = ms.map(m => m[k] ?? null);
+          if (!data.some(v => v !== null)) return;
+          datasets.push({ label: `${r.info.name.split('/').pop()} · ${k}`,
+            data, borderColor: COLORS[ri % COLORS.length], backgroundColor: 'transparent',
+            tension: 0.3, pointRadius: 0, borderWidth: 2,
+            borderDash: group.indexOf(k) > 0 ? [4, 2] : [] });
+        });
+      }
       if (!datasets.length) return;
       const maxLen = Math.max(...datasets.map(d => d.data.length));
-      charts[`expc-${k}`] = new Chart(ctx, { type: 'line',
+      const yTitle = _groupYTitle(group);
+      charts[ckey] = new Chart(ctx, { type: 'line',
         data: { labels: Array.from({length: maxLen}, (_, i) => i), datasets },
         options: { ...baseChartOpts(),
-          plugins: { ...baseChartOpts().plugins, title: { display: true, text: k, color: CHART_TICK, font: { size: 13, weight: '600' } } },
-          scales: chartScalesXY('Epoch', k) } });
+          plugins: { ...baseChartOpts().plugins, title: { display: true, text: group.join(', '), color: CHART_TICK, font: { size: 13, weight: '600' } } },
+          scales: chartScalesXY('Epoch', yTitle) } });
     });
   }
 }
@@ -811,6 +863,10 @@ function _metricsXLabels(metrics, axis) {
   return { labels: metrics.map((m, i) => m.epoch ?? m.step ?? i), xTitle: 'Epoch' };
 }
 
+function resetAllZoom() {
+  Object.values(charts).forEach(c => { try { c.resetZoom(); } catch {} });
+}
+
 function switchMetricsAxis(targetId, runId, axis) {
   metricsXAxis = axis;
   showRunMetrics(targetId, runId);
@@ -847,8 +903,9 @@ async function showRunMetrics(targetId, runId) {
       body.innerHTML = `<div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
         <div class="run-metrics">${summary}</div>
         <span class="run-meta">${metrics.length} entries</span>${axisToggle}
+        <button class="btn" style="font-size:10px;padding:2px 8px" onclick="resetAllZoom()">Reset Zoom</button>
       </div>
-      <div class="grid-2" id="${pfx}-charts">${chartGroups.map((_, i) => '<div class="chart-wrap" style="height:200px"><canvas id="' + pfx + '-chart-' + i + '"></canvas></div>').join('')}</div>`;
+      <div class="chart-grid" id="${pfx}-charts">${chartGroups.map((_, i) => '<div class="chart-wrap" style="height:200px"><canvas id="' + pfx + '-chart-' + i + '"></canvas></div>').join('')}</div>`;
     } else {
       // Update summary + axis buttons only
       const summaryEl = body.querySelector('.run-metrics');
@@ -857,9 +914,11 @@ async function showRunMetrics(targetId, runId) {
       if (countEl) countEl.textContent = metrics.length + ' entries';
     }
 
+    const run = allRuns.find(r => r.info.id === runId);
+    const mu = run?.info?.metric_units || {};
     chartGroups.forEach((group, gi) => {
       const ckey = pfx + '-' + gi;
-      const yTitle = group.length === 1 ? group[0] : group.join(', ');
+      const yTitle = _groupYTitle(group, mu);
       const datasets = group.map((k, ki) => ({
         label: k, data: metrics.map(m => m[k] ?? null),
         borderColor: COLORS[ki % COLORS.length], backgroundColor: 'transparent', tension: 0.3, pointRadius: 0, borderWidth: 2
@@ -966,10 +1025,6 @@ function renderSidebar(s) {
 }
 
 // ── Exp sidebar resize ──
-const _expResizeHandle = document.createElement('div');
-_expResizeHandle.className = 'exp-resize';
-let _expDragging = false;
-
 (function() {
   const sidebar = document.getElementById('exp-list');
   if (!sidebar) return;

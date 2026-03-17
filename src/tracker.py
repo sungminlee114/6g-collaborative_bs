@@ -130,6 +130,7 @@ class RunInfo:
     ended_at: Optional[str] = None
     tags: dict = field(default_factory=dict)
     config: dict = field(default_factory=dict)
+    metric_units: dict = field(default_factory=dict)  # {"loss": "Loss", "val_nmse_db": "NMSE (dB)"}
     result: Optional[dict] = None
     error: Optional[str] = None
     pid: Optional[int] = None
@@ -218,6 +219,7 @@ class Tracker:
                  tags: dict = None, config: dict = None,
                  purpose: str = None, variables: dict = None,
                  hypothesis: str = None, eval_criteria: str = None,
+                 metric_units: dict = None,
                  capture_output: bool = False):
         self.name = name
 
@@ -235,6 +237,7 @@ class Tracker:
         self.variables = variables
         self.hypothesis = hypothesis
         self.eval_criteria = eval_criteria
+        self.metric_units = dict(metric_units) if metric_units else {}
         self._capture = capture_output
 
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -346,7 +349,7 @@ class Tracker:
             id=self.run_id, name=self.name, experiment=self.experiment,
             status=status, started_at=self._started_at,
             ended_at=_now() if status != "running" else None,
-            tags=self.tags, config=self.config,
+            tags=self.tags, config=self.config, metric_units=self.metric_units,
             result=self._result,
             error=error, pid=os.getpid(), version=self._version,
         )

@@ -394,6 +394,13 @@ def train_config(config_name: str, gpu: int,
             "val_nmse_db": {bs: [] for bs in ALL_BS},
         }
 
+        # Early stopping (conservative)
+        ES_PATIENCE = 15
+        ES_MIN_ROUNDS = 20
+        best_avg_db = float("inf")
+        best_round = 0
+        best_states = None
+
         for rnd in range(fl_rounds):
             for bs in ALL_BS:
                 models[bs].train()
@@ -418,10 +425,18 @@ def train_config(config_name: str, gpu: int,
 
             avg_db = np.mean(avg_val_db_list)
             avg_train = np.mean([history["train_nmse"][bs][-1] for bs in ALL_BS])
+
+            # Track best (lower dB = better)
+            if avg_db < best_avg_db:
+                best_avg_db = avg_db
+                best_round = rnd
+                best_states = {bs: {k: v.clone() for k, v in models[bs].state_dict().items()} for bs in ALL_BS}
+
             log_entry = {
                 "round": rnd,
                 "avg_val_nmse_db": avg_db,
                 "avg_train_nmse": avg_train,
+                "best_avg_db": best_avg_db,
             }
             # Add per-BS val (for pretrain/test split tracking)
             for bs in PRETRAIN_BS:
@@ -431,14 +446,31 @@ def train_config(config_name: str, gpu: int,
             run.log(**log_entry)
 
             if (rnd + 1) % 5 == 0:
-                print(f"  Round {rnd+1}/{fl_rounds}: avg_val={avg_db:.2f} dB")
+                print(f"  Round {rnd+1}/{fl_rounds}: avg_val={avg_db:.2f} dB (best={best_avg_db:.2f} @r{best_round})")
+
+            # Early stop check
+            if rnd >= ES_MIN_ROUNDS and (rnd - best_round) >= ES_PATIENCE:
+                print(f"  Early stop at round {rnd+1} (best was round {best_round+1})")
+                run.log_message(f"Early stopped at round {rnd+1}, best round {best_round+1}")
+                break
+
+        # Restore best model states
+        if best_states is not None:
+            for bs in ALL_BS:
+                models[bs].load_state_dict(best_states[bs])
+
+        # ── Evaluate best model ──
+        final_db = {}
+        for bs in ALL_BS:
+            _, v_db = evaluate(models[bs], val_loaders[bs], device)
+            final_db[str(bs)] = v_db
 
         # ── Save ──
         SAVE_DIR.mkdir(parents=True, exist_ok=True)
         for bs in ALL_BS:
             torch.save(models[bs].state_dict(), SAVE_DIR / f"{config_name}_bs{bs}.pt")
 
-        final_db = {str(bs): history["val_nmse_db"][bs][-1] for bs in ALL_BS}
+        total_rounds = len(history["round"])
         result = {
             "config_name": config_name,
             "config": cfg,
@@ -451,6 +483,9 @@ def train_config(config_name: str, gpu: int,
             "avg_nmse_db": float(np.mean(list(final_db.values()))),
             "avg_pretrain_bs": float(np.mean([final_db[str(bs)] for bs in PRETRAIN_BS])),
             "avg_test_bs": float(np.mean([final_db[str(bs)] for bs in TEST_BS])),
+            "best_round": best_round,
+            "total_rounds": total_rounds,
+            "early_stopped": total_rounds < fl_rounds,
             "history": {
                 "round": history["round"],
                 "val_nmse_db": {str(k): v for k, v in history["val_nmse_db"].items()},
