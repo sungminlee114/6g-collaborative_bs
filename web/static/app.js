@@ -406,7 +406,7 @@ function _buildExpSidebarHtml() {
         runsHtml += `<div class="exp-run-group${isGroupOpen ? ' open' : ''}">
           <div class="exp-run exp-run-header${anyActive && !isGroupOpen ? ' active' : ''}" onclick="event.stopPropagation(); toggleRunGroup('${exp}','${name}')">
             <span class="exp-run-arrow">${isGroupOpen ? '▾' : '▸'}</span>
-            <span class="exp-run-dot ${_runDot(nameRuns[0])}"></span>${name}<span class="exp-run-count">${nameRuns.length}</span>
+            <span class="exp-run-dot ${_runDot(nameRuns.find(r => _runDot(r)==='running') || nameRuns[0])}"></span>${name}<span class="exp-run-count">${nameRuns.length}</span>
           </div>`;
         if (isGroupOpen) {
           runsHtml += nameRuns.map(r => {
@@ -449,11 +449,16 @@ function selectRun(runId) {
   // Ensure parent exp is open
   const exp = run.info.experiment;
   if (selectedExp !== exp) { selectedExp = exp; _ss('exp', exp); }
-  // Highlight in sidebar
-  document.querySelectorAll('.exp-run').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.exp-item').forEach(el => el.classList.remove('active'));
-  const activeEl = document.querySelector(`.exp-run[onclick*="${runId}"]`);
-  if (activeEl) activeEl.classList.add('active');
+  // Ensure run's name group is expanded (for duplicate names)
+  const name = run.info.name.split('/').pop();
+  const groupKey = `${exp}/${name}`;
+  const siblings = allRuns.filter(r => r.info.experiment === exp && r.info.name.split('/').pop() === name);
+  if (siblings.length > 1 && !expandedRunGroups.has(groupKey)) {
+    expandedRunGroups.add(groupKey);
+    localStorage.setItem('dash_expanded_groups', JSON.stringify([...expandedRunGroups]));
+  }
+  // Re-render sidebar to reflect state, then highlight
+  renderExpListOnly();
   // Render run detail in exp-detail
   showRunDetailInline(run);
 }

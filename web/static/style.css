@@ -407,6 +407,13 @@ select.form-input { cursor: pointer; }
 .exp-run-dot.done { background: var(--green); }
 .exp-run-dot.failed { background: var(--red); }
 .exp-run-dot.stale { background: var(--text-tertiary); }
+
+/* ── Run sub-groups (duplicate name collapsing) ── */
+.exp-run-group { margin: 0; }
+.exp-run-header { font-weight: 500; }
+.exp-run-arrow { font-size: 9px; color: var(--text-tertiary); width: 10px; flex-shrink: 0; }
+.exp-run-count { color: var(--text-tertiary); font-size: 10px; margin-left: auto; }
+.exp-run-child { padding-left: 42px; font-size: 11px; color: var(--text-tertiary); }
 .exp-detail {
   flex: 1; overflow-y: auto; padding: 24px; min-width: 0;
 }
