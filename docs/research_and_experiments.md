@@ -46,11 +46,15 @@ If this works -> "site foundation representation" -- much stronger than just col
 
 ## 2. Dataset
 
-- Sionna RT, Munich scene, 15 GHz mmWave, 400 MHz BW, 1024 subcarriers
-- 8 BS (fixed positions), 100 UE/snapshot, multiple snapshots (>=100)
-- 2x2 TX (4 ant), 1x1 RX cross-pol (2 ant) -> 8 antenna pairs
-- Pre-train BSs: [0..5], Test BSs: [6, 7]
+- Sionna RT, Munich scene, 6G ELAA multi-scale configs
+- 16 BS (UMi layout), 100 UE/snapshot, multiple snapshots (>=100)
+- ELAA TX: Small 16×16 (256), Base 32×16 (512), Big 32×32 (1024)
+- RX: 1×1 cross-pol (2 ant)
+- Dual-band: 15 GHz (FR3) + 28 GHz (FR2)
+- Subcarriers: 1024 (Small) / 2048 (Base) / 4096 (Big)
+- Pre-train BSs: [0..11], Test BSs: [12..15]
 - Storage: .npz per snapshot + metadata.parquet
+- Legacy: munich_uma8 (8 BS, 4 ant), munich_umi16 (16 BS, 4 ant)
 
 ---
 
@@ -368,6 +372,111 @@ src/
 - FL aggregation은 이 adaptive weight의 기반이 되는 Linear layer를 평균화
 - P80 (ANFR)은 channel attention이 FL heterogeneity를 **완화**할 수 있음을 보였으나, 이는 attention을 **shared feature의 일관성 필터**로 쓸 때
 - 우리 경우 SE는 **site-specific feature amplifier** 역할 → FL 평균화와 목적이 상충
+
+---
+
+## 12. 세팅 냉정 분석 & 6G ELAA 확장 전략
+
+### 12.1 현재 세팅 객관적 평가 (2026.03 기준)
+
+| 항목 | 현재 세팅 | 실제 5G NR | 6G 방향 | 평가 |
+|------|-----------|-----------|---------|------|
+| 주파수 | 28 GHz (FR2) | FR1: <6GHz, FR2: 24-52GHz | sub-THz (100-300 GHz) | 5G 수준, 6G 아님 |
+| BS 안테나 | 4 Tx | Macro 32-64T, Small cell 4-8T | ELAA 256-1024+ | 5G small cell 수준 |
+| UE 안테나 | 2 Rx | 2-4 Rx | 2-8 Rx | **현실적** |
+| 서브캐리어 | 1024 OFDM | FR2: 792-3168 SC | 유사 | **현실적** |
+| 채널 모델 | Sionna RT (뮌헨) | 3GPP 38.901 + RT | Site-specific RT | **현실적** |
+| Multi-cell | 8-16 BS, FL | 수십-수백 cell | O-RAN 협력 | 방향 맞음, 규모 작음 |
+
+**결론**: "6G 시스템 시뮬레이션" 주장은 과장. 정확히는 **5G FR2 small cell** 환경.
+프로젝트 가치는 시스템 세팅이 아니라 **FL + site-specific adaptation 프레임워크**에 있음.
+
+### 12.2 PACE-Net vs 우리 — 정직한 비교
+
+| 항목 | PACE-Net (Yang et al., Entropy 2025) | 우리 |
+|------|--------------------------------------|------|
+| 채널 모델 | Kronecker (통계적, i.i.d.) | Sionna RT (레이트레이싱) |
+| OFDM | 없음 (flat channel) | 1024 subcarrier |
+| BS 안테나 | 16 Tx | 4 Tx (더 작음) |
+| UE 안테나 | 16 Rx (**비현실적**) | 2 Rx (현실적) |
+| MIMO 구조 | 16×16 symmetric (학술용) | 2×4 (현실적) |
+| 네트워크 채널 | C=256 (antenna 수와 일치) | C=64 (VRAM 제약) |
+| Multi-cell | 없음 | 있음 (FL) |
+| Feature map 크기 | (B, 256, 16, 16) 작음 | (B, 64, 8, 1024) 큼 |
+
+**C=256 vs C=64 이유**: 논문은 spatial dim (16×16)이 작아 채널을 크게 가져갈 수 있음.
+우리는 1024 subcarrier 유지 때문에 feature map이 이미 크므로 (batch=260일 때 activation ~17 GB),
+C=256으로 올리면 ~70 GB로 단일 GPU 불가.
+
+### 12.3 FR2 mmWave 채널 추정 연구 현황
+
+FR2 DL 채널 추정은 **성숙했지만 dead는 아님** (2025-2026에도 논문 출판 중):
+- CNN/UNet mmWave MIMO CE (arxiv 2506.11714, 2025.06)
+- Dual-band massive MIMO extrapolation (arxiv 2601.06858, 2026.01)
+- Decentralized FL for GNN CE in O-RAN (IEEE ICMLCN 2025)
+
+**2025-2026 핫토픽 이동**:
+1. Near-field ELAA 채널 추정 (arxiv 2507.23526 — comprehensive survey)
+2. Sub-THz / THz UM-MIMO (IET Comms 2025, arxiv 2601.18333)
+3. RIS-aided 채널 추정
+4. Cross-band extrapolation (sub-6GHz → mmWave)
+5. ISAC (통합 센싱-통신)
+
+**FL + 채널 추정**은 아직 emerging 분야 — 경쟁 적음.
+
+### 12.4 Sionna 기반 6G ELAA 확장 전략
+
+#### 12.4.1 ELAA 물리 계층 구현
+
+6G ELAA의 핵심인 수천 개 안테나(5,000+) 환경에서 발생하는 **Near-field Beamfocusing** 효과를
+Sionna의 GPU 가속 레이 트레이싱(RT)으로 정밀하게 모델링 가능.
+
+- Sionna의 `SyntheticArray` 기능을 활용하여 ELAA 거대 위상 배열 구조 정의
+- 고주파수(15 GHz+)에서의 구형파(Spherical Wave) 특성 반영
+- Near-field 영역: Rayleigh distance가 수십-수백m로 확대 → far-field 가정 깨짐
+
+#### 12.4.2 dApp 로직 통합 (실시간 Closed-loop)
+
+dApp의 핵심은 **10ms 미만 실시간성**:
+
+1. Sionna RT에서 CIR(Channel Impulse Response) 추출
+2. AI 모델(dApp)의 입력으로 투입
+3. 추론된 빔포밍 가중치를 물리 계층에 적용
+4. Closed-loop 시뮬레이션으로 실시간 제어 지연 시간 정량화
+
+SIMD 가속 개념 반영하여 AI 워크로드 실행 중 latency budget 분석 필요.
+
+### 12.5 데이터셋 정당성 설득 논리 (Scientific Justification)
+
+리뷰어 예상 질문: **"시뮬레이션 데이터가 실제 환경을 대변할 수 있는가?"**
+
+#### Step 1: Differentiable RT를 통한 Sim-to-Real 간극 해소
+
+> "본 연구의 데이터셋은 고정된 값이 아니다. 실세계에서 수집된 소량의 피드백을 통해
+> Sionna의 재질 파라미터(반사율 등)를 역전파(Backpropagation)로 캘리브레이션하여
+> 실제 환경에 최적화된 디지털 트윈 데이터를 생성한다."
+
+참고: Differentiable Ray Tracing (Hoydis et al., Sionna RT)
+
+#### Step 2: Site-specific 데이터의 가치 강조
+
+> "6G 기지국은 고유한 주변 지형지물에 종속적이다. Sionna로 생성된 고정밀 LoD3
+> 시나리오 데이터는 실제 기지국이 직면할 전파 환경을 가장 사실적으로 모사한
+> 'Site-specific' 지능의 토대다."
+
+참고: NVIDIA 6G site-specific 연구, Traciverse, DeepTelecom 파이프라인
+
+#### Step 3: 데이터 생성 파이프라인의 표준성
+
+> "본 데이터셋 생성 방식은 최신 6G 연구 트렌드인 Traciverse 및 DeepTelecom
+> 파이프라인과 일관성을 유지하며, 3GPP 및 O-RAN 규격에 부합하는 채널 모델을 따른다."
+
+### 12.6 Nature Comms급 완성도를 위한 추가 실험
+
+1. **Heterogeneity Test**: 동일 데이터셋으로 학습된 모델이 이질적 안테나 구성
+   (ELAA vs Standard MIMO)에서도 성능 유지 검증
+2. **Self-Evolving Proof**: 운영 중 실시간 데이터 수신 → 모델 자가 진화 →
+   NMSE 점진적 개선 시뮬레이션 입증
 
 ---
 

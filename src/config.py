@@ -5,7 +5,7 @@ from pathlib import Path
 import yaml
 
 CONFIGS_DIR = Path(__file__).resolve().parent.parent / "assets" / "configs"
-DEFAULT_PRESET = "munich_umi16"
+DEFAULT_PRESET = "munich_elaa_s_1k_15g"
 
 
 @dataclass
@@ -132,8 +132,10 @@ class DatasetConfig:
     snr_range_db: Tuple[float, float] = (0.0, 30.0)
 
     # Train/val/test split (by BS)
-    pretrain_bs_ids: List[int] = field(default_factory=list)
+    train_bs_ids: List[int] = field(default_factory=list)
+    val_bs_ids: List[int] = field(default_factory=list)
     test_bs_ids: List[int] = field(default_factory=list)
+    pretrain_bs_ids: List[int] = field(default_factory=list)  # legacy alias for train_bs_ids
 
     @classmethod
     def from_scene(cls, scene: SceneConfig, **overrides) -> "DatasetConfig":
