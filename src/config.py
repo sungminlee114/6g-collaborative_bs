@@ -46,6 +46,7 @@ class SceneConfig:
     max_depth: int = 0
     max_num_paths_per_src: int = 0
     samples_per_src: int = 0
+    synthetic_array: bool = True
 
     # UE sampling config
     num_ue: int = 0

@@ -1,8 +1,16 @@
 """Multi-snapshot Sionna RT channel data generation.
 
+Supports two modes:
+  - Independent: each snapshot samples new UE positions (default, for CE accuracy)
+  - Temporal: UEs follow mobility trajectories across snapshots (for CE scheduling)
+
 Usage:
-    python -m src.dataset_operation.generate --preset munich_umi16
-    python -m src.dataset_operation.generate --preset munich_uma8 --num_ue 200
+    # Independent (default)
+    python -m src.dataset_operation.generate --preset munich_elaa_s_1k_15g
+
+    # Temporal trajectory
+    python -m src.dataset_operation.generate --preset munich_elaa_s_1k_15g \
+        --mode temporal --dt_ms 10 --velocities 0,1,8.3
 """
 import argparse
 import json
@@ -98,20 +106,41 @@ def sample_ue_positions(radio_map, num_ue, cfg):
                 "x": float(positions[tx_id, idx, 0]),
                 "y": float(positions[tx_id, idx, 1]),
                 "z": float(positions[tx_id, idx, 2]),
-                # F_UE: Device features
                 "ue_device_type": dev_type_idx,
                 "ue_rx_rows": dev[0],
                 "ue_rx_cols": dev[1],
                 "ue_polarization": dev[2],
-                # F_UE: Mobility (velocity = 0 for static; computed across snapshots later)
                 "vx": 0.0,
                 "vy": 0.0,
             })
     return ue_infos, counts
 
 
-def generate_snapshot(scene, cfg, snapshot_id: int, seed: int, data_dir: Path):
-    """Generate one snapshot: sample UEs, compute paths, extract CIR/CFR, save."""
+def compute_radio_map(scene, cfg):
+    """Compute radio map (expensive — call once, reuse for temporal mode)."""
+    from sionna.rt import RadioMapSolver
+
+    rm_solver = RadioMapSolver()
+    return rm_solver(
+        scene=scene, cell_size=(1.0, 1.0),
+        samples_per_tx=10_000_000, max_depth=cfg.max_depth,
+        los=True, specular_reflection=True, diffuse_reflection=True,
+        refraction=True, diffraction=True, edge_diffraction=True,
+    )
+
+
+def generate_snapshot(scene, cfg, snapshot_id: int, seed: int, data_dir: Path,
+                      ue_infos=None, radio_map=None):
+    """Generate one snapshot: place UEs, compute paths, extract CIR/CFR, save.
+
+    Args:
+        ue_infos: Pre-defined UE positions (temporal mode). If None, samples new
+                  positions from radio_map (independent mode).
+        radio_map: Pre-computed radio map. If None and ue_infos is None, computes one.
+
+    Returns:
+        ue_infos: list of UE info dicts with positions and metadata.
+    """
     from sionna.rt import Receiver, PathSolver, RadioMapSolver, subcarrier_frequencies
     import drjit as dr
 
@@ -122,18 +151,18 @@ def generate_snapshot(scene, cfg, snapshot_id: int, seed: int, data_dir: Path):
     for name in rx_names:
         scene.remove(name)
 
-    # Compute radio map
-    rm_solver = RadioMapSolver()
-    radio_map = rm_solver(
-        scene=scene, cell_size=(1.0, 1.0),
-        samples_per_tx=10_000_000, max_depth=cfg.max_depth,
-        los=True, specular_reflection=True, diffuse_reflection=True,
-        refraction=True, diffraction=True, edge_diffraction=True,
-    )
-
-    # Sample UE positions
-    ue_infos, counts = sample_ue_positions(radio_map, cfg.num_ue, cfg)
-    print(f"  Snapshot {snapshot_id}: UEs per BS = {counts}")
+    # Get UE positions
+    if ue_infos is None:
+        # Independent mode: sample new positions each snapshot
+        if radio_map is None:
+            radio_map = compute_radio_map(scene, cfg)
+        ue_infos, counts = sample_ue_positions(radio_map, cfg.num_ue, cfg)
+        print(f"  Snapshot {snapshot_id}: UEs per BS = {counts}")
+    else:
+        bs_counts = {}
+        for info in ue_infos:
+            bs_counts[info["bs_id"]] = bs_counts.get(info["bs_id"], 0) + 1
+        print(f"  Snapshot {snapshot_id}: UEs per BS = {[bs_counts.get(i, 0) for i in range(cfg.num_bs)]}")
 
     # Add receivers
     for i, info in enumerate(ue_infos):
@@ -150,7 +179,7 @@ def generate_snapshot(scene, cfg, snapshot_id: int, seed: int, data_dir: Path):
         max_num_paths_per_src=cfg.max_num_paths_per_src,
         samples_per_src=cfg.samples_per_src,
         los=True, specular_reflection=True, diffuse_reflection=True,
-        refraction=True, synthetic_array=False, seed=seed,
+        refraction=True, synthetic_array=cfg.synthetic_array, seed=seed,
     )
 
     associated_tx_idxs = [info["bs_id"] for info in ue_infos]
@@ -161,28 +190,47 @@ def generate_snapshot(scene, cfg, snapshot_id: int, seed: int, data_dir: Path):
         associated_tx_idxs=associated_tx_idxs,
         out_type="numpy",
     )
-    # a: (N_UE, n_rx_ant, 1, n_tx_ant, n_paths, 1) complex
-    # tau: (N_UE, n_rx_ant, 1, n_tx_ant, n_paths)
+    cir_a = np.squeeze(a)
+    cir_tau = np.squeeze(tau)
 
-    # CFR
+    # CFR — compute on GPU via torch (drjit has 2^32 limit, numpy eats CPU RAM)
+    # H(f) = sum_paths[ a * exp(-j*2*pi*f*tau) ]
+    import torch
     frequencies = subcarrier_frequencies(cfg.num_subcarriers, cfg.subcarrier_spacing)
-    h_freq = paths.cfr(
-        frequencies=frequencies,
-        associated_tx_idxs=associated_tx_idxs,
-        normalize=True,
-        normalize_delays=True,
-        out_type="numpy",
-    )
-    # h_freq: (N_UE, n_rx_ant, 1, n_tx_ant, 1, n_subcarriers) complex
+    freqs_t = torch.tensor(frequencies.numpy(), dtype=torch.float32, device="cuda")
+
+    tau_for_cfr = cir_tau
+    while tau_for_cfr.ndim < cir_a.ndim:
+        tau_for_cfr = np.expand_dims(tau_for_cfr, axis=1)
+
+    a_t = torch.tensor(cir_a, dtype=torch.complex64, device="cuda")
+    tau_t = torch.tensor(tau_for_cfr, dtype=torch.float32, device="cuda")
+
+    # Per-UE on GPU to stay within VRAM (~40GB)
+    # Per UE: (n_rx, n_tx, n_paths, n_sc) complex64 = small on GPU
+    per_ue_elems = int(np.prod(cir_a.shape[1:])) * len(freqs_t)
+    chunk = max(1, int(30e9 / (per_ue_elems * 8)))  # 30GB budget on 40GB GPU
+    n_ue = cir_a.shape[0]
+
+    if chunk >= n_ue:
+        phase = -2j * torch.pi * tau_t[..., None] * freqs_t
+        cfr = torch.sum(a_t[..., None] * torch.exp(phase), dim=-2).cpu().numpy()
+    else:
+        cfr_chunks = []
+        for i in range(0, n_ue, chunk):
+            j = min(i + chunk, n_ue)
+            phase = -2j * torch.pi * tau_t[i:j, ..., None] * freqs_t
+            cfr_chunks.append(
+                torch.sum(a_t[i:j, ..., None] * torch.exp(phase), dim=-2).cpu().numpy()
+            )
+        cfr = np.concatenate(cfr_chunks, axis=0)
+
+    del a_t, tau_t
+    torch.cuda.empty_cache()
 
     # Save
     snap_dir = data_dir / f"snapshot_{snapshot_id:04d}"
     snap_dir.mkdir(parents=True, exist_ok=True)
-
-    # Squeeze singleton dims: tx=1, time=1
-    cfr = h_freq[:, :, 0, :, 0, :]  # (N_UE, n_rx_ant, n_tx_ant, n_sc) complex
-    cir_a = a[:, :, 0, :, :, 0]     # (N_UE, n_rx_ant, n_tx_ant, n_paths) complex
-    cir_tau = tau[:, :, 0, :, :]     # (N_UE, n_rx_ant, n_tx_ant, n_paths)
 
     np.savez_compressed(
         snap_dir / "channels.npz",
@@ -198,20 +246,103 @@ def generate_snapshot(scene, cfg, snapshot_id: int, seed: int, data_dir: Path):
     return ue_infos
 
 
-def generate_dataset(cfg, data_dir: str, num_snapshots: int, seed_offset: int = 0):
-    """Generate full multi-snapshot dataset."""
+# ── Mobility models ────────────────────────────────────────────────
+
+def init_trajectories(ue_infos, velocities, rng):
+    """Assign velocity and random direction to each UE.
+
+    Args:
+        ue_infos: list of UE info dicts (with x, y, z).
+        velocities: list of speeds [m/s]. Each UE randomly gets one.
+                    e.g. [0, 1.0, 8.3] for static/pedestrian/vehicle mix.
+        rng: numpy random generator.
+
+    Returns:
+        trajectories: list of dicts with velocity, direction for each UE.
+    """
+    trajectories = []
+    for info in ue_infos:
+        v = rng.choice(velocities)
+        angle = rng.uniform(0, 2 * np.pi)
+        trajectories.append({
+            "vx": float(v * np.cos(angle)),
+            "vy": float(v * np.sin(angle)),
+            "speed": float(v),
+        })
+        info["vx"] = trajectories[-1]["vx"]
+        info["vy"] = trajectories[-1]["vy"]
+    return trajectories
+
+
+def advance_positions(ue_infos, trajectories, dt):
+    """Move UEs by dt seconds along their trajectories.
+
+    Simple linear model — UEs move in straight lines.
+    z (height) stays fixed at 1.5m.
+
+    Returns:
+        Updated ue_infos with new x, y positions.
+    """
+    for info, traj in zip(ue_infos, trajectories):
+        info["x"] += traj["vx"] * dt
+        info["y"] += traj["vy"] * dt
+    return ue_infos
+
+
+# ── Dataset generation ─────────────────────────────────────────────
+
+def generate_dataset(cfg, data_dir: str, num_snapshots: int, seed_offset: int = 0,
+                     mode: str = "independent", dt: float = 0.01,
+                     velocities: list = None):
+    """Generate multi-snapshot dataset.
+
+    Args:
+        mode: "independent" (random UE positions each snapshot) or
+              "temporal" (fixed UEs with mobility trajectories).
+        dt: Time step between snapshots [seconds]. Only for temporal mode.
+            e.g. 0.01 = 10ms, 0.001 = 1ms.
+        velocities: List of UE speeds [m/s] for temporal mode.
+                    e.g. [0, 1.0, 8.3] for static/pedestrian/vehicle mix.
+    """
     data_dir = Path(data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
+
+    if velocities is None:
+        velocities = [0.0, 1.0, 8.3]  # static, pedestrian, 30km/h
 
     scene = build_scene(cfg)
 
     all_records = []
-    for snap_id in range(num_snapshots):
-        seed = seed_offset + snap_id * 17 + 41  # deterministic seeds
-        ue_infos = generate_snapshot(scene, cfg, snap_id, seed, data_dir)
+    ue_infos = None
+    trajectories = None
+    radio_map = None
 
-        for ue_id, info in enumerate(ue_infos):
-            all_records.append({
+    if mode == "temporal":
+        # Compute radio map once, sample initial positions
+        radio_map = compute_radio_map(scene, cfg)
+        rng = np.random.default_rng(seed_offset)
+        init_seed = seed_offset + 41
+        np.random.seed(init_seed)
+        ue_infos, counts = sample_ue_positions(radio_map, cfg.num_ue, cfg)
+        trajectories = init_trajectories(ue_infos, velocities, rng)
+        print(f"  Initial UEs per BS = {counts}")
+        print(f"  Velocities: {[f'{t['speed']:.1f}' for t in trajectories[:5]]}... (m/s)")
+        print(f"  dt = {dt*1000:.1f}ms, total duration = {dt*num_snapshots*1000:.1f}ms")
+
+    for snap_id in range(num_snapshots):
+        seed = seed_offset + snap_id * 17 + 41
+
+        if mode == "temporal" and snap_id > 0:
+            ue_infos = advance_positions(ue_infos, trajectories, dt)
+
+        snap_ue_infos = generate_snapshot(
+            scene, cfg, snap_id, seed, data_dir,
+            ue_infos=ue_infos if mode == "temporal" else None,
+            radio_map=radio_map,
+        )
+
+        for ue_id, info in enumerate(snap_ue_infos):
+            record = {
                 "snapshot_id": snap_id,
                 "ue_id": ue_id,
                 "bs_id": info["bs_id"],
@@ -225,14 +356,17 @@ def generate_dataset(cfg, data_dir: str, num_snapshots: int, seed_offset: int = 
                 "ue_polarization": info["ue_polarization"],
                 "vx": info["vx"],
                 "vy": info["vy"],
-            })
+            }
+            if mode == "temporal":
+                record["t_ms"] = snap_id * dt * 1000
+            all_records.append(record)
 
     # Save metadata
     df = pd.DataFrame(all_records)
     df.to_parquet(data_dir / "metadata.parquet", index=False)
 
-    # Save BS positions
-    bs_info = {
+    # Save dataset info
+    ds_info = {
         "positions": [list(p) for p in cfg.bs_positions[:cfg.num_bs]],
         "num_bs": cfg.num_bs,
         "num_snapshots": num_snapshots,
@@ -241,13 +375,18 @@ def generate_dataset(cfg, data_dir: str, num_snapshots: int, seed_offset: int = 
         "num_subcarriers": cfg.num_subcarriers,
         "num_tx_ant": cfg.num_tx_ant,
         "num_rx_ant": cfg.num_rx_ant,
+        "mode": mode,
     }
+    if mode == "temporal":
+        ds_info["dt_s"] = dt
+        ds_info["velocities_ms"] = velocities
+        ds_info["total_duration_ms"] = dt * num_snapshots * 1000
     with open(data_dir / "bs_info.json", "w") as f:
-        json.dump(bs_info, f, indent=2)
+        json.dump(ds_info, f, indent=2)
 
     print(f"\nDataset saved to {data_dir}")
     print(f"  {num_snapshots} snapshots, {len(all_records)} total samples")
-    print(f"  Metadata: {data_dir / 'metadata.parquet'}")
+    print(f"  Mode: {mode}" + (f", dt={dt*1000:.1f}ms" if mode == "temporal" else ""))
     return df
 
 
@@ -261,8 +400,46 @@ if __name__ == "__main__":
     parser.add_argument("--data_dir", type=str, default=None)
     parser.add_argument("--seed_offset", type=int, default=0)
     parser.add_argument("--num_ue", type=int, default=100)
+    parser.add_argument("--mode", type=str, default="independent",
+                        choices=["independent", "temporal"])
+    parser.add_argument("--dt_ms", type=float, default=10.0,
+                        help="Snapshot interval in ms (temporal mode)")
+    parser.add_argument("--velocities", type=str, default="0,1,8.3",
+                        help="Comma-separated UE speeds in m/s (temporal mode)")
     args = parser.parse_args()
 
     cfg = SceneConfig.from_preset(args.preset, num_ue=args.num_ue)
-    data_dir = args.data_dir or DatasetConfig.from_scene(cfg).data_dir
-    generate_dataset(cfg, data_dir, args.num_snapshots, args.seed_offset)
+
+    # Read data_dir from YAML
+    if args.data_dir:
+        data_dir = args.data_dir
+    else:
+        import yaml
+        yaml_path = Path("assets/configs") / f"{args.preset}.yaml"
+        if yaml_path.exists():
+            with open(yaml_path) as f:
+                raw = yaml.safe_load(f)
+            data_dir = raw.get("data_dir", f"assets/data/channels_{args.preset}")
+        else:
+            data_dir = DatasetConfig.from_scene(cfg).data_dir
+
+    # Temporal mode: append suffix to data_dir
+    if args.mode == "temporal":
+        data_dir = f"{data_dir}_temporal"
+
+    velocities = [float(v) for v in args.velocities.split(",")]
+
+    print(f"Preset: {args.preset}")
+    print(f"  TX array: {cfg.tx_rows}x{cfg.tx_cols} = {cfg.num_tx_ant} ant")
+    print(f"  Freq: {cfg.frequency/1e9:.1f} GHz, BW: {cfg.bandwidth/1e6:.0f} MHz")
+    print(f"  Subcarriers: {cfg.num_subcarriers}")
+    print(f"  BS: {cfg.num_bs}, UE: {cfg.num_ue}")
+    print(f"  Synthetic array: {cfg.synthetic_array}")
+    print(f"  Mode: {args.mode}")
+    if args.mode == "temporal":
+        print(f"  dt: {args.dt_ms}ms, velocities: {velocities} m/s")
+    print(f"  Output: {data_dir}")
+    print(f"  Snapshots: {args.num_snapshots}")
+
+    generate_dataset(cfg, data_dir, args.num_snapshots, args.seed_offset,
+                     mode=args.mode, dt=args.dt_ms / 1000, velocities=velocities)
