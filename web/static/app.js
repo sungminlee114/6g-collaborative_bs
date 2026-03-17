@@ -185,9 +185,12 @@ if (_st('rsb') === '1') {
 }
 
 function renderRightSidebar() {
-  const active = backlogItems.filter(b => b.status === 'in_progress' || b.status === 'queued');
-  const recent = backlogItems.filter(b => b.status === 'done' || b.status === 'failed')
-    .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')).slice(0, 8);
+  const inProgress = backlogItems.filter(b => b.status === 'in_progress');
+  const queued = backlogItems.filter(b => b.status === 'queued');
+  const done = backlogItems.filter(b => b.status === 'done')
+    .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')).slice(0, 6);
+  const failed = backlogItems.filter(b => b.status === 'failed')
+    .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')).slice(0, 4);
 
   const itemHtml = (b) => {
     const type = b.type || 'experiment';
@@ -206,26 +209,28 @@ function renderRightSidebar() {
     </div>`;
   };
 
-  document.getElementById('rsb-active').innerHTML = active.length
-    ? active.map(itemHtml).join('')
-    : '<div style="color:var(--text-tertiary);font-size:11px;padding:8px 4px">No active tasks</div>';
+  const sectionHtml = (label, items, emptyMsg) => {
+    if (!items.length && !emptyMsg) return '';
+    return `<div class="rsb-section-label">${label}<span style="opacity:0.5;margin-left:4px">${items.length}</span></div>
+      ${items.length ? items.map(itemHtml).join('') : `<div style="color:var(--text-tertiary);font-size:11px;padding:4px 4px 8px">${emptyMsg}</div>`}`;
+  };
 
-  const recentLabel = document.getElementById('rsb-recent-label');
-  if (recent.length > 0) {
-    recentLabel.style.display = 'block';
-    document.getElementById('rsb-recent').innerHTML = recent.map(itemHtml).join('');
-  } else {
-    recentLabel.style.display = 'none';
-    document.getElementById('rsb-recent').innerHTML = '';
-  }
+  let html = '';
+  html += sectionHtml('In Progress', inProgress, 'None');
+  if (queued.length) html += sectionHtml('Queued', queued);
+  if (done.length) html += sectionHtml('Done', done);
+  if (failed.length) html += sectionHtml('Failed', failed);
+
+  document.getElementById('rsb-active').innerHTML = html;
+  // Hide the old "recent" section (now merged above)
+  document.getElementById('rsb-recent-label').style.display = 'none';
+  document.getElementById('rsb-recent').innerHTML = '';
 
   // Mini sidebar (collapsed) — show dots for active tasks
   const miniEl = document.getElementById('rsb-mini');
   let miniHtml = '';
-  active.forEach(b => {
-    const clr = b.status === 'in_progress' ? 'var(--blue)' : 'var(--yellow)';
-    miniHtml += `<div class="rsb-mini-dot" style="background:${clr}" title="${b.name}"></div>`;
-  });
+  inProgress.forEach(b => { miniHtml += `<div class="rsb-mini-dot" style="background:var(--blue)" title="${b.name}"></div>`; });
+  queued.forEach(b => { miniHtml += `<div class="rsb-mini-dot" style="background:var(--yellow)" title="${b.name}"></div>`; });
   if (!miniHtml) miniHtml = '<div style="font-size:8px;color:var(--text-tertiary)">0</div>';
   miniEl.innerHTML = miniHtml;
 }
@@ -296,10 +301,11 @@ async function renderDashboard() {
   for (const b of inProgress) {
     const type = b.type || 'experiment';
     const clr = TYPE_COLORS[type] || 'var(--text-tertiary)';
+    const sBadge = b.session ? `<span class="rsb-session">${b.session}</span>` : '';
     rows += `<div class="dash-row in-progress">
       <span class="dash-status-dot in-progress"></span>
       <span class="dash-name">${b.name}</span>
-      <span class="dash-detail"><span style="color:${clr};font-size:11px">${TYPE_ICONS[type]||'◆'} ${type}</span>${b.description ? ` &middot; ${b.description}` : ''}</span>
+      <span class="dash-detail"><span style="color:${clr};font-size:11px">${TYPE_ICONS[type]||'◆'} ${type}</span>${sBadge}${b.description ? ` &middot; ${b.description}` : ''}</span>
       <span class="dash-progress"></span>
       <span class="dash-time">${ago(b.created_at)}</span>
     </div>`;
@@ -548,7 +554,7 @@ async function selectExp(exp) {
 
   if (done.length >= 2) {
     html += `<div class="card"><div class="card-header"><span class="card-title">Comparison</span></div>
-      <div class="chart-wrap" style="height:280px"><canvas id="exp-cmp"></canvas></div></div>`;
+      <div class="chart-grid"><div class="chart-wrap" style="height:280px"><canvas id="exp-cmp"></canvas></div></div></div>`;
   }
   if (done.length >= 1) {
     html += `<div class="card"><div class="card-header"><span class="card-title">Training Curves</span>
@@ -562,7 +568,13 @@ async function selectExp(exp) {
     const ctx = document.getElementById('exp-cmp');
     if (ctx) {
       if (charts['exp-cmp']) charts['exp-cmp'].destroy();
-      const scales = chartScales(); scales.y.title = { display: true, text: mainResultKey, color: CHART_TICK };
+      const vals = done.map(r => r.info.result?.[mainResultKey]).filter(v => v != null);
+      const vMin = Math.min(...vals), vMax = Math.max(...vals);
+      const pad = Math.max(Math.abs(vMax - vMin) * 0.15, Math.abs(vMax) * 0.02 || 0.1);
+      const scales = chartScales();
+      scales.y.title = { display: true, text: _metricUnit(mainResultKey), color: CHART_TICK };
+      scales.y.min = vMin - pad;
+      scales.y.max = vMax + pad;
       charts['exp-cmp'] = new Chart(ctx, { type: 'bar',
         data: { labels: done.map(r => r.info.name.split('/').pop()),
           datasets: [{ label: mainResultKey, data: done.map(r => r.info.result?.[mainResultKey] ?? 0), backgroundColor: COLORS.slice(0, done.length), borderRadius: 4 }] },
@@ -703,8 +715,10 @@ function queueItemHtml(b, showStatus) {
   const statusBadge = showStatus || b.status === 'in_progress' ? `<span class="status status-${statusCls}">${b.status}</span> ` : '';
   const runLink = b.run_id ? `<span class="run-link" onclick="openRunDetail('${b.run_id}')">view run</span>` : '';
   const summary = b.summary ? `<div class="queue-desc" style="color:var(--green);font-size:12px">${b.summary}</div>` : '';
+  const sessionBadge = b.session ? `<span class="rsb-session">${b.session}</span>` : '';
   const metaParts = [
     `<span style="color:${iconColor};font-size:11px">${icon} ${type}</span>`,
+    sessionBadge,
     b.script ? `<span>${b.script}</span>` : '',
     configStr ? `<span>${configStr}</span>` : '',
     `<span>${ago(b.created_at)}</span>`,
