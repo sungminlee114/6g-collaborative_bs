@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Experiment Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<div class="app-layout">
+  <!-- Sidebar -->
+  <div class="sidebar" id="sidebar">
+    <button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()" title="Toggle sidebar">‹</button>
+    <div class="sidebar-full" id="sidebar-full">
+      <div class="sys-row" id="sys-info"></div>
+      <div id="gpu-info"><span class="run-meta">loading...</span></div>
+    </div>
+    <div class="sidebar-mini" id="sidebar-mini"></div>
+  </div>
+
+  <!-- Main -->
+  <div class="main-area">
+    <div class="tabs" id="tabs">
+      <div class="tab active" data-tab="dashboard">Dashboard</div>
+      <div class="tab" data-tab="experiments">Experiments</div>
+      <div class="tab" data-tab="queue">Backlog<span class="badge" id="queue-badge" style="display:none">0</span></div>
+    </div>
+
+    <div class="content" id="content">
+      <!-- Dashboard -->
+      <div class="section active" id="sec-dashboard">
+        <div id="dash-list"></div>
+      </div>
+
+      <!-- Experiments -->
+      <div class="section" id="sec-experiments">
+        <div class="exp-layout">
+          <div class="exp-sidebar" id="exp-list"></div>
+          <div class="exp-detail" id="exp-detail">
+            <div class="empty">Select an experiment</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Queue -->
+      <div class="section" id="sec-queue">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Task Queue</span>
+            <button class="btn btn-primary" onclick="openAddBacklog()">+ Add</button>
+          </div>
+          <div id="queue-list"></div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Completed / Failed</span>
+            <button class="btn" onclick="clearDoneBacklog()">Clear Done</button>
+          </div>
+          <div id="queue-done"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Sidebar (Tasks) -->
+  <div class="right-sidebar" id="right-sidebar">
+    <button class="rsb-toggle" id="rsb-toggle" onclick="toggleRightSidebar()" title="Toggle tasks">›</button>
+    <div class="rsb-content" id="rsb-content">
+      <div class="rsb-header">
+        <span>Tasks</span>
+        <button class="btn" style="padding:2px 8px;font-size:11px" onclick="openAddBacklog()">+</button>
+      </div>
+      <div id="rsb-active"></div>
+      <div class="rsb-section-label" id="rsb-recent-label" style="display:none">Recent</div>
+      <div id="rsb-recent"></div>
+    </div>
+    <div class="rsb-mini" id="rsb-mini"></div>
+  </div>
+</div>
+
+<!-- Run Detail Modal -->
+<div class="modal-overlay" id="run-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modal-title">Run Detail</h2>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-tabs">
+      <div class="modal-tab active" onclick="switchModalTab(this,'info')">Info</div>
+      <div class="modal-tab" onclick="switchModalTab(this,'logs')">Logs</div>
+      <div class="modal-tab" onclick="switchModalTab(this,'metrics')">Metrics</div>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-footer">
+      <span id="modal-status" class="run-meta"></span>
+      <div style="display:flex; gap:8px">
+        <button class="btn btn-danger" id="modal-delete-btn" onclick="deleteCurrentRun()">Delete Run</button>
+        <button class="btn" onclick="closeModal()">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Backlog Modal -->
+<div class="modal-overlay" id="backlog-modal">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header">
+      <h2>Add to Queue</h2>
+      <button class="modal-close" onclick="closeBacklogModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
+        <div class="form-group">
+          <label class="form-label">Type</label>
+          <select id="bl-type" class="form-input" onchange="toggleExpFields()">
+            <option value="experiment">Experiment</option>
+            <option value="implement">Implement</option>
+            <option value="research">Research</option>
+            <option value="fix">Fix</option>
+            <option value="review">Review</option>
+            <option value="config">Config</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Priority</label>
+          <select id="bl-priority" class="form-input">
+            <option value="low">Low</option>
+            <option value="normal" selected>Normal</option>
+            <option value="high">High</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Name</label>
+        <input type="text" id="bl-name" class="form-input" placeholder="e.g. implement/sidebar-toggle">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <input type="text" id="bl-desc" class="form-input" placeholder="e.g. 사이드바 접기/펴기 토글 구현">
+      </div>
+      <div id="exp-fields">
+        <div class="form-group">
+          <label class="form-label">Script</label>
+          <input type="text" id="bl-script" class="form-input" placeholder="e.g. src/experiments/1_fl_verification/train.py">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Config (JSON)</label>
+          <textarea id="bl-config" class="form-input" rows="3" placeholder='{"lr": 1e-3, "epochs": 100}'></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <span></span>
+      <div style="display:flex; gap:8px">
+        <button class="btn" onclick="closeBacklogModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitBacklog()">Add</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

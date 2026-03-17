@@ -1,0 +1,1160 @@
+1
+Elastic Federated Learning over Open Radio Access
+Network (O-RAN) for Concurrent Execution of
+Multiple Distributed Learning Tasks
+Payam Abdisarabshali, Nicholas Accurso, Student Member, IEEE, Filippo Malandra, Member, IEEE,
+Weifeng Su, Fellow, IEEE, and Seyyedali Hosseinalipour, Senior Member, IEEE
+Abstract—Federated learning (FL) is a popular distributed
+machine learning (ML) technique in Internet of Things (IoT)
+networks, where resource-constrained devices collaboratively
+train ML models while preserving data privacy. However, im-
+plementation of FL over 5G-and-beyond wireless networks faces
+key challenges caused by (i) dynamics of the wireless network
+conditions and (ii) the coexistence of multiple FL-services in
+the system. In this paper, we unveil two key phenomena that
+arise from these challenges: over/under-provisioning of resources
+and perspective-driven load balancing, both of which significantly
+impact FL performance in IoT environments. We take the
+first steps towards addressing these phenomena by proposing
+a novel distributed ML architecture called elastic FL (EFL).
+EFL unleashes the full potential of Open RAN (O-RAN) systems
+and introduces an elastic resource provisioning methodology to
+execute FL-services. It further constitutes a multi-time-scale FL
+management system that introduces three dedicated network
+control functionalities tailored for FL-services, including (i) non-
+real-time (non-RT) system descriptor, which trains ML-based
+applications to predict both system and FL-related dynamics
+and parameters; (ii) near-RT FL controller, which handles O-
+RAN slicing and mobility management for the seamless execution
+of FL-services; (iii) FL MAC scheduler, which conducts real-
+time resource allocation to the end clients of various FL-
+services. We finally prototype EFL to demonstrate its potential
+in improving the performance of FL-services. Our implementa-
+tions are publicly available at the following GitHub repository:
+https://github.com/payamsiabd/Elastic FL Over O RAN.git
+I. INTRODUCTION
+Federated learning (FL) has attracted tremendous attention for
+executing data-intensive Internet-of-Things (IoT) applications
+(e.g., smart manufacturing), where data is distributedly col-
+lected at edge devices [1]. This distributed machine learning
+(ML) approach is an alternative to centralized ML methods
+that require transferring distributed data to cloud servers,
+which often cause a high communication overhead and con-
+cerns regarding the exposure of raw data to untrusted parties.
+FL performs ML training through the repetition of multiple
+global training rounds, with each round consisting of two key
+steps: (i) using their local data, clients/devices perform local
+model training, e.g., via several local iterations of stochastic
+gradient descent (SGD), and transfer their local models to a
+server, and (ii) the server aggregates all the received models
+(e.g., via averaging) to a global model and then broadcasts it
+back to the clients to initiate the next global training round.
+A. Motivation
+Despite its tremendous potential, FL is anticipated to be
+deployed on resource-constrained IoT wireless devices such as
+IoT sensors [1], which is challenging due to the increasing size
+of modern ML models that demand substantial computational
+power for local model training and incur high communication
+overheads during the transfer from devices to the central
+server. To this end, research – see [1] and the references therein
+– has focused on (i) tuning the number of local SGD iterations
+and frequency/period of client-to-server communications; (ii)
+model compression, gradient sparsification, or selective param-
+eter sharing; (iii) efficient client selection/recruitment. Despite
+the significance of these methods, there are two key underlying
+assumptions made in all of them, limiting their applicability
+in real-world scenarios:
+(A1) Snapshot-Based Analysis: These methods often as-
+sume that network and client conditions, such as client location
+and client-to-server channels, remain fixed during each global
+training round of FL, and thus they conduct snapshot-based
+analysis of the network. Afterwards, in each snapshot – often
+presumed to be the condition of the network at the beginning
+of each global training round – they make control decisions
+(e.g., spectrum allocation and client recruitment). However, in
+real-world scenarios, such analysis may quickly become sub-
+optimal, as the network condition may vary over time due to
+factors like client mobility and evolving client datasets.
+(A2) Isolated Execution of a Single FL-Service: The exist-
+ing methods primarily focus on executing a single FL-service.
+However, in large-scale IoT networks, multiple FL-services
+may simultaneously compete for wireless resources and client
+recruitment (e.g., Google may run an FL-service for next-word
+prediction, while Apple does so for face recognition). Despite
+its importance, only a few studies have explored this topic [2],
+[3], all of which consider snapshot-based analysis suffering
+from the above limitations.
+The simultaneous relaxation of the above assumptions
+(A1)&(A2) unveils a new paradigm in which multi-service FL
+execution intersects with dynamic wireless resource manage-
+ment, introducing the following two non-trivial challenges:
+(1) Over-/Under-Provisioning of Resources: The relaxation
+of (A1) introduces critical design considerations focused on
+the over-/under-provisioning of resources (e.g., wireless spec-
+trum), stemming from two phenomena: (i) Signal Strength
+Fluctuation: This issue is caused by client mobility and time-
+varying channels. For example, a client experiencing poor
+channel conditions at the start of a global round might initially
+be allocated high bandwidth to offset its weaker connection.
+However, as the client moves to a position with a better
+arXiv:2305.02109v6  [cs.NI]  5 Jan 2026
+2
+channel, the previously allocated high bandwidth may end up
+being underutilized; (ii) Incomplete Information: This reflects
+a situation where FL-services lack complete information about
+each other’s objectives, strategies, and the congestion of clients
+at different areas. This incompleteness often stems from net-
+work access restrictions, where FL-services are not granted
+access to view network information, such as bandwidth avail-
+ability and client conditions. In this situation, due to selfishness
+of FL-service owners, they may make greedy decisions and
+occupying shared resources (e.g., spectrum), which can lead
+to over-provisioning of resources for some FL-services while
+inadvertently cause under-provisioning for others.
+(2) Perspective-Driven Load Balancing: Load balancing
+refers to distributing the network traffic, preventing conges-
+tion across the network. The coexistence of multiple FL-
+services (relaxation of (A2)) calls for a unique load balancing
+strategy that considers a nuanced phenomenon which we
+call perspective-driven client distribution. This phenomenon
+captures the fact that the distribution of FL clients across
+different network regions varies depending on the perspective
+from which clients are evaluated/perceived. For example,
+regions with advanced connectivity infrastructure, such as
+urban areas, may have a higher density of clients suitable
+for latency-sensitive FL-services. Also, certain regions may
+have a higher density of low-cost clients, making them ideal
+for cost-sensitive FL-services, while other regions may have
+clients with greater computational capabilities, better suited
+for computation-intensive FL-services. Given the perspective-
+driven client distribution, in FL, load balancing must account
+for the overlap of the FL-services’ objectives.
+B. Migration from Per-User to Service-Level Objectives
+Simultaneous addressing of the above two challenges calls
+for client mobility management (i.e., handover design for
+load balancing) and dynamic resource allocation solutions,
+which are the key network control functionalities of radio
+access networks (RANs) [4], [5]. Additionally, orchestrating
+the coexistence of multiple FL-services over a dynamic IoT
+network, while addressing the above two challenges, demands
+a system management approach operating at different levels
+of agility. For example, while client recruitment for different
+FL-services can be performed at the start of each global round,
+mobility management requires a finer-granular time scale (real-
+time) to accommodate the fast-paced changes in network
+topology due to client repositioning. However, the existing
+IoT network control functionalities are often developed for
+native wireless services (e.g., high data-rate Internet provi-
+sioning) and primarily focus on per-user QoS requirements,
+including energy consumption and communication latency.
+Instead, in FL, addressing the aforementioned two challenges
+should consider collective service-level objectives/character-
+istics, such as the prediction accuracy of the FL models and
+client recruitment costs, alongside QoS metrics like overall
+energy consumption and model training latency across FL-
+services. Additionally, effective load balancing in FL must
+ensure an optimal allocation of clients to FL-services and
+wireless resources to the clients, while considering the innate
+differences among FL-services. For example, consider an FL-
+service for monitoring industrial equipments utilized during
+business hours coexisting with an FL-service focused on air
+quality monitoring. Equipment monitoring might require rapid
+ML model training to predict failures, while environmental
+sensing may tolerate longer ML training delays. In this case,
+the system should prioritize allocating network resources to
+industrial equipment monitoring during business hours and
+then shift resources towards environmental sensing.
+These considerations necessitate a revamp of the existing
+IoT network control functionalities to facilitate the coexis-
+tence of multiple FL-services within a dynamic network –
+an approach absent in the literature. This naturally calls for
+a migration from traditional RANs (e.g., distributed RANs in
+4G), operating with black-box network control functionalities
+applied to all network services [4]. To overcome this limi-
+tation and develop dedicated network control functionalities
+for FL-services, we leverage virtualization, intelligence, and
+programmability features of an emerging RAN technology used
+in 5G-and-beyond networks, called Open RAN.
+O-RAN (Fig. 1) transitions from rigid cellular to multi-
+vendor and data-driven networks by integrating the con-
+cepts of intelligence, virtualization (RAN slicing), and pro-
+grammable white-box hardware (as opposed to the black-box
+hardware) [6]. O-RAN supports multiple services with diverse
+QoS requirements via RAN slicing, which partitions RAN
+resources into isolated RAN slices, each leased to a virtual
+network operator (VNO) [4]. Unlike traditional RANs, O-RAN
+fosters dedicated functionalities for each type of service, a fea-
+ture referred to as programmability. For example, in contrast
+to the black-box MAC scheduler used in 4G that serves all
+services uniformly, O-RAN enables the implementation of a
+dedicated MAC scheduler for each service.
+In this work, we exploit O-RAN’s unique features, i.e., RAN
+slicing and programmability, and develop a novel intelligent
+FL architecture, called elastic FL (EFL). In EFL, we intro-
+duce dedicated network control functionalities to orchestrate
+multiple FL-services over a shared dynamic wireless network.
+C. Contributions
+Our major contributions are as follows:
+• We identify unique challenges arising from the coexistence
+of multiple FL-services in dynamic environments. To ad-
+dress them, while considering the service-level objectives
+of FL-services, we propose elastic FL (EFL) over O-RAN.
+• In EFL, we use intelligence and programmability features
+of O-RAN to implement dedicated dynamic network control
+functionalities for FL-services (relaxation of (A1)) at three
+time scales: non-real-time (non-RT), near-RT, and RT.
+• At the non-RT level, we develop functionalities in EFL that
+do not require immediate responsiveness, including client
+and FL-service registration, and training AI-based applica-
+tion, which we call estimator applications (eApps). eApps
+are utilized to predict FL-related factors, e.g., perspective-
+driven client distribution across O-RUs.
+• At the near-RT level, we develop virtual RAN slices for FL-
+services in EFL, facilitating the seamless execution of mul-
+tiple FL-services (relaxation of (A2)). EFL also introduces
+3
+Fig. 1: O-RAN architecture (all abbreviations follow standard 3GPP terminologies [6]. O-RAN components interact via standard
+open interfaces (E2, F1, open fronthaul, A1, and O1), facilitating interoperability between network elements from different
+manufacturers.
+a dedicated slice management unit and a mobility manage-
+ment unit to handle resource over-/under-provisioning and
+perspective-driven load balancing.
+• At the RT level, we introduce dedicated FL MAC scheduler
+in EFL to dynamically allocate resources to clients consid-
+ering service-level objectives of FL-services.
+II. EFL: ELASTIC FL
+In the following, we systematically introduce the EFL frame-
+work, which will be implemented over O-RAN.
+A. Preliminaries on O-RAN
+5G-and-beyond IoT networks are expected to support di-
+verse services, including ultra-reliable low latency communi-
+cations and massive machine-type communications [4]. They
+also are envisioned to provide services for various verticals –
+groups of companies requiring similar services (e.g., industrial
+factories) – operated by distinct virtual network operators.
+This versatile service provisioning is enabled by the use of
+intelligent and programmable O-RANs (Fig. 1). In O-RAN,
+3GPP stack functionalities are disaggregated into (i) radio
+unit (O-RU), (ii) distributed unit (O-DU), and (iii) centralized
+unit (O-CU) [6]. O-RAN also introduces RAN intelligent
+controllers (RICs), i.e., non-real-time (non-RT) RIC and near-
+RT RICs, which utilize AI/ML algorithms to manage RAN
+operations at different time-scales [6], [7].
+B. Integration of EFL in O-RAN
+To integrate EFL in O-RAN, we first focus on intelligent
+network control in O-RAN. O-RAN supports intelligent con-
+trol across three levels of agility: (i) Non-RT RIC operates on
+a timescale of seconds to minutes, establishing network man-
+agement policies and hosting applications, known as rApps,
+which handle long-term functionalities like training AI models
+for network management. These trained AI models will be
+packaged into applications, referred to by xApps, and deployed
+on near-RT RIC. (ii) Near-RT RIC, operating on timescales of
+10 milliseconds to seconds, leverages xApps to forecast traffic
+flow and network dynamics. Using these forecasts, near-RT
+RIC manages load balancing, network slicing, and mobility
+management. (iii) Finally, the MAC Scheduler, located at the
+O-DUs, operates in sub-10-millisecond intervals, focusing on
+real-time resource allocation to the clients.
+EFL, depicted in Fig. 2, exploits O-RAN programmability
+and envisions dedicated functionalities at each of the afore-
+mentioned control layers to manage the concurrent execution
+of multiple FL-services (relaxation of (A2)) in a dynamic
+wireless environment (relaxation of (A1)). We refer to these
+functionalities as: (i) Non-RT System Descriptor, located at
+the non-RT RIC; (ii) Near-RT FL Controller, deployed at
+the near-RT RIC; (iii) FL MAC Scheduler, deployed at the
+O-DUs. We next design these functionalities to consider the
+collective service-level performance requirements, such as FL
+model accuracy across all FL-services.
+C. Non-RT System Descriptor
+The coexistence of multiple FL-services introduces a new
+dimension of heterogeneity, which we call heterogeneity of
+interest. This heterogeneity reflects the diverse interests of FL-
+services in recruiting clients with different (i) datasets, (ii) data
+quality, (iii) channel conditions, and (iv) processing capabili-
+ties. These preferences are shaped by quality-of-service (QoS)
+requirements of each FL-service (e.g., target model accuracy
+and latency sensitivity) and its budget to recruit clients and
+acquire wireless resources.
+4
+Fig. 2: Top Panel: The three main components of EFL (NSD, NFC, and FMS) are illustrated along with their key characteristics
+and distinguishing features. Bottom Panel: The process flow of EFL execution is depicted, showing the integration of NSD (red
+boxes), NFC (blue box), and FMS (green box). The sequence of operations is indicated by directional arrows, each annotated
+with a descriptive label written in blue text.
+To monitor the status of clients and FL-services, we equip
+EFL with non-RT system descriptor, deployed at the O-RAN
+non-RT RIC. This component handles long-term operations
+(ranging from seconds to minutes) such as client and FL-
+service registration, along with training AI-based applications
+for network control. Specifically, this unit stores and regularly
+updates two descriptors: (i) client descriptor and (ii) FL-
+service descriptor. The client descriptor contains information
+about each client such as dataset type/size. The FL-service
+descriptor consists of key QoS requirements such as max-
+imum delay for ML training and model acquisition, target
+model accuracy, and budget for client recruitment and wireless
+resource acquisition. Using the information these descriptors
+provide, the non-RT system descriptor trains AI-based control
+applications, which we call estimator applications (eApps).
+eApps can be construed as a special case of rApps, where
+due to their unique features, we have opted for a new name.
+The key difference between eApps and conventional rApps
+is their focus on service-level requirements unique to the
+FL. For example, client congestion in FL extends beyond
+simple network traffic volume; it also encompasses unique FL
+characteristics, including recruitment costs and dataset types
+5
+(e.g., congestion of clients suitable for an object detection FL-
+service vs a product recommendation FL-service may differ
+across O-RUs). Subsequently, using eApps, EFL becomes
+capable of satisfying the service-level requirements of FL-
+services – a nuanced capability absent from existing FL
+methodologies. In particular, in EFL, eApps are utilized to
+predict/estimate various system factors, including perspective-
+driven client distribution at O-RUs and fluctuations in the
+descriptors of clients and FL-services. These estimates enable
+EFL to dynamically shift the resources between FL-services
+based on their real-time demands for clients and wireless
+resources.
+D. Near-RT FL Controller
+To manage over-/under-provisioning of wireless resources
+and provide an environment for seamless execution of multiple
+FL-services, we equip EFL with near-RT FL controllers. A
+near-RT FL controller, operating on a timescale from 10 mil-
+liseconds to seconds, periodically downloads eApps to predict
+the future FL system state, e.g., client congestion at O-RUs.
+Using these predictions, near-RT FL controller then performs
+functionalities that require faster response times than those
+handled by the non-RT system descriptor. These functionalities
+include FL slice creation, elastic slice scaling up/down, and
+client mobility management, explained below.
+1) FL slice creation: EFL enables the coexistence of mul-
+tiple FL-services by creating a virtual RAN slice for each FL-
+service. In particular, using eApps, the near-RT FL controller
+first predicts the FL system states (e.g., client congestion
+at O-RUs). These predictions are derived from both current
+and historical data provided by the non-RT system descriptor.
+Based on these predictions, the near-RT FL controller then
+sends a slice creation request for each FL-service to the near-
+RT RIC responsible for RAN slicing. This request specifies (i)
+the required resources, such as bandwidth/spectrum, and (ii)
+the QoS requirements for each FL-service, including delay
+constraints and priority for accessing O-RAN resources. The
+slice is then provisioned with the wireless resources (e.g., spec-
+trum) and sent to O-DUs where FL MAC schedulers perform
+real-time resource allocation for clients of FL-services.
+For example, consider a time-sensitive FL-service (e.g., traf-
+fic prediction) with strict delay constraints for receiving local
+models from its clients. Additionally, presume that the datasets
+across the clients in this FL-service are highly heterogeneous.
+This dataset heterogeneity leads to a higher demand for timely
+reception of the local models of large number of clients at the
+model aggregations of FL as missing clients’ local models may
+prevent the global model from being exposed to certain client
+data, severely affecting its prediction performance. In this
+scenario, the near-RT FL controller in EFL creates a dedicated
+RAN slice, with high-priority access to O-RAN resources, for
+this FL-service to ensure successful transmission of the local
+models of its clients.
+2) Elastic slice scaling down/up:
+To address resource
+over/under-provisioning, the near-RT FL controller performs
+elastic slice scaling down/up. This operation dynamically
+adjusts the wireless resources (e.g., spectrum) provisioned to
+slices based on the client congestion and resource demands
+of FL-services estimated by eApps. For example, if a high-
+priority, time-sensitive FL-service (e.g., traffic prediction) ar-
+rives with significant resource demands predicted by eApps,
+the near-RT FL controller may scale down an existing slice
+(i.e., reallocating its resources) to ensure that this FL-service
+receives enough resources to meet its QoS requirements.
+3) Client mobility management: The near-RT FL controller
+periodically estimates the service-level resource requirements
+of each FL-service and assesses wireless channel quality –
+such as data rates – between clients and O-RUs using eApps.
+Based on these estimates, the near-RT FL controller alters
+the client to O-RU connections (i.e., conducts handovers).
+For example, assume that some clients of a time-sensitive
+FL-service (e.g., traffic prediction) move into the coverage
+area of an O-RU with better channel conditions than their
+current O-RUs. To maintain low-latency model transmission
+for these clients, the near-RT FL controller may prioritize the
+time-sensitive FL-service by shifting the connections of these
+clients to the target O-RU with stronger channel conditions.
+At the target O-RU, this operation may require reallocating
+resources from the clients of other FL-services with lower
+time-sensitivity (e.g., decreasing their allocated bandwidth) to
+accommodate the clients of the higher-priority service.
+E. FL MAC Scheduler
+EFL introduces a new dimension to MAC schedulers, en-
+abling client-level, real-time resource allocation for FL clients.
+This addresses resource over/under-provisioning at a shorter
+time-scale compared to near-RT FL controller, tailored to
+service-level performance metrics of FL-services, such as
+delay constraints for receiving local models from clients.
+Specifically, for FL-services, we equip EFL with a dedicated
+FL MAC scheduler located at O-DU to allocate wireless
+resources to FL clients.
+Resource allocation by the FL MAC scheduler is different
+from resource provisioning by the near-RT FL controller, as
+the FL MAC scheduler manages client-level resource alloca-
+tion (e.g., spectrum allocation to each client), responding to
+the real-time demands of individual clients. Conversely, the
+near-RT FL controller focuses on service-level resource pro-
+visioning (e.g., spectrum allocation to each slice), considering
+the broader resource needs of each FL-service, which typically
+change slower than rapid variations in client-level resource
+demands (e.g., their needed bandwidth which exhibits a high
+temporal variation caused by the channel fluctuations).
+F. System Operation
+Fig. 2 illustrates the integration of our proposed EFL into
+O-RAN. At the top, the characteristics of different EFL
+components are highlighted, along with their differences from
+conventional O-RAN functionalities. At the bottom, the figure
+depicts how EFL components interact.
+G. Challenges of Integration into the Existing O-RAN Imple-
+mentations
+Integrating EFL into existing commercial O-RAN imple-
+mentations such as the OpenAirInterface (OAI) and Software-
+Defined RAN (SD-RAN) [8] poses several challenges due to
+6
+Fig. 3: Real-world distribution of 150 FL clients over the Porto City Taxi Dataset: https://www.kaggle.com/datasets/crailtap/taxi-
+trajectory/data. Clients follow their actual mobility trajectories across the city and are served by 18 O-RUs forming a realistic
+cellular network. These O-RUs are grouped under 4 O-DUs, such that each O-DU serves on average 4–5 O-RUs. The colored
+dots in the figure represent the locations of individual clients, where different colors indicate clients managed by the same
+O-DU. The coverage areas of the O-RUs, each spanning 500 meters, are shown as colored hexagonal cells, where different
+colors indicate O-RUs managed by the same O-DU. In addition, the trajectories of the clients are shown by lines across the
+city. This setup creates a realistic dynamic wireless environment for evaluating slice management, mobility handling, and MAC
+scheduling within the proposed EFL framework.
+their current design limitations. First, both OAI and SD-RAN
+provide limited built-in support for FL-specific service-level
+objectives, such as model convergence time, client hetero-
+geneity, and multi-service orchestration. Extending them to
+support our EFL framework would require custom modifica-
+tions to their RIC platforms to support estimator applications
+(eApps) and FL-specific slicing logic. Second, achieving real-
+time responsiveness across non-RT, near-RT, and RT lay-
+ers necessitates tight synchronization and lightweight cross-
+layer APIs, which may not be natively supported in current
+RIC/xApp/rApp pipelines. For example, deploying FL MAC
+schedulers at the O-DU level would require modification of
+the real-time scheduler in OAI or SD-RAN’s platform to
+accommodate FL client-specific metrics such as local model
+delivery deadlines. Third, interoperability between vendor-
+specific O-RUs and generalized FL slice descriptors remains
+a challenge due to heterogeneous support for open fronthaul.
+Despite these challenges, the modular nature of OAI and
+SD-RAN makes them promising platforms for incremental
+integration of EFL.
+III. CASE STUDY AND PROTOTYPING
+For
+prototyping,
+we
+consider
+a
+dense
+urban
+O-RAN
+scenario
+with
+vehicular
+clients
+in
+Porto
+city.
+The
+positions
+and
+mobility
+trajectories
+of
+the
+clients
+are
+drawn
+from
+the
+real-world
+Porto
+city
+taxi
+dataset:
+https://www.kaggle.com/datasets/crailtap/taxi-trajectory/data.
+We model an O-RAN deployment with 4 O-DUs, 18 O-RUs,
+and 150 FL clients (see Fig. 3). The O-RUs provide coverage
+over a hexagonal grid with a radius of 500 m, each assumed
+to have 5 MHz of available bandwidth. We also assume that
+FL clients have a maximum transmit power of 300 mW. The
+O-RAN environment, including signal forms, channels, and
+data rates, is modeled according to [9].
+It is worth noting
+that the optimization problems in our framework are solved
+independently for each O-DU and O-RU in parallel, enabling
+scalability to accommodate large numbers of clients.
+We consider three FL-services, each recruiting 50 clients,
+which utilize convolutional neural networks (CNNs) to train
+on CIFAR10 (FL-service 1), Fashion-MNIST (FL-service 2),
+and MNIST (FL-service 3) datasets [10]. In FL-service 1, data
+points are distributed based on Dirichlet distribution Dir(𝛼)
+[11] with parameter 𝛼=0.1, making clients’ datasets highly
+heterogeneous. For FL-service 2 and FL-service 3, we use
+𝛼=10. Each FL service runs for 100 global training rounds,
+where global aggregations are performed using the FedAvg
+method [12]. We assume that FL-service 1 has a strict delay
+constraint of 15 seconds for receiving local models from its
+clients, while FL services 2 and 3 have a more relaxed delay
+constraint of 20 seconds. Clients that fail to fully transfer their
+models to their O-RUs within the designated time window are
+considered unsuccessful.
+★The details of our implementations, including all
+source codes and extended discussions on the mathemat-
+ical formulations, are provided in our GitHub repository:
+https://github.com/payamsiabd/Elastic FL Over O RAN.git
+7
+10
+20
+40
+50
+60
+70
+80
+90
+Test Accuracy (%)
+20
+40
+Number of Global Rounds
+60
+80
+100
+0.0
+0.2
+0.4
+0.6
+1.0
+S-HMAC
+EFL (Ours)
+Success Rate
+CIFAR-10
+Fashion-MNIST
+MNIST
+The number of successful FL clients has a direct impact on the performance of FL services. 
+Below, the test accuracy of different resource orchestration methods is evaluated.
+The x-axis of all plots starts at 20 since the plots are moving 
+averages with a window size of 20 global rounds, applied to smooth 
+out fluctuations and highlight long-term trends in test accuracy.
+CIFAR-10
+Fashion-MNIST
+MNIST
+20
+40
+Number of Global Rounds
+60
+80
+100
+20
+40
+Number of Global Rounds
+60
+80
+100
+G-MAC
+SH-MAC
+ST-HMAC
+FP-UP
+0.8
+EFL (red plot) consistently leads to highest test accuracy (closed to FP-UP) 
+during global rounds for all FL-services. This is because EFL network 
+orchestration results in a higher number of successful FL clients.
+The dashed brown plot represents the hypothetical upper bound 
+of the test accuracy achieved by FP-UP,  when all users 
+successfully transfer their models to the server.
+EFL (red bar) leads to the highest number of successful FL clients by benefiting from dynamic handover 
+operations and MAC scheduling, each operating at a different time scale.
+FP-UP is a 
+hypothetical 
+upper bound, with 
+full participation 
+of all FL clients. 
+10
+20
+40
+50
+60
+70
+80
+90
+Test Accuracy (%)
+20
+40
+Number of Global Rounds
+60
+80
+100
+0.0
+0.2
+0.4
+0.6
+1.0
+S-HMAC
+EFL (Ours)
+Success Rate
+CIFAR-10
+Fashion-MNIST
+MNIST
+The number of successful FL clients has a direct impact on the performance of FL services. 
+Below, the test accuracy of different resource orchestration methods is evaluated.
+The x-axis of all plots starts at 20 since the plots are moving 
+averages with a window size of 20 global rounds, applied to smooth 
+out fluctuations and highlight long-term trends in test accuracy.
+CIFAR-10
+Fashion-MNIST
+MNIST
+20
+40
+Number of Global Rounds
+60
+80
+100
+20
+40
+Number of Global Rounds
+60
+80
+100
+G-MAC
+SH-MAC
+ST-HMAC
+FP-UP
+0.8
+EFL (red plot) consistently leads to highest test accuracy (closed to FP-UP) 
+during global rounds for all FL-services. This is because EFL network 
+orchestration results in a higher number of successful FL clients.
+The dashed brown plot represents the hypothetical upper bound 
+of the test accuracy achieved by FP-UP,  when all users 
+successfully transfer their models to the server.
+EFL (red bar) leads to the highest number of successful FL clients by benefiting from dynamic handover 
+operations and MAC scheduling, each operating at a different time scale.
+FP-UP is a 
+hypothetical 
+upper bound, with 
+full participation 
+of all FL clients. 
+Fig. 4: The number of successful clients and its impact on the model prediction of FL-services under baseline methods and our
+proposed EFL method. Our proposed method outperforms the baseline methods in terms of the number of successful clients
+and the model prediction performance of FL-services. EFL leads to the success rate of above 0.9 for all the datasets, which
+is better than the best baseline (i.e., S-HMAC), which can reach the top success rate of 0.8. Additional insights can be found
+in the annotated text within the plots.
+8
+S-HMAC
+EFL (Ours)
+G-MAC
+SH-MAC
+ST-HMAC
+0.0
+20
+40
+60
+100
+Total Consumed Energy (KJ)
+Resource Orchestration Methods
+80
+62.7 61.6
+89.7
+52.8
+64.4
+0.0
+1
+2
+5
+Avg computation overhead per 
+global round (second)
+Resource Orchestration Methods
+4
+0.19
+0.04
+0.21
+6.2
+0.04
+6
+7
+3
+ST-HMAC leads to the 
+highest computation 
+overhead because it 
+performs computation-
+intensive handovers at 
+each MAC scheduling time 
+instant (i.e., every 0.01 
+seconds).
+G-MAC leads to the highest energy consumption 
+because its goal is to maximize the data rate of 
+individual clients, which requires allocating more 
+power and therefore consumes more energy.
+S-HMAC
+EFL (Ours)
+G-MAC
+SH-MAC
+ST-HMAC
+0.0
+20
+40
+60
+100
+Total Consumed Energy (KJ)
+Resource Orchestration Methods
+80
+62.7 61.6
+89.7
+52.8
+64.4
+0.0
+1
+2
+5
+Avg computation overhead per 
+global round (second)
+Resource Orchestration Methods
+4
+0.19
+0.04
+0.21
+6.2
+0.04
+6
+7
+3
+ST-HMAC leads to the 
+highest computation 
+overhead because it 
+performs computation-
+intensive handovers at 
+each MAC scheduling time 
+instant (i.e., every 0.01 
+seconds).
+G-MAC leads to the highest energy consumption 
+because its goal is to maximize the data rate of 
+individual clients, which requires allocating more 
+power and therefore consumes more energy.
+Fig. 5: Energy consumption and computation overhead of different methods. Our EFL method maintains a low energy
+consumption and computation overhead compared to the baselines with the added benefit of model performance gains as
+reflected in Fig. 4. The numbers that correspond to each bar are represented above it for clarity. Additional insights can be
+found in the annotated text within the plots.
+A. Prototyping of EFL Components
+We implement the core components of EFL following the
+outlined methodology in Fig. 2 as follows.
+1) Non-RT system descriptor: To prototype this component,
+we first focus on arrows numbered 1 and 2 at the bottom
+of Fig. 2 and implement features for storing client descriptor
+(containing clients’ locations and dataset types) and FL-service
+descriptors (containing delay constraints for receiving local
+models). Considering the arrow numbered 3 in Fig. 2, we
+develop an eApp for mobility pattern prediction. To train the
+eApp, we run a simulation where EFL starts with an untrained
+mobility prediction model, which uses past clients’ positions
+to predict their future locations for the next 0.01 seconds
+(the model architecture is provided in the above GitHub). The
+model optimizes the mean squared error (MSE) loss function
+to minimize prediction errors in mobility patterns.
+We note
+that our eApps train rapidly (within a few learning iterations;
+see our GitHub for details) and provide accurate location
+predictions for the next 0.01 seconds. As a result, the impact
+of estimation errors is negligible, making our optimizations
+robust to such inaccuracies.
+Following the arrow numbered 4 in Fig. 2, the client
+recruitment for each FL-service is conducted based on the
+dataset type of each client (50 clients with CIFAR10 dataset
+are assigned to FL-service 1, 50 clients with Fashion-MNIST
+dataset are assigned to FL-service 2, and 50 clients with
+MNIST dataset are assigned to FL-service 3). Referring to
+Fig. 2, following the arrow number 5, the trained eApp is then
+used as a component in the near-RT FL controller to predict the
+system state, based on which network control managements
+are performed as follows.
+2) Near-RT FL controller: Referring to Fig. 2, following
+the arrow number 5, we implement functionalities of near-RT
+FL controller for slice and mobility management jointly as an
+optimization problem. We define the operational time window
+for the near-RT FL controller as 400 milliseconds: every 400
+milliseconds, the near-RT FL controller first leverages the
+eApp to predict client locations for the next 10 milliseconds
+and then estimates the data rate between clients and O-
+RUs.
+Near-RT FL controller then solves an optimization
+problem to determine the optimal transmit power of clients
+and the bandwidth allocated to each client to maximize
+Í3
+𝑠=1 𝛿𝑠−𝜆𝐸
+Í
+𝑢𝑃𝑢, which represents the difference between
+two terms: (i) an FL-service–level metric, formulated as the
+sum of successful clients 𝛿𝑠of each FL-service 𝑠, and (ii)
+the total energy consumption of all clients Í
+𝑢𝑃𝑢. Here, 𝜆𝐸
+specifies the importance assigned to energy efficiency, and 𝑃𝑢
+denotes the transmit power of client 𝑢. Detailed formulation of
+our optimization problem are provided in the above GitHub.
+Near-RT FL controller then creates a slice creation request
+for each FL-service that specifies (i) the maximum transmit
+power allowed for each client within the slice and (ii) the set
+of FL clients connected to each O-RU, defined as those whose
+allocated power exceeds a small threshold of 0.01 W. It then
+sends the request to O-RAN near-RT RIC to create a RAN
+slice at each O-RU for each FL-service.
+3) FL MAC scheduler: Referring to Fig. 2, and following
+arrow number 6, we design FL MAC schedulers that operate
+in real-time (every 10 milliseconds) using information from
+the near-RT FL controller. The MAC schedulers leverage
+eApps to predict client locations over the next 10 milliseconds
+and, based on these predictions, estimate the channel gains
+between clients and their connected O-RUs. They then solve
+9
+Changing the emphasis on energy efficiency has a direct impact on the 
+success rate of FL clients, as shown in the following plot
+10
+40
+60
+Total Consumed Energy (KJ)
+62.7
+10.1
+3.80
+20
+20
+50
+70
+6.47
+2.30
+1.37
+0.78
+0
+Energy efficiency importance (       )
+1
+2
+4
+6
+8
+10
+0.0
+0.2
+0.4
+0.6
+1.0
+Success Rate
+CIFAR-10
+Fashion-MNIST
+MNIST
+0.8
+0
+Energy efficiency 
+importance(        ) 
+1 2
+4 6 8 10
+0
+Energy efficiency 
+importance(        ) 
+1 2
+4 6 8 10
+0
+Energy efficiency 
+importance(        ) 
+1 2
+4 6 8 10
+The lowest value of energy 
+importance leads to the highest 
+energy consumption. The 
+energy consumption reduces by 
+increasing the importance of 
+energy in the objective function 
+of our optimization.
+Changing the emphasis on energy efficiency has a direct impact on the 
+success rate of FL clients, as shown in the following plot
+10
+40
+60
+Total Consumed Energy (KJ)
+62.7
+10.1
+3.80
+20
+20
+50
+70
+6.47
+2.30
+1.37
+0.78
+0
+Energy efficiency importance (       )
+1
+2
+4
+6
+8
+10
+0.0
+0.2
+0.4
+0.6
+1.0
+Success Rate
+CIFAR-10
+Fashion-MNIST
+MNIST
+0.8
+0
+Energy efficiency 
+importance(        ) 
+1 2
+4 6 8 10
+0
+Energy efficiency 
+importance(        ) 
+1 2
+4 6 8 10
+0
+Energy efficiency 
+importance(        ) 
+1 2
+4 6 8 10
+The lowest value of energy 
+importance leads to the highest 
+energy consumption. The 
+energy consumption reduces by 
+increasing the importance of 
+energy in the objective function 
+of our optimization.
+Fig. 6: Energy consumption and the number of successful clients of EFL upon varying the importance of energy efficiency 𝜆𝐸
+in the objective function of our optimization. Increasing 𝜆𝐸leads to energy savings (the numbers that correspond to each bar
+are represented above it for clarity) but it results in a drop in the number of successful clients, which in turn causes reductions
+in the model performance as reflected in Fig. 4. This reveals the tradeoff between energy savings and model performance.
+Additional insights can be found in the annotated text within the plots.
+lightweight optimization problems to allocate bandwidth and
+power to clients. These optimization problems follow the same
+structure as the one solved by the near-RT controller but differ
+in two key ways: (i) they are solved per O-RU and only over
+the clients currently connected to that O-RU (as determined
+by the near-RT controller), and (ii) the client power on each
+link is upper bounded by the slice-level power cap computed
+by the near-RT controller.
+We compare EFL against five methods:
+1) Single
+time-scale
+dynamic
+handover
+and
+MAC
+scheduling
+(ST-HMAC): both handover and MAC
+scheduling are performed at each MAC scheduling in-
+terval (i.e., every 0.01 s), inspired by [13].
+2) Snapshot handover and dynamic MAC scheduling (S-
+HMAC): handover is performed only once at the start
+of each global round, while MAC scheduling is updated
+dynamically every 0.01 s, inspired by [14].
+3) Snapshot handover and MAC scheduling (SH-MAC):
+inspired by conventional FL orchestrators [2], [3], [12],
+this method performs both handover and MAC scheduling
+once at the beginning of each global round.
+4) General MAC scheduling (G-MAC): resembling cur-
+rent MAC schedulers used in general internet services
+such as video streaming [4], [5], [15], this method does
+not incorporate FL-specific QoS considerations such as
+the number of successful clients or prioritization among
+FL services.
+5) Full participation upper bound (FP-UP): an idealized
+10
+benchmark where all FL clients in all services are always
+able to successfully transmit their local models to the
+server, serving as a hypothetical upper bound on test
+accuracy (due to violating the resource constraints).
+B. Results and Discussions
+The top plot in Fig. 4 shows that ST-HMAC yields the
+worst performance as it performs handover operations and
+MAC scheduling every 0.01 seconds, which introduces sub-
+stantial overhead. Specifically, since FL clients must upload
+their local models to the server within a strict deadline, the
+time wasted by these frequent control operations reduces the
+available transmission window, thereby increasing the number
+of unsuccessful clients. This is further reflected by its worst
+performance across the methods in the bottom plot of Fig. 4.
+Also, it can be seen that S-HMAC performs better than the
+other baselines but worse than our EFL. This is because,
+although S-HMAC carries out dynamic MAC scheduling, it
+still performs handover operations only at the start of each
+global round (the initially optimal connections between clients
+and O-RUs may become suboptimal due to client mobility).
+Moreover, G-MAC results in more failure of clients compared
+to EFL as it focuses on maximizing each client’s data rate (i.e.,
+a per-client performance metric), rather than maximizing the
+number of successful clients for FL-services (i.e., service-level
+performance metric). This highlights how MAC-layer resource
+allocation and mobility management designed for native wire-
+less services fall short in addressing the unique demands of
+FL-services. As illustrated in Fig. 4, our EFL outperforms all
+baselines by enabling more clients to successfully transmit
+their local models to O-RUs. This is further reflected by its
+resulting model accuracies that are comparable to the upper
+bound achieved by FP-UP.
+The left plot of Fig. 5 depicts the energy consumption
+of all methods. G-MAC consumes the most energy as its
+objective prioritizes maximizing user data rates, which in turn
+drives higher power consumption. The energy consumption
+of EFL is comparable to ST-HMAC, S-HMAC, and SH-
+MAC, demonstrating that our framework does not impose
+additional energy burdens. Importantly, while maintaining
+similar energy costs, EFL yields the highest model accuracy
+among all algorithms, as discussed above, by enabling the
+largest number of successful clients to transmit their models
+within the deadline. Also, the right plot in Fig. 5 reports the
+average computation time overhead per global round incurred
+by handover operations and MAC scheduling. EFL achieves
+a computation overhead that is close to the best baselines;
+however, it is worth noting that S-HMAC and SH-HMAC
+yield lower computation overheads compared to EFL as they
+perform handover operation only once at the beginning of
+each global round. Nevertheless, these additional overheads
+of EFL remain tractable and are justified by the gains in the
+previously discussed client success rate and model accuracy.
+This highlights the advantage of our design in balancing
+computational overhead, energy efficiency, and FL accuracy.
+In Fig. 6, we conduct analyses on the value of 𝜆𝐸, which
+tunes the importance of energy term in our optimization, to
+show how varying this coefficient affects both the success
+rate of clients and the total energy consumption of EFL. As
+shown, by increasing the value of 𝜆𝐸, our method prioritizes
+energy savings (i.e., it reduces the transmit power of clients)
+by sacrificing the number successful clients, which will lead to
+a drop in model accuracy as we studied in Fig. 4. These results
+highlight the tradeoff between energy conservation and client
+participation, offering insights into how EFL can be tailored
+to energy-constrained IoT devices depending on the prioritized
+objective (model performance vs. energy efficiency).
+IV. CONCLUSION AND FUTURE WORK
+We proposed EFL, an innovative FL architecture over O-RAN,
+orchestrating the concurrent execution of multiple FL-services
+in a dynamic wireless network. In EFL, we introduced three
+layers of dedicated network control functionalities for FL-
+services: the non-RT system descriptor, near-RT FL controller,
+and FL MAC scheduler. Additionally, we implemented a
+prototype of EFL and demonstrated the notable performance
+gains it can obtain compared to the baselines methods.
+The introduction of EFL opens the door to various future
+innovations, including creating optimized slice elasticity units
+that balance client energy usage, O-RAN operational costs,
+and the efficiency of FL-service model training. Also, ad-
+dressing adversarial behaviors — such as FL-services misrep-
+resenting their resource requirements — is crucial, as these
+can negatively impact overall system performance. Further,
+considering direct device-to-device communications between
+the clients opens up a new research avenue on designing
+optimal RICs and MAC schedulers considering ML model
+relaying between the clients.
+REFERENCES
+[1] W. Y. B. Lim, N. C. Luong, D. T. Hoang, Y. Jiao, Y.-C. Liang, Q. Yang,
+D. Niyato, and C. Miao, “Federated learning in mobile edge networks: A
+comprehensive survey,” IEEE Commun. Surveys & Tuts., vol. 22, no. 3,
+pp. 2031–2063, 2020.
+[2] Z. Cheng, M. Liwang, X. Xia, M. Min, X. Wang, and X. Du, “Auction-
+promoted trading for multiple federated learning services in UAV-aided
+networks,” IEEE Trans. Veh. Technol., vol. 71, no. 10, pp. 10 960–10 974,
+2022.
+[3] M. N. H. Nguyen, N. H. Tran, Y. K. Tun, Z. Han, and C. S. Hong,
+“Toward multiple federated learning services resource sharing in mobile
+edge networks,” IEEE Trans. Mobile Comput., vol. 22, no. 1, pp. 541–
+555, 2023.
+[4] J. Li, W. Shi, P. Yang, Q. Ye, X. S. Shen, X. Li, and J. Rao,
+“A hierarchical soft RAN slicing framework for differentiated service
+provisioning,” IEEE Wireless Commun., vol. 27, no. 6, pp. 90–97, 2020.
+[5] S. Mandelli, M. Andrews, S. Borst, and S. Klein, “Satisfying network
+slicing constraints via 5G MAC scheduling,” in IEEE INFOCOM, 2019,
+pp. 2332–2340.
+[6] S. D’Oro, M. Polese, L. Bonati, H. Cheng, and T. Melodia, “dApps:
+Distributed applications for real-time inference and control in O-RAN,”
+IEEE Commun. Mag., vol. 60, no. 11, pp. 52–58, 2022.
+[7] S. D’Oro, L. Bonati, M. Polese, and T. Melodia, “OrchestRAN: Network
+automation through orchestrated intelligence in the open RAN,” in IEEE
+INFOCOM, 2022, pp. 270–279.
+[8] K. Alam, M. A. Habibi, M. Tammen, D. Krummacker, W. Saad,
+M. D. Renzo, T. Melodia, X. Costa-P´erez, M. Debbah, A. Dutta,
+and H. D. Schotten, “A comprehensive tutorial and survey of o-ran:
+Exploring slicing-aware architecture, deployment options, use cases, and
+challenges,” IEEE Commun. Surv. Tutor., pp. 1–1, 2025.
+[9] S. Mondal and M. Ruffini, “Optical front/mid-haul with open access-
+edge server deployment framework for sliced O-RAN,” IEEE Trans.
+Netw. Service Manag., vol. 19, no. 3, pp. 3202–3219, 2022.
+11
+[10] J. Mills, J. Hu, and G. Min, “Multi-task federated learning for person-
+alised deep neural networks in edge computing,” IEEE Trans. Parallel
+Distrib. Syst., vol. 33, no. 3, pp. 630–641, 2022.
+[11] H. Li, Z. Cai, J. Wang, J. Tang, W. Ding, C.-T. Lin, and Y. Shi, “FedTP:
+Federated learning by transformer personalization,” IEEE Trans. Neural
+Netw. Learn. Syst., vol. 35, no. 10, pp. 13 426–13 440, 2024.
+[12] S. Hosseinalipour, S. Wang, N. Michelusi, V. Aggarwal, C. G. Brinton,
+D. J. Love, and M. Chiang, “Parallel successive learning for dy-
+namic distributed model training over heterogeneous wireless networks,”
+IEEE/ACM Trans. Netw., 2023.
+[13] Y. Kang, Y. Zhu, D. Wang, Z. Han, and T. Bas¸ar, “Joint server selection
+and handover design for satellite-based federated learning using mean-
+field evolutionary approach,” IEEE Trans. Netw. Sci. Eng., vol. 11, no. 2,
+pp. 1655–1667, 2023.
+[14] C. Feng, H. H. Yang, D. Hu, Z. Zhao, T. Q. Quek, and G. Min,
+“Mobility-aware cluster federated learning in hierarchical wireless net-
+works,” IEEE Trans. Wireless Commun., vol. 21, no. 10, pp. 8441–8458,
+2022.
+[15] S. Deng, Z. Xiang, P. Zhao, J. Taheri, H. Gao, J. Yin, and A. Y. Zomaya,
+“Dynamical resource allocation in edge for trustable internet-of-things
+systems: A reinforcement learning method,” IEEE Trans. Indust. Inform.,
+vol. 16, no. 9, pp. 6103–6113, 2020.
+Payam Abdisarabshali [S] received the M.Sc. degree in Computer Engineer-
+ing from Razi University, Iran, with top-rank recognition in 2018. He was a
+teaching assistant professor at Razi University from 2018 to 2022. He is cur-
+rently a Ph.D. student at the Department of Electrical Engineering, University
+at Buffalo–SUNY, NY, USA. His research interests include distributed and
+federated machine learning, computer vision, the design of neural network
+architectures, and mathematical modeling.
+Nicholas Accurso [S] received the M.Sc. degree from University at Buffalo
+(SUNY). He is currently a PhD student at Department of Electrical Engineer-
+ing of the University at Buffalo (SUNY).
+Filippo Malandra [M] received the B.Eng. and M.Eng. degrees in telecom-
+munications engineering from the Politecnico di Milano, Milan, Italy, in 2008
+and 2011, respectively, and the Ph.D. degree in electrical engineering from
+Polytechnique Montreal, Montreal, QC, Canada, in 2016. He is an Assistant
+Professor with the Department of Electrical Engineering, State University of
+New York at Buffalo, Buffalo, NY, USA, where he is the Director of the
+Wireless Network for Smart Systems (WN4SS) Lab. His research interests
+include the performance analysis and design of mobile networks for smart
+cities, smart grid IoT applications, and the design of new solutions to provide
+broadband Internet access to underserved communities.
+Weifeng Su [F] received the B.S. and Ph.D. degrees in mathematics from
+Nankai University, Tianjin, China, in 1994 and 1999, respectively, and the
+Ph.D. degree in electrical engineering from the University of Delaware,
+Newark, USA, in 2002. He is currently a Professor with the Department of
+Electrical Engineering, State University of New York (SUNY), Buffalo, USA.
+He has authored more than 100 peer-reviewed papers in IEEE journals and
+leading international conferences. He has coauthored the book Cooperative
+Communications and Networking (Cambridge University Press, 2009). His
+research interests span a broad range of areas from signal processing to
+wireless communications and networking, including space-time coding and
+modulation for MIMO wireless communications, MIMO-OFDM systems, and
+cooperative communications for wireless networks.
+Seyyedali Hosseinalipour [SM] received the B.S. degree in electrical en-
+gineering from Amirkabir University of Technology, Tehran, Iran, in 2015
+with high honor and top-rank recognition. He then received the M.S. and
+Ph.D. degrees in electrical engineering from North Carolina State University,
+NC, USA, in 2017 and 2020, respectively; and was a postdoctoral researcher
+at Purdue University, IN, USA from 2020 to 2022. He was the recipient
+of the ECE Doctoral Scholar of the Year Award (2020) and ECE Distin-
+guished Dissertation Award (2021) at NC State University; and Students’
+Choice Teaching Excellence Award (2023) at University at Buffalo–SUNY.
+Furthermore, he was the first author of a paper published in IEEE/ACM
+Transactions on Networking that received the 2024 IEEE Communications
+Society William Bennett Prize. He has served as the TPC Co-Chair of
+workshops/symposiums related to machine learning and edge computing for
+IEEE INFOCOM, GLOBECOM, ICC, CVPR, ICDCS, SPAWC, WiOpt, and
+VTC. He has also served as the guest editor of IEEE Internet of Things
+Magazine for the special issue on Federated Learning for Industrial Internet
+of Things (2023). Since Feb. 2025, he has been serving as an Associate
+Editor for the IEEE Transactions on Signal and Information Processing over
+Networks. His research interests include the analysis of modern wireless
+networks, synergies between machine learning methods and fog/edge

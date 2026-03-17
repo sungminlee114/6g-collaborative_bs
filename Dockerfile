@@ -98,7 +98,7 @@ matplotlib \
 pandas \
 scikit-build \
 einops \
-scipy \ 
+scipy \
 numba \
 scikit-learn \
 scikit-learn-extra \

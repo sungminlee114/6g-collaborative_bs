@@ -884,3 +884,115 @@ Cluster F: 시뮬레이션 & 데이터셋 (3편)
 | 3GPP Beam Mgmt | ML model f_W(·) | R (RSRP vector) | Prediction î | P77 |
 
 > **권장**: `z_u = f_φ(H_u) ∈ ℝ^d` — CSI feedback AE, foundation model, split learning 문헌 모두와 일관. VAE 문헌의 표준 관례(z)와도 부합.
+
+---
+
+## 6. Site-Adaptive Channel Estimation & Attention in FL (8편)
+
+> PACE-Net 실험에서 발견한 "SE attention이 FL aggregation과 충돌" 현상 관련 논문 조사. Site-specific adaptation, domain adaptation, attention + FL 조합 연구 정리.
+
+### Cluster I1: Attention 기반 채널 추정 (SE block의 원본 참조)
+
+#### [P78] PACE-Net: Channel Estimation for Massive MIMO via Polarized Self-Attention (PACE-Net 원본 참조)
+- **저자**: Yang, Li, Liu, Xia, Wang, Li
+- **연도**: 2025, Entropy (MDPI) 27(3):220
+- **PDF**: `papers/PACE_Net_DL_Channel_Estimation_Massive_MIMO.pdf`
+- **핵심 기여**: Polarized Self-Attention (PSA) 기반 채널 추정 네트워크. Channel attention (SE 방식) + Spatial attention 직교 결합. 채널 추정을 image denoising으로 변환.
+- **방법론**: ResNet backbone + PSA 모듈. Kronecker 채널 모델, 64×16 massive MIMO.
+- **주요 결과**: MMSE 대비 우수한 NMSE, 계산복잡도 대폭 감소 (MMSE의 행렬 역산 제거)
+- **관련도**: ★★★★☆ — **프로젝트 PACE-Net의 직접적 참조. SE block이 채널 특성에 따라 feature를 adaptive하게 re-weight한다는 핵심 메커니즘 출처.**
+- **실험적 발견**: PACE-Net에서 FL aggregation 시 SE의 implicit site adaptation이 평균화되어 성능 저하 관찰 (Independent -18.34 vs Ours -17.37 dB). → **SE와 FL의 충돌은 본 논문에서 미다룸 (새로운 finding).**
+
+#### [P79] Channelformer: Attention-Based Neural Solution for Wireless Channel Estimation
+- **저자**: Luan, Thompson
+- **연도**: 2023, IEEE TWC / arXiv:2302.04368
+- **PDF**: `papers/Channelformer_2302.04368.pdf`
+- **핵심 기여**: Multi-head self-attention 인코더 + CNN 디코더 하이브리드 CE. 70% 파라미터 pruning 가능.
+- **관련도**: ★★★☆☆ — Attention 기반 CE의 기초 연구. 단일 BS, FL 없음.
+
+### Cluster I2: Channel Attention과 FL Heterogeneity
+
+#### [P80] ANFR: Adaptive Normalization-Free Feature Recalibration in Federated Learning ⭐
+- **저자**: Siomos, Naval-Marimont, Passerat-Palmbach, Tarroni
+- **연도**: 2025, ICLR 2025 / arXiv:2410.02006
+- **PDF**: `papers/ANFR_FL_channel_attention_2410.02006.pdf`
+- **핵심 기여**: **FL에서 channel attention으로 heterogeneity 해결.** Weight Standardization + Channel Attention으로 BN 제거. **클라이언트 간 불일치 feature를 suppress, 일관된 feature를 emphasize.**
+- **주요 결과**: Global FL과 personalized FL 모두에서 SOTA. BN 없이 heterogeneous data에서 안정적 수렴.
+- **강점**: **SE block과 FL의 상호작용을 직접 다룬 가장 가까운 논문.** Channel attention이 FL에서 feature inconsistency를 완화하는 메커니즘 제시.
+- **한계**: Vision 도메인 (CIFAR, ImageNet). 무선 채널 추정에는 적용 안 됨.
+- **관련도**: ★★★★★ — **핵심 참고문헌. 우리 PACE-Net 실험 결과를 해석하는 이론적 근거. "SE가 client-specific feature를 학습하면 FL aggregation 시 상충"이라는 우리 가설을 뒷받침.**
+
+#### [P81] FedAttn: Federated Attention for Distributed LLM Inference
+- **저자**: Deng, Xiong, Chen, Kim, Debbah, Poor
+- **연도**: 2025, arXiv:2511.02647
+- **PDF**: `papers/FedAttn_2511.02647.pdf`
+- **핵심 기여**: Transformer self-attention 자체를 federate. 로컬 self-attention + KV matrix 주기적 교환/aggregation. Token relevance heterogeneity 분석.
+- **관련도**: ★★★☆☆ — Attention을 분산하는 개념적 참고. 채널 추정과는 다른 도메인.
+
+### Cluster I3: Site-Specific / Environment-Adaptive 채널 추정
+
+#### [P82] NVIDIA Neural 5G NR Receiver: Environment-Specific Base Stations ⭐
+- **저자**: Cammerer et al. (NVIDIA / Rohde & Schwarz)
+- **연도**: 2024-2025, arXiv:2409.02912
+- **PDF**: `papers/NVIDIA_env_specific_BS_2409.02912.pdf`
+- **핵심 기여**: **Site-specific neural receiver.** Ray-tracing 디지털 트윈으로 사전학습 → 사이트별 fine-tuning. Classical PHY layer (CE, equalization, demapping)를 trainable NN으로 대체.
+- **주요 결과**: 3GPP-compliant 5G NR 실시간 구동. Site-specific fine-tuning이 generic 모델 대비 유의미한 성능 향상.
+- **강점**: **"각 BS는 고유한 전파 환경 → site-specific model 필요"라는 우리 프로젝트 핵심 가정의 산업적 검증.**
+- **관련도**: ★★★★★ — **Site-specific adaptation의 필요성을 산업 수준에서 입증. 우리의 per-BS LoRA adapter가 이 방향과 정확히 일치.**
+
+#### [P83] Transfer Learning vs Meta-Learning for MIMO-OFDM Channel Denoising
+- **저자**: Ha, Jeon et al.
+- **연도**: 2025, arXiv:2508.09751
+- **PDF**: `papers/Transfer_vs_Meta_CE_2508.09751.pdf`
+- **핵심 기여**: 표준호환 온라인 학습 데이터 생성 + Transfer Learning (fine-tuning) vs Meta-Learning (MAML) 비교. 새로운 환경에 빠른 적응.
+- **관련도**: ★★★★☆ — Site adaptation 방법론 비교. 우리의 FL + LoRA는 이 두 접근의 중간점.
+
+#### [P84] Domain Adaptation-Enabled Realistic Map-Based Channel Estimation
+- **저자**: Hoang et al.
+- **연도**: 2025, arXiv:2507.08974
+- **PDF**: `papers/Domain_Adapt_CE_2507.08974.pdf`
+- **핵심 기여**: QSCM (준정적 채널 모델) → MBCM (맵기반 채널 모델) 간 domain gap을 domain adaptation으로 해소. Simulation-to-realistic 전이.
+- **관련도**: ★★★★☆ — Site 간 채널 통계 차이를 domain adaptation으로 해결. 우리의 LoRA per-BS가 implicit domain adaptation 역할.
+
+#### [P85] ReQuestNet: Foundational Learning Model for Channel Estimation (Qualcomm)
+- **저자**: Pratik, Sadeghi, Cesa et al. (Qualcomm AI Research)
+- **연도**: 2025, IEEE Globecom 2025 / arXiv:2508.08790
+- **PDF**: `papers/ReQuestNet_Qualcomm_2508.08790.pdf`
+- **핵심 기여**: Recurrent equivariant 아키텍처로 채널 추정 foundation model. 다양한 delay-Doppler profile에서 10 dB gain over genie MMSE.
+- **관련도**: ★★★★☆ — 대형 foundation model 접근. 우리의 경량 per-BS 접근과 대비되는 방향.
+
+### Cluster I4: Continual Learning for Channel Prediction
+
+#### [P86] Continual Learning for Wireless Channel Prediction ⭐
+- **저자**: Mohsin, Umer, Bilal, Jamshed, Cioffi
+- **연도**: 2025, ICML Workshop ML4Wireless / arXiv:2506.22471
+- **PDF**: `papers/Continual_Learning_Channel_2506.22471.pdf`
+- **핵심 기여**: **Cross-cell handover 시 채널 통계 변화에 대한 continual learning.** Replay, synaptic importance regularization (EWC/SI), LwF 비교. 다른 안테나/주파수/산란 환경 간 적응.
+- **주요 결과**: 최고 방법 2 dB NMSE 개선 (~35%). SI가 가장 효과적.
+- **강점**: **"각 BS/cell은 다른 채널 통계" 문제를 continual learning으로 접근 — 우리의 FL + per-BS adapter와 상보적 관점.**
+- **관련도**: ★★★★★ — **우리와 같은 문제 (BS별 채널 이질성)를 다른 방법 (CL vs FL)으로 해결. Related work에 반드시 인용.**
+
+---
+
+### Cluster I 종합: PACE-Net 실험 해석 & 연구 갭
+
+**실험적 발견 요약:**
+- PACE-Net에서 Independent (-18.34 dB) > Ours/FL+LoRA (-17.37 dB) — SE가 FL과 충돌
+- ResNet/DWS-ResNet에서는 Ours가 Independent를 이김
+
+**해석 (P80 ANFR 기반):**
+- SE의 channel attention은 **입력에 따라 feature를 adaptive하게 re-weight** (P78 PACE-Net)
+- FL aggregation은 이 adaptive weight의 기반이 되는 Linear layer를 평균화
+- P80 (ANFR)은 channel attention이 FL heterogeneity를 **완화**할 수 있음을 보였으나, 이는 attention을 **shared feature의 일관성 필터**로 쓸 때
+- 우리 경우 SE는 **site-specific feature amplifier** 역할 → FL 평균화와 목적이 상충
+
+**연구 갭:**
+| 갭 ID | 설명 | 관련 논문 |
+|-------|------|----------|
+| G8 | SE/attention block의 FL aggregation 시 site-specific adaptation 손실 메커니즘 분석 | P78, P80 |
+| G9 | Site-adaptive CE에서 FL vs Transfer Learning vs Continual Learning 체계적 비교 | P82, P83, P86 |
+| G10 | 경량 모델 (O-DU급)에서 collaborative learning의 이점이 커지는 현상의 이론적 분석 | P78, P85 |
+
+---
+
+*Updated: 2026-03-17 | 86 papers (77 previous + 9 site-adaptive CE & attention) analyzed*

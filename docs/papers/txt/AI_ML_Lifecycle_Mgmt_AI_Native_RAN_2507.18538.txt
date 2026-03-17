@@ -1,0 +1,968 @@
+IEEE COMMUNICATIONS STANDARDS MAGAZINE
+1
+AI/ML Life Cycle Management for Interoperable
+AI Native RAN
+Chu-Hsiang Huang, Member, IEEE, Chao-Kai Wen, Fellow, IEEE, and Geoffrey Ye Li, Fellow, IEEE
+Abstract—Artificial intelligence (AI) and machine learning
+(ML) models are rapidly permeating the 5G Radio Access
+Network (RAN), powering beam management, channel state
+information (CSI) feedback, positioning, and mobility prediction.
+However, without a standardized life-cycle management (LCM)
+framework, challenges, such as model drift, vendor lock-in,
+and limited transparency, hinder large-scale adoption. 3GPP
+Releases 16–20 progressively evolve AI/ML from experimental
+features to managed, interoperable network functions. Beginning
+with the Network Data Analytics Function (NWDAF) in Rel-
+16, subsequent releases introduced standardized interfaces for
+model transfer, execution, performance monitoring, and closed-
+loop control, culminating in Rel-20’s two-sided CSI-compression
+Work Item and vendor-agnostic LCM profile. This article re-
+views the resulting five-block LCM architecture, KPI-driven
+monitoring mechanisms, and inter-vendor collaboration schemes,
+while identifying open challenges in resource-efficient monitoring,
+environment drift detection, intelligent decision-making, and
+flexible model training. These developments lay the foundation
+for AI-native transceivers as a key enabler for 6G.
+C.-H. Huang is with the Department of Electrical Engineering, National
+Taiwan University National Taiwan University, Taipei 10617, Taiwan, Email:
+chuhsianh@ntu.edu.tw.
+C.-K.
+Wen
+is
+with
+the
+Institute
+of
+Communications
+Engineering,
+National
+Sun
+Yat-sen
+University,
+Kaohsiung
+80424,
+Taiwan,
+Email:
+chaokai.wen@mail.nsysu.edu.tw.
+G. Y. Li is with the Department of Electrical and Electronic Engi-
+neering, Imperial College London, SW7 2AZ London, U.K., Email: geof-
+frey.li@imperial.ac.uk.
+8 pages, 4 figures, 2 table. This work has been submitted to the IEEE for
+possible publication. Copyright may be transferred without notice, after which
+this version may no longer be accessible.
+I. INTRODUCTION
+A
+RTIFICIAL intelligence (AI) and machine learning (ML)
+have demonstrated significant potential in enhancing
+radio access network (RAN) performance, particularly for non-
+linear and analytically complex tasks, such as beam manage-
+ment [1], channel state information (CSI) feedback [2], [3],
+positioning [4], and mobility prediction [5]. As these models
+become more prevalent in production networks, managing
+their lifecycle, including training, deployment, inference, and
+replacement, becomes essential to maintain robustness under
+diverse and evolving operating conditions. The deployment
+of AI/ML at scale in a wide variety of scenarios and under
+different configurations introduces challenges, such as model
+drift, version consistency, performance degradation, and cross-
+vendor compatibility. These challenges highlight the need
+for a standardized life-cycle management (LCM) framework
+to sustain performance and enable rapid adaptation across
+heterogeneous, and multi-vendor networks [6]–[8].
+In 2020, 3GPP began addressing these needs in Release
+16 (Rel-16) through the introduction of the Network Data
+Analytics Function (NWDAF), specified in TS 23.288. This
+specification established a logical separation between model
+training and analytics services within the 5G Core Network
+(CN). While its initial focus was limited to core-network
+key performance indicators (KPIs), it implicitly defined a
+basic life-cycle that included model training, distribution, and
+inference.
+Release 17 (Rel-17) marked the formalization of AI/ML
+TR 38.843 v18 sets 
+tech. foundation for 
+AI/ML air interface.
+TS 23.288 v18.5.0 + 
+companion CRs 
+define multi-layer 
+model deployment 
+(core / edge / RAN) 
+and repository 
+hooks for unified 
+model IDs. 
+Q1 2024
+TR 28.908 
+concludes the 
+closed-loop LCM 
+study (train–
+validate–deploy–
+infer–monitor–
+retrain) and aligns it 
+with OAM 
+workflows.
+Mar 2022
+Jun 14, 2025
+TS 23.288 & TS 
+28.104 standardise
+NWDAF 
+architecture and 
+Management-Data-
+Analytics (MDA); 
+implicit model 
+versioning becomes 
+part of service 
+procedures.
+TS 28.105 v17.0.0 
+publishes AI/ML 
+Management 
+Stage-2 services for 
+onboarding, 
+deployment control, 
+KPI/alarm 
+handling — LCM 
+formally recognised
+as a 5GS capability.
+Rel-17
+(Freeze)
+Rel-16
+(Freeze)
+Jul 2020
+Rel-18
+(SI Closure)
+Dec 2023
+Rel-18
+(Freeze)
+Focus on continual 
+learning, model 
+provenance, 
+energy-aware 
+inference and 
+federated LCM; 
+first CRs against TS 
+28.105 & TS 38.331 
+drafted.
+Rel-19 
+(WI Start)
+Q1 2024
+“LCM Profile” 
+agreed: delta-
+model format, hot-
+swap triggers, KPI-
+driven rollback; RRC 
+IE set (ml-ModelId, 
+ml-ModelVersion, 
+integrity hash) 
+stable.
+Rel-19 
+(RAN1 Freeze)
+Jun 13, 2025
+Rel-20 
+(Stage-1 Freeze)
+RP-251870 
+approves 
+NR_AIML_air_Ph2
+WI: two-sided CSI-
+compression Case-0 
+plus full LCM 
+protocol (pairing, 
+activation, fallback, 
+monitoring). LCM 
+declared a baseline 
+AI-native network 
+capability for 6G.
+•
+Study-Item (SI) → feasibility/study reports (TR).
+•
+Work-Item (WI) → normative specs (TS) and change requests (CR).
+•
+Stage-1 / Stage-2 / Stage-3 → follow 3GPP’s service, architecture, and protocol layering.
+•
+TS 23.x →system architecture and procedures. TS 28.x →network management and orchestration. TS 38.x → RAN protocols and radio-layer realization.
+Fig. 1. 3GPP AI/ML LCM Timeline.
+arXiv:2507.18538v2  [cs.IT]  26 Jul 2025
+IEEE COMMUNICATIONS STANDARDS MAGAZINE
+2
+management as a network-wide capability. TS 28.105, pub-
+lished by the SA5 working groups, specified Stage-2 services
+for model onboarding, deployment control, KPI monitoring,
+and alarm handling. These capabilities extended AI/ML inte-
+gration into general network operations, supporting alignment
+with existing operations, administration, and maintenance
+(OAM) processes.
+Release 18 (Rel-18) further expanded the scope of AI/ML
+LCM to include RAN and PHY/MAC layer air-interface de-
+sign. RAN1 concluded Study Item (SI) FS_NR_AIML_air,
+with its findings documented in TR 38.843 [9]. This report
+stands as a milestone in 3GPP’s exploration of AI/ML-native
+air interfaces at the RAN level. It identifies key use cases,
+such as CSI compression, beam management, and positioning,
+quantifies expected performance gains, highlights protocol-
+level gaps, and aligns LCM requirements. These contributions
+laid the technical foundation for Rel-19 feature freeze and
+the two-sided model Work Item (WI) in Rel-20. In paral-
+lel, TR 28.908 [10] in SA5 introduced a closed-loop LCM
+framework encompassing training, validation, deployment, in-
+ference, monitoring, and retraining. These concepts were sub-
+sequently reflected in TS 23.288 v18.5 and TS 38.331 v18.5.1,
+which enable multi-layer model deployment and added initial
+Radio Resource Control (RRC) signaling support for model
+identifiers and activation controls, respectively.
+Release 19 (Rel-19) introduced a WI to support deployment
+of AI/ML models in live systems. TS 28.105 was extended
+with Stage-2 features, such as model provenance, bias au-
+diting, and anomaly reporting. In addition, TS 38.331 was
+updated to support life-cycle operations (model activation and
+rollback, integrity verification, and version reporting). These
+updates culminated in the functional freeze milestone in June
+2025, where RAN1 finalized the initial “LCM Profile,” includ-
+ing mechanisms for delta updates, hot-swapping, and real-time
+KPI-triggered lifecycle events. Stage-3 protocol changes are
+expected to complete across RAN2, SA2, and SA5 in 2025.
+Release 20 (Rel-20) marked a major transition toward two-
+sided model deployment. At the RAN#108 plenary meeting
+in June 2025, 3GPP approved WI NR_AIML_air_Ph2. It
+focuses on CSI compression Case-0 use cases where the
+encoder resides in the UE and the decoder in the gNB.1 This
+initiative includes a complete LCM control protocol covering
+model pairing, activation, fallback, and version synchroniza-
+tion between vendors. Inter-vendor cooperation is supported
+through three mechanisms: reference model sharing, encoder
+parameter exchange, and dataset alignment. RAN4 is leading
+the development of a conformance test suite that includes a
+standard test decoder and performance benchmarks to ensure
+consistent implementation.
+6G study on AI/ML is expected to deliver AI-native
+transceiver technologies as the key differentiator for 6G sys-
+tems. Among these technologies, LCM procedure is listed
+in the key objectives in 6G study by 3GPP [11] since it
+is a crucial enabler for AI-native transceivers to adapt and
+1Case-0 is the “temporal-domain-0” baseline two-sided CSI-compression
+scenario in which the UE-side encoder compresses only the current-slot
+spatial-frequency CSI (no temporal context) into a fixed-length bitstream that
+the gNB-side decoder reconstructs for benchmarking more advanced cases.
+customize towards a wide variety of different 6G operating
+scenarios and unleash the potential of data-driven design. The
+interoperability and alignment across the connected AI/ML
+models in the two-sided operations ensured by the model con-
+troller in LCM are the foundation of the AI-native transceiver
+implementation in the cellular communication systems.
+As shown in Fig. 1, the evolution of AI/ML LCM in 3GPP
+reflects a progressive trajectory. Initial architectural enablers
+were introduced in the CN in Rel-16. System-level manage-
+ment and orchestration were established in Rel-17. Rel-18
+expanded lifecycle support to include closed-loop workflows
+and RAN-specific signalling. Rel-19 introduced normative
+deployment and monitoring mechanisms. In the near future,
+Rel-20 is expected to aim to deliver a robust, interoperable,
+and cross-domain AI/ML management framework. Future re-
+leases are expected to support federated learning, continual
+adaptation, and AI-native orchestration capabilities for 6G.
+In contrast to [6], [7], which mainly review AI/ML progress
+in 3GPP Rel-18, this article examines the evolution of LCM
+standardization beyond Rel-18 and identifies unresolved chal-
+lenges for future research. Section II reviews the 3GPP LCM
+framework and its functional components; Section III analyzes
+two-sided model interoperability schemes and their trade-
+offs; Section IV summarizes key insights and identifies future
+directions for interoperable AI-native RAN systems.
+II. LCM ARCHITECTURE
+In this section, we review the 3GPP discussions on LCM
+framework and related procedures including performance
+monitoring and other important functional blocks. We then
+use CSI prediction as a case study of LCM controller design
+for AI/ML models in cellular communication systems.
+A. Functional Framework
+Fig. 2 illustrates the five logical blocks (highlighted by or-
+ange and red boxes) in the AI/ML LCM functional framework
+for the NR air interface defined by 3GPP in TR 38.843 clause
+4.4 [9] together with the associated LCM functionalities and
+interactions. A central Management entity coordinates the op-
+eration of the Data-Collection, Model-Training/Adaptation,
+Model-Storage, and Inference blocks, thereby closing the
+performance-governance loop. According to 3GPP, Manage-
+ment is defined as follows [9]:
+Management is a function that oversees the opera-
+tion (e.g., selection / (de)activation / switching / fall-
+back2) and monitoring (e.g., performance) of AI/ML
+models or AI/ML functionalities. This function is
+also responsible for making decisions to ensure the
+proper inference operation based on data received
+from the Data Collection function and the Inference
+function.
+The Management block interfaces with the Inference function
+via management instructions, i.e. the information needed as
+input to manage the inference function [12]. As concluded in
+2Switch to a conventional, non-AI-based operation when necessary
+IEEE COMMUNICATIONS STANDARDS MAGAZINE
+3
+Training data
+Model Storage
+Model 3
+Model 2
+Model 1
+Model Activation/ fallback
+Model 
+switch
+Inference input
+Inference output
+Offline/Online
+training related
+Online Measur. 
+related
+Data Collection
+Long-term 
+Stats 
+Collection/ 
+Filtering
+Performance 
+Monitoring
+Model Inference
+Monitoring 
+data
+Inference data
+Life Cycle 
+Management
+Controller
+Model 
+Training/ Adaptation
+LCM Signaling
+Training request
+Trained/Updated Model
+Model Transfer/Delivery
+Fig. 2. Detailed interaction of AI/ML LCM sub-functions in 3GPP.
+Rel-18 study TR 28.908 [10], such instructions may include
+the operations overseen by management as mentioned above.
+While these five blocks establish the high-level structure of
+AI/ML LCM, 3GPP discussions have further elaborated the
+sub-functions required to support reliable and adaptive model
+operation. These functional elements include:
+• Monitoring schedules and collects observations used for
+evaluation of AI/ML model operation and performance.
+• KPI derivation transforms raw observations into mea-
+surable indicators of accuracy, robustness, and trustwor-
+thiness of the AI/ML models.
+• Environment detection compares the current data distri-
+butions against those observed during model training.
+• Adaptation enables model updates via delta downloads,
+hot-swapping, or retraining in response to drift or policy
+triggers.
+• Decision logic integrates multiple sources of input and
+determines actions, such as maintaining, switching, re-
+training, or reverting to non-AI models.
+Based on these functional requirements, Fig. 2 shows the
+detailed interactions among LCM functionalities. Training,
+monitoring, and inference data are collected by the Data-
+Collection block. Training data are forwarded to the Model-
+Training/Adaptation block, which produces and updates mod-
+els, and stores them in the Model-Storage block. The selected
+model is then deployed to the Inference block, which uses
+incoming measurement data to produce real-time outputs. In
+parallel, monitoring data, which are collected during inference,
+are combined with inference results to compute KPIs, such as
+accuracy degradation or model drift. Additionally, statistical
+analysis of measurement data may reveal whether the current
+operating environment remains consistent with the assump-
+tions made during model training.
+These metrics and statistics, along with auxiliary signalling
+data, are supplied to the Management block, which evaluates
+the suitability of the currently deployed model. When Man-
+agement detects events required model control actions, such as
+performance falling below predefined thresholds or significant
+deviations between measured and training data statistics, it
+issues control decisions. The options of the control action
+include initiating model switching, retraining, and fallback to
+a non-AI configuration. The decisions apply to the Model-
+Training/Adaptation block or the Inference block, thereby
+completing the feedback loop and maintaining inference re-
+liability under evolving environments and configurations.
+Management instructions are transmitted via standard-
+ized
+Management
+Service
+(MnS)
+interfaces,
+primarily
+ModelTransferMnS (ML-model transfer management ser-
+vice) and ModelExecMnS (ML-model execution or inference
+management service), specified in TS 28.105 v18.x. Further-
+more, TS 28.567 defines state transitions for common LCM
+control actions, such as Retrain, Rollback, and Scale,
+through the LoopState framework, enabling standardized
+execution of adaptive responses.
+To support these life-cycle operations, 3GPP has introduced
+two complementary signalling paradigms:
+• The model-ID-based approach exchanges explicit iden-
+tifiers, including modelId and modelVersion. This
+approach facilitates fine-grained tracking, integrity vali-
+dation, and trust verification of deployed models. It is
+especially suited for use cases that require strict model
+alignment, such as two-sided model operations explained
+in Section III.
+• The functionality-based approach abstracts model identity
+and instead advertises the supported capability sets (e.g.,
+BeamMgmt-v2) at the UE. This reduces signalling over-
+head and improves flexibility, particularly in one-sided or
+asymmetric deployments where only the UE or gNB hosts
+IEEE COMMUNICATIONS STANDARDS MAGAZINE
+4
+TABLE I
+REPRESENTATIVE KPIS FOR AI/ML RAN USE CASES
+Use-case
+KPIs
+Computation Point
+Beam
+management
+Top-K beam prediction ac-
+curacy
+gNB or UE assisted
+CSI compression
+SGCS, NMSE
+UE or gNB
+Positioning
+Position-error CDF
+gNB
+the AI/ML model.
+B. Performance Monitoring
+Performance monitoring serves as the evidential foundation
+for the closed-loop LCM of AI/ML models in RANs. By
+transforming AI/ML models from opaque algorithms into
+observable network functions, it enables transparent, auditable,
+and scalable deployments across various environments. The
+baseline procedure was established in 3GPP Rel-18 through
+TR 28.908 while Rel-19 introduced further enhancements,
+including expanded KPI instrumentation, trust indicators, and
+standardized LoopState transitions defined in TS 28.567.
+To initiate effective monitoring, reference signals for moni-
+toring associated with model inference events must be sched-
+uled. These measurements enable ground-truth comparison
+and evaluation of model performance. For instance, in beam
+prediction tasks, the UE measures received signal strength or
+CSI on the beams predicted by the model. The correspondence
+between monitored signals and model outputs must be explic-
+itly signaled using mechanisms, such as MeasurementInfo
+in TS 38.331 to ensure correct KPI computation.
+3GPP has specified multiple KPIs tailored to different
+AI/ML use cases. Representative examples include:
+• Beam prediction accuracy: Defined in TR 38.843, this
+metric counts how often, among the N most recent
+monitoring intervals, at least one of the M best measured
+beams appears within the top-K predicted beams.
+• CSI prediction quality: The squared generalized co-
+sine similarity (SGCS) metric quantifies the alignment
+between predicted precoder ˜w and true precoder w as
+following:
+SGCS =
+| ˜wHw|2
+∥˜wH∥2∥w∥2 .
+(1)
+Table I summarizes these and other KPIs across common
+AI/ML use cases. These KPIs may be computed at either the
+UE or the gNB, depending on the use case and are reported
+via the ModelExecMnS interface.
+If KPI values fall below preconfigured thresholds, the
+DriftDetection policy triggers remedial actions, such as
+Retrain or Rollback, as defined in TS 28.567. These
+actions cause a transition in the life-cycle state machine, for
+example from Stable to Recovering or Degraded, ensuring that
+corrective steps are taken promptly.
+C. Case Study: One-sided CSI Prediction
+In 5G networks, CSI reports are typically generated every
+40–160 ms. This periodicity introduces channel aging, particu-
+larly for medium- and high-mobility UEs, whose instantaneous
+TABLE II
+REL-19 MONITORING MODES FOR ONE-SIDED CSI PREDICTION
+Mode
+UE →gNB reporting
+Type 1
+UE computes SGCS; if the metric stays below a gNB-
+signalled threshold for N consecutive checks, the UE
+sets a 1-bit perf-bad flag in the Predicted-CSI report.
+Type 2
+UE reports both predicted CSI and ground-truth CSI
+(extra CSI-RS/SRS); gNB derives SGCS. Highest air-
+interface overhead, retained mainly for debugging.
+Type 3
+UE sends the quantised SGCS value (e.g. 8 bits) with
+no raw CSI; gNB compares it with the threshold.
+channel states may have drifted significantly since the last
+report. Such aging degrades the performance of MU-MIMO
+schedulers and precoder design, which depend on timely and
+accurate CSI. While increasing the reporting frequency could
+mitigate this degradation, it would also introduce substantial
+uplink overhead. To tackle the issue, 3GPP promoted “one-
+sided CSI prediction” from a Rel-18 study (TR 38.843) to a
+formal WI in Rel-19. The target prediction horizons are 4 ms
+and 8 ms. Inference is performed on either the UE or the gNB
+while the opposite side remains unchanged. Thus, no paired
+decoder is required. The LCM and performance-monitoring
+blocks introduced earlier apply directly to this setup. Fig. 3
+illustrates how these elements supervise a UE-side predictor.
+Life-cycle Anchoring: Model training is performed in a
+cloud platform or a RAN Intelligent Controller (RIC). The
+resulting weights are wrapped into a package and delivered
+via the ModelTransferMnS interface; smaller ∆-packages
+may also be transmitted via RRC for latency-sensitive updates.
+During inference, the UE collects CSI-RS measurements,
+performs local prediction, and reports a Predicted-CSI field
+that minimally includes a Type-II PMI index, with optional
+CQI and RI extensions.3 The management entity monitors the
+SGCS to determine whether the current model remains valid
+or requires fallback.
+Performance Monitoring: For performance monitoring,
+the gNB shall schedule CSI-RS or SRS resources, such that
+the reference slot used for ground-truth CSI acquisition falls
+within a minimal slot offset from the slot to which the
+predicted CSI applies. Rel-19 defines three modes of UE-
+assisted performance monitoring for one-sided CSI prediction,
+as summarized in Table II. In Type 1, the UE locally computes
+the SGCS metric. If the value remains below a gNB-configured
+threshold for N consecutive evaluations, the UE sets a 1-bit
+perf-bad flag within the Predicted-CSI report. This flag is
+interpreted by the AIOpsMnS module as a DriftAlarm,
+prompting the management function to take one of the fol-
+lowing actions, as specified in TS 28.585:
+a) initiate a delta update by transmitting a DeltaPackage
+to adjust the UE’s adaptation layers;
+b) revert to a previous ModelID;
+c) trigger immediate fallback to legacy CSI reporting.
+In case (a), the management entity applies recent monitoring
+data to fine-tune the adaptation layers attached to the deployed
+3PMI: Precoding Matrix Indicator; CQI: Channel Quality Indicator; RI:
+Rank Indicator.
+IEEE COMMUNICATIONS STANDARDS MAGAZINE
+5
+Cloud/RIC
+gNB
+UE
+Channel Est.
+AI CSI Predictor 
+(Inference)
+Type I/II Codebook
+CSI-RS
+CSI Feedback
+Model Training
+Model Storage
+Model 
+Transfer/Delivery
+Trained/Updated 
+Model
+1
+3
+5
+2
+4
+6
+CSI-RS
+Channel Est.
+AI CSI Predictor 
+(Inference)
+7
+Measurement 
+Instruction
+8
+Inference Mode
+Performance 
+Monitoring
+10
+“perf-bad” flag
+(for inference)
+(for Monitoring)
+Adap. 
+layers
+Core 
+NN
+Management
+Model Transfer/ 
+Delivery Request
+Retraining 
+Request
+11 a)
+Inference 
+Output
+9
+Inference 
+Output
+SGCS
+Fig. 3. One-sided CSI prediction mapped onto the 3GPP AI/ML LCM framework. Red arrows indicate LCM control paths; green arrows represent legacy
+CSI reporting.
+model. Common lightweight update techniques include Low-
+Rank Adaptation (LoRA) and batch normalization recentering.
+The resulting parameter delta is packaged with the corre-
+sponding BaseModelID into a compact DeltaPackage,
+typically on the order of a few kilobytes. Since the base model
+remains unchanged and only adaptation layers are updated, no
+changes are required on the gNB side, which preserves the
+one-sided deployment model.
+III. TWO SIDED MODEL: MODEL MANAGEMENT FOR
+INTEROPERABILITY
+Many functions in cellular networks, such as PMI in CSI
+feedback, demodulation, and channel decoding, rely on tightly
+coupled two-sided operations across the UE and gNB. For
+example, PMI-based CSI feedback works only when both UE
+and gNB recognize the same mapping from PMIs to precoders.
+In Section II, we have introduced the model management func-
+tionalities from the environment and operating scenario change
+perspectives. When we implement two-sided operations, the
+model management functional block has to additionally main-
+tain the interoperability between independently developed
+models. Traditional interoperability is achieved through stan-
+dardized interfaces. However, for AI-native designs, transmit-
+ter and receiver models (e.g., neural encoders and decoders)
+may be trained separately by different vendors, and these
+models may have different interface and therefore are hard
+to be seamlessly connected with each other, which introduces
+new technical hurdles for model management, training, and
+inference. We must address the issue by properly designed
+specifications to guide the AI/ML model development and
+ensure cross-vendor compatibility and functional reliability.
+A representative example from 3GPP is the use case of
+CSI compression using neural encoders and decoders. In this
+approach, the UE does not report a PMI directly. Instead, the
+UE uses a neural encoder to compress the precoder into a
+latent message, which is transmitted to the gNB. The gNB
+then reconstructs the precoder using a neural decoder. While
+joint training yields high fidelity, it is impractical in multi-
+vendor deployments.
+To address this, 3GPP has initiated the development of inter-
+vendor training collaboration schemes, which define mecha-
+nisms for exchanging the necessary information between UE
+and gNB vendors. These schemes enable either party to train
+their respective model component (encoder or decoder) while
+maintaining compatibility with the counterpart model. The
+ultimate goal is to ensure that the CSI decoder can reliably
+reconstruct the intended precoder from the encoder’s output
+even if developed and trained independently. This challenge
+exemplifies the need for standardization not just of interfaces
+but also of training formats, latent representations, and trust
+mechanisms as AI/ML models become integral parts of the
+physical-layer protocol stack.
+A. Collaboration Modes
+In the initial study during Rel-18, 3GPP identified three
+types of inter-vendor collaborative training [9]:
+IEEE COMMUNICATIONS STANDARDS MAGAZINE
+6
+Simulation setup 
+(for evaluation)
+Determine 
+backbone model
+Determine 
+hyperparameters
+Select 
+reference model
+Joint training of two-sided model
+One side training based on dataset
+Reference model development
+(UE/gNB) Vendor model development
+Labeled 
+input
+Labeled 
+output
+Standardized 
+reference model 
+(encoder or decoder)
+Standardized 
+dataset
+Vendor model 
+(decoder or encoder)
+Reference 
+model
+Vendor model 
+(encoder or decoder)
+Fig. 4. Two-sided model: reference model and vendor model development.
+• Type 1: Joint training of the two-sided model at a single
+side/entity, e.g., UE side or network side.
+• Type 2: Joint training of the two-sided model at the
+network side and UE side, respectively.
+• Type 3: Separate training at the network side and UE
+side, where the UE-side CSI generation part (encoder)
+and the network-side CSI reconstruction part (decoder)
+are trained by the UE side and network side, respectively.
+The following note is included to define the two types of “joint
+training” in a two-sided model:
+Joint training means the generation model and re-
+construction model should be trained in the same
+loop for forward propagation and backward propa-
+gation. Joint training could be done both at single
+node or across multiple nodes (e.g., through gradient
+exchange between nodes).
+The follow-up Rel-19 studies focused mostly on Type 3
+inter-vendor collaborative training and its derivatives since
+Type 1 does not require extensive interface design, and the
+study on the air interface for Type 2 was deprioritized by
+3GPP. In Rel-19, 3GPP concluded the following feasible
+directions for inter-vendor collaboration:
+• Direction
+I:
+Providing
+fully
+standardized
+reference
+model(s) and parameters with specified CSI encoder
+and/or CSI decoder.
+• Direction II: Providing the necessary information that
+enables UE-side offline engineering. The necessary infor-
+mation could be the dataset with {target CSI, feedback
+CSI}, or the encoder parameters together with {target
+CSI}. Target CSI refers to the precoder estimated by the
+UE and feedback CSI refers to the latent message sent to
+gNB.
+For Direction I, the vendors can take the standardized
+reference model(s) and jointly train their own AI/ML models.
+For example, a UE vendor can take the standardized reference
+decoder model, connect with its encoder model, and jointly
+train the encoder model while keeping the reference decoder
+model fixed. Similarly, a gNB vendor can train their own
+decoder with the reference encoder. For Direction II, a UE
+vendor can take the {target CSI, feedback CSI} dataset as
+the labeled encoder input and encoder output to train its own
+encoder model. Similarly, a gNB vendor can take the {target
+CSI, feedback CSI} dataset as the labeled decoder output and
+decoder input to train its own decoder model. The authors
+in [3] proposed a similar approach in which the UE vendors
+provide the {target CSI, feedback CSI} datasets to gNB ven-
+dors. Each gNB vendor can train multiple decoders for each of
+the datasets so that the decoders can reconstruct the feedback
+CSI correctly. They further propose a multi-vendor training
+approach, in which an index is added to each dataset, and the
+decoder is trained using the aggregated dataset. The added
+index enables the decoder to distinguish the datasets from
+different encoders while using a single model to reconstruct
+the target CSI [3]. We depict the derivation procedures in
+Directions I and II in the vendor model development part of
+Fig. 4.
+Since multiple reference models, parameter sets, and
+datasets can be specified, the associated ID is introduced to
+facilitate the pairing of the CSI encoder and CSI decoder based
+on the collaboration procedure. That is, it is confirmed that the
+CSI encoder and CSI decoder are collaboratively trained using
+the same reference model or dataset (and/or parameter set) by
+checking the associated ID.
+B. Reference Model Development
+Note that to implement Direction I, 3GPP needs to agree
+on which model(s) to be captured in the specification as the
+reference model(s). Similarly, for Direction II, 3GPP needs
+to first conclude the reference model(s) that generate dataset
+with {target CSI, feedback CSI} or the the encoder parameters
+together with {target CSI}. Since the reference model(s) can
+determine how the commercial CSI encoder and decoder are
+IEEE COMMUNICATIONS STANDARDS MAGAZINE
+7
+developed, the reference model(s) are important foundations
+of the commercialization and implementation of the two-sided
+models in AI-native transceivers. Hence, a carefully designed
+derivation procedure to develop the reference model(s) for
+Directions I and II implementation is the first step towards
+the successful deployment of two-sided models. Based on
+the 3GPP previous discussions, we propose the following
+procedures to derive the reference model(s) for inter-vendor
+collaboration (depicted together with vendor model develop-
+ment in Fig. 4):
+Step 1 : Determine the simulation setup and encoder input
+dataset generation procedure for the performance evalu-
+ation of the candidate models.
+Step 2 : Determine the model backbone structure, e.g., CNN,
+transformer, or their variants, based on initial assessment
+of performance, robustness, and complexity. Further de-
+tailed structure of the model can be included in this step
+or Step 4.
+Step 3 : Determine training hyper-parameters.
+Step 4 : Determine the test decoder reference model(s) based
+on performance evaluation against the following criteria:
+• Achievable performance: It can be intermediate KPIs,
+e.g., SGCS, or overall system performance of through-
+put or block error rate.
+• Complexity: It includes FLOPs or model storage size.
+• Robustness: Whether the decoder(or encoder) from the
+reference model can achieve satisfactory performance
+when connected to encoders(or decoder) with different
+model backbone structures, but trained using inter-
+vendor collaborative training procedures.
+The inter-vendor collaboration procedure targets the best sys-
+tem performance with reasonable complexity to limit imple-
+mentation cost, as well as a flexible design space to allow
+vendors to develop their own models based on the reference
+model(s). Therefore, the selection of the reference model
+has to take performance, complexity, and robustness (when
+connecting to models developed independently by vendors)
+into consideration.
+IV. KEY TECHNOLOGIES AND FUTURE DIRECTIONS
+As explained in the previous sections, 3GPP laid solid
+foundations for the LCM procedure development. In this
+section, we provide the key technology challenges and future
+development directions towards the AI-native RAN design.
+A. Design
+Challenges
+in
+Resource-Efficient
+Performance
+Monitoring
+Although 3GPP has laid out a preliminary air-interface
+design for performance monitoring schemes in beam predic-
+tion and CSI feedback use cases, the design of performance
+monitoring schemes that effectively evaluate AI/ML model
+performance based on the air-interface specification remains
+challenging.
+i) Resource Allocation Trade-Offs in Monitoring Design:
+When scheduling monitoring resources, using more resources
+enables better tracking of AI/ML model performance but
+reduces the overhead savings achieved by AI/ML models. For
+example, in the beam prediction use case, scheduling more
+monitoring resources, such as transmitting more beams in the
+to-be-predicted beam set, allows better tracking of AI/ML
+predictions but diminishes the RS overhead reduction benefit
+provided by the AI/ML models. Therefore, it is a key challenge
+to design the monitoring resources intelligently to achieve a
+better trade-off between the monitoring procedure performance
+and the amount of resources used.
+ii) Monitoring Without Complex Decoder at the UE:
+Another key challenge lies in managing complexity. In two-
+sided CSI compression, the UE uses a lightweight encoder
+to compress the precoding vector, while the gNB uses a more
+complex decoder for reconstruction. Since the UE lacks access
+to the reconstructed precoder, it cannot directly assess down-
+link quality. Replicating the decoder at the UE would close
+this gap but would significantly increase device complexity.
+Efficient monitoring must therefore provide meaningful quality
+indicators without requiring full decoder functionality at the
+UE [13].
+B. Input Distribution Shifts and Their Impact on Model Reli-
+ability
+i) Detecting Environmental Drift Through Input Statistics:
+When the characteristics or statistics of the data that the
+AI/ML model operates on deviate from the training data,
+performance of the AI/ML model may degrade. In such cases,
+we rely on the LCM controller to recover the performance.
+So far, 3GPP has focused mostly on performance monitoring
+based on the AI/ML model output. In addition to monitoring
+the model output, the distribution of the model input data
+can indicate whether the operating environment is starting
+to deviate from the training dataset of the current AI/ML
+model. In fact, 3GPP studies on CSI feedback show that
+changes in the input dataset distribution may degrade AI/ML
+model performance [14]. Therefore, tracking variations in
+model input statistics provides valuable information for LCM
+controller decisions and can be considered part of the LCM
+functionality framework as depicted in Fig. 2.
+ii) Input Descriptors as Keys for Model Retrieval:
+Furthermore, input statistics play a critical role in selecting
+appropriate models from storage. The density of models stored
+in the system, in terms of coverage across the statistical input
+space, should be sufficient to ensure that adjacent models offer
+similar performance levels with respect to key KPIs. In this
+context, input distribution descriptors not only support drift
+detection but also act as compact and effective retrieval keys
+for identifying the most suitable model for a given operating
+condition.
+C. Key Challenges in Intelligent LCM Decision-Making
+As depicted in Fig. 2, the LCM controller takes performance
+monitoring and model input statistics collection as input and
+makes model control decisions. There are several challenges
+in making accurate model control decisions:
+IEEE COMMUNICATIONS STANDARDS MAGAZINE
+8
+i) Information Fusion Across Heterogeneous Inputs: The
+LCM controller takes model input analysis and performance
+monitoring as input and leverages assistance signaling from the
+other side as side information. How to combine heterogeneous
+information from different functionalities to make accurate
+model control decisions is crucial for designing a good LCM
+controller.
+ii) Diagnosing Model Misalignment vs. System Limita-
+tions: When system performance degrades, model misalign-
+ment may not be the only cause. For example, an SNR drop
+may lead to degradation in CSI prediction accuracy even
+when the AI/ML model still captures the channel dynamics
+properly. Therefore, the LCM controller needs to infer whether
+the observed performance degradation is due to misalignment
+between the current AI/ML model and the environment, or
+whether the system suffers from inevitable performance degra-
+dation, such as degradation caused by SNR drops.
+iii) Selecting Effective Model Control Actions: After
+deciding that the AI/ML model in use does not fit the current
+environment, the next challenge for the LCM controller is
+to select an action from the available model control options,
+such as switching to another model, adapting the model by
+adjusting parameters, or falling back to non-AI/ML-based
+algorithms. The LCM controller needs to derive sufficient
+information from the controller inputs, including performance
+monitoring results and model input analysis, to select or adjust
+the AI/ML model that aligns with the current environment, or
+fall back to non-AI/ML models if it determines that the current
+environment cannot be recognized to ensure proper AI/ML
+model operations.
+D. Rethinking Interoperability in Vendor-Separated AI Model
+Training
+As explained in the previous section, the 3GPP Rel-19
+study concluded that the interoperability of the CSI feedback
+two-sided model can be guaranteed by standardizing refer-
+ence model(s) or dataset(s) generated by reference model(s).
+However, standardizing reference model(s) limits the design
+flexibility of the AI/ML model to adapt to different envi-
+ronments or types of channels in order to produce the best
+recovered precoders with minimum CSI feedback size. In fact,
+that flexibility is one of the major advantages of using AI/ML
+models.
+Moreover, standardized reference model(s) may delay the
+adoption of the latest AI/ML model architectures into the
+system since the standardized model(s) must be updated before
+vendors can use new model architectures. Therefore, to fully
+explore the potential of two-sided AI/ML models in AI-
+native transceiver design, we need to rethink the approach to
+guaranteeing the interoperability of two-sided models. Ideally,
+we need to have a set of specifications that guarantee interoper-
+ability when the models on both sides follow the specifications.
+V. CONCLUSION
+From
+Rel-16’s
+NWDAF
+to
+Rel-20’s
+two-sided
+CSI-
+compression WI, 3GPP has transformed AI/ML from isolated
+features into a network-wide, closed-loop capability. Standard
+LCM interfaces for model transfer, execution, monitoring, and
+drift-triggered control are now supported for reliable AI/ML
+model deployment while collaboration schemes and reference
+models enable cross-vendor interoperability of AI/ML models.
+These foundations unlock AI-native transceiver design and
+pave the way toward 6G systems featuring federated learning
+and continual adaptation. Remaining research must balance
+monitoring overhead, distribution-shift detection, intelligent
+LCM decisions, and flexible training rules to sustain perfor-
+mance across diverse, evolving RAN scenarios.
+REFERENCES
+[1] Q. Xue et al., “AI/ML for Beam Management in 5G-Advanced: A
+Standardization Perspective,” IEEE Veh. Technol. Mag., vol. 19, no. 4,
+pp. 64–72, 2024.
+[2] J. Guo, C.-K. Wen, S. Jin, and G. Y. Li, “Overview of Deep Learning-
+Based CSI Feedback in Massive MIMO Systems,” IEEE Trans. Com-
+mun., vol. 70, no. 12, pp. 8017–8045, 2022.
+[3] D. Korpi et al., “Demonstrating Interoperable Channel State Feedback
+Compression with Machine Learning,” arXiv preprint arXiv:2506.21796,
+2025.
+[4] A. Foliadis, M. H. Casta˜neda Garcia, R. A. Stirling-Gallacher, and R. S.
+Thom¨a, “Deep Learning-Based Positioning With Multi-Task Learning
+and Uncertainty-Based Fusion,” IEEE Trans. Cognit. Commun. Netw.,
+vol. 2, pp. 1127–1141, 2024.
+[5] 3GPP TR 38.744, “Study on Artificial Intelligence (AI)/Machine Learn-
+ing (ML) for Mobility in NR,” Version 1.0.0, June 2025.
+[6] X. Lin, “Artificial Intelligence in 3GPP 5G-Advanced: A Survey,” IEEE
+ComSoc Tech. News, Aug. 2023.
+[7] ——, “An Overview of the 3GPP Study on Artificial Intelligence for
+5G New Radio,” IEEE ComSoc Tech. News, Mar. 2024.
+[8] A. Ulbert et al., “MLSecOps: Protecting the AI/ML Lifecycle in
+Telecom,” Ericsson White Paper, Feb. 2024.
+[9] 3GPP TR 38.843, “Study on Artificial Intelligence (AI)/Machine Learn-
+ing (ML) for NR Air Interface (Release 18),” Version 18.0.0, Dec. 2023.
+[10] 3GPP TR 28.908, “Study on Artificial Intelligence/Machine Learning
+(AI/ ML) management (Release 18),” Version 18.0.0, May 2024.
+[11] 3GPP RP-251881, “New SID: Study on 6G Radio,” Jun 2025.
+[12] 3GPP TS 28.105, “5G; Management and orchestration; Artificial Intelli-
+gence/ Machine Learning (AI/ML) management ,” Version 18.4.0, July
+2024.
+[13] J. Guo, S. Ma, C.-K. Wen, and S. Jin, “Performance Monitoring-Enabled
+Reliable AI-Based CSI Feedback,” IEEE Trans. Wireless Commun.,
+vol. 24, no. 1, pp. 197–212, 2025.
+[14] R4-2505107, “Way Forward on AI ML for Air Interface Study,” 3GPP
+TSG RAN WG4 Meeting #114bis, April 2025.

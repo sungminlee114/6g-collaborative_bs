@@ -1,0 +1,978 @@
+1
+Large Generative AI Models meet Open Networks
+for 6G: Integration, Platform, and Monetization
+Peizheng Li, Adrián Sánchez-Mompó, Tim Farnham, Aftab Khan, Adnan Aijaz
+Abstract—Generative artificial intelligence (GAI) has emerged
+as a pivotal technology for content generation, reasoning, and
+decision-making, making it a promising solution on the 6G stage
+characterized by openness, connected intelligence, and service
+democratization. This article explores strategies for integrating
+and monetizing GAI within future open 6G networks, mainly
+from the perspectives of mobile network operators (MNOs).
+We propose a novel API-centric telecoms GAI marketplace
+platform, designed to serve as a central hub for deploying,
+managing, and monetizing diverse GAI services directly within
+the network. This platform underpins a flexible and interoperable
+ecosystem, enhances service delivery, and facilitates seamless
+integration of GAI capabilities across various network segments,
+thereby enabling new revenue streams through customer-centric
+generative services. Results from experimental evaluation in an
+end-to-end Open RAN testbed, show the latency benefits of this
+platform for local large language model (LLM) deployment, by
+comparing token timing for various generated lengths with cloud-
+based general-purpose LLMs. Lastly, the article discusses key
+considerations for implementing the GAI marketplace within 6G
+networks, including monetization strategy, regulatory, manage-
+ment, and service platform aspects.
+Index Terms—6G, generative AI, large language models, mar-
+ketplace, monetization, open networks, platform.
+I. INTRODUCTION
+Generative artificial intelligence (GAI) has emerged as a
+compelling and prominent research area due to its proven suc-
+cess in content generation services. Large GAI models, such as
+large language models (LLMs), image and video generation
+models, and multi-modality models, excel at understanding
+language and performing general-purpose tasks.
+Models like GPT-4, Deepseek, Gemini, LLaMA, and Claude
+demonstrate powerful capabilities in context understanding,
+planning, responding, and code generation. These models can
+be customized for specific industries using techniques like
+retrieval-augmented generation (RAG), low-rank adaptation
+(LoRA), and prompt-tuning for cost-effective updates.
+Integration of AI and communication networks is at the
+heart of 6G evolution, as highlighted in the “IMT-2030 Frame-
+work” [1]. GAI, especially through LLMs [2], is seen as a
+key enabler of this integration, enhancing wireless communi-
+cation systems with advanced understanding, reasoning, and
+generating capabilities – essential for developing in-network
+intelligence.
+GAI is increasingly being adopted as a service in the
+telecoms sector. For example, LLMs are used for analyzing
+The authors are with the Bristol Research and Innovation Laboratory,
+Toshiba Europe Ltd., U.K. (e-mail: peizheng.li@toshiba-bril.com).
+This work was supported partially by the 6G-GOALS project under the 6G
+SNS-JU Horizon program, n.101139232.
+3GPP specifications, data synthesis, anomaly detection, net-
+work modelling, and personalized service generation. Image
+generation models are applied in the goal-oriented and seman-
+tic communication paradigm for image reconstruction.
+GAI services are expected to significantly impact the socioe-
+conomics of the telecoms industry [3], by delivering customer-
+centric services, improving operational efficiency, creating new
+products and revenue streams, reducing costs, and fostering
+innovation. It should be noted that the role and practices of
+mobile network operators (MNOs) are crucial in this evolution.
+However, integrating GAI with telecoms systems and net-
+works remains challenging for MNOs. Ongoing GAI-focused
+research is driven by computer sciences rather than telecoms
+and is generally confined to academic and AI circles. While
+MNOs can access GAI capabilities for potential services
+like conversational chatbots [3] via cloud platforms (e.g.,
+Google’s), such solutions are not attractive due to limited
+prospects of intrinsic control and customization of GAI ser-
+vices. Three key issues need to be addressed in this respect.
+• Lack of fine-grained control. Third-party cloud solutions
+often function as black boxes, limiting an MNO’s abil-
+ity to enforce domain-specific policies, guarantee low-
+latency responses, or optimize model usage.
+• Scalability and cost structure. Large GAI models can
+be very costly to train and deploy at scale. Offloading
+tasks to generic cloud LLMs may not produce the desired
+return on investment for telecom-specific usage.
+• Fragmented business models. As GAI moves in-network,
+new revenue streams arise (e.g., user-facing AR/VR expe-
+riences, generative chatbots for enterprise customers), ne-
+cessitating robust billing and service orchestration frame-
+works.
+The key principles of open radio access network (Open
+RAN), i.e., openness, disaggregation, cloudification, and pro-
+grammability, hold transformative potential for 6G architec-
+tural evolution. The traditional monolithic RAN is embracing
+disaggregated RAN components [4] while MNOs are increas-
+ingly adopting cloud-neutral platforms supporting multi-cloud,
+private cloud, and hybrid configurations. While the shift to-
+wards openness complicates network management, especially
+with AI integration across RAN, edge, and cloud layers, it also
+provides opportunities for innovation.
+As AI evolves into GAI and 6G networks become more
+open, there is a growing need to address these issues and
+explore monetization strategies for GAI within open networks.
+This article investigates a marketplace strategy for integrating
+GAI in networks, focusing on collaboration, service access
+and management, monetization, and the development of GAI-
+arXiv:2410.18790v2  [cs.NI]  18 Feb 2025
+2
+native 6G open networks. To our knowledge, this is one of the
+first studies proposing a monetization strategy for GAI models
+integrated into 6G networks, with telecoms GAI marketplace
+in the spotlight.
+The main contributions of this article are summarized as
+follows:
+• We design and implement an API-centric telecoms GAI
+marketplace platform, serving as the entry point for
+heterogeneous GAI services deployed across various net-
+work segments and the exit for integrated and meshed
+GAI services. This marks a significant step toward a
+(G)AI-native network, enabling seamless AI integration
+within telecom infrastructure.
+• We demonstrate an in-network GAI deployment use case
+within an end-to-end Open RAN network, wherein an
+LLMs-based generative service is examined, highlighting
+the benefits of this approach in terms of reduced service
+latency compared to general-purpose cloud-based GAI
+services.
+• We provide a detailed discussion on the marketplace
+framework, covering aspects such as service access,
+monetizing, regulation, management, and open service
+platform.
+II. BACKGROUND AND CHALLENEGES
+A. Open Networks
+In 6G context, an open network is characterized by an
+architecture that promotes interoperability and flexibility by
+adhering to open standards and interfaces across the RAN, core
+network, and cloud infrastructure. This approach facilitates
+the seamless integration of components from various vendors,
+supports modular and programmable network architectures,
+and fosters a competitive ecosystem by avoiding vendor lock-
+in. Open networks include the following features:
+• Vendor-Neutral Infrastructure: Supports interoperability
+between equipment and software from multiple vendors,
+allowing MNOs to build diversified networks.
+• Multi-Cloud Flexibility: Enables the network to oper-
+ate seamlessly across multiple cloud service providers,
+including public, private, and hybrid environments.
+This enhances network resilience, optimizes performance
+through strategic workload distribution, and offers cost
+management benefits through varied pricing models.
+• Third-Party App Deployment: Allows external developers
+to deploy applications on the network, diversifying the ap-
+plication ecosystem. This enhances customization, meets
+specific needs, and opens new revenue opportunities
+through third-party partnerships.
+B. Overview of the SOTA Large Models
+Large GAI models are advanced neural networks with
+billions of parameters, trained on vast datasets using powerful
+computational resources. They generate human-like data (text,
+images, videos) using transformer and attention mechanisms.
+These state-of-the-art models are actively researched and ap-
+plied in language, image/video, and multi-modality generation.
+Early milestones in GAI include OpenAI’s GPT-3, which
+significantly advanced natural language processing and gener-
+ation, showcasing the potential of LLMs across various appli-
+cations. Building on this foundation, GPT-4 further enhanced
+the field by improving the model’s ability to understand and
+generate human-like text.
+In image generation, a major breakthrough was achieved
+with DALL-E, which introduced the capability to generate
+images from textual descriptions. The subsequent release of
+DALL-E 3 excelled in creating detailed and coherent images,
+making it an invaluable tool for artists and designers. Stable
+Diffusion further refined text-to-image generation by produc-
+ing high-quality, detailed images from textual inputs. Other
+notable GAI services available in the market include Deepseek,
+Claude, Gemini, and LLaMA.
+These generative models are generally designed for general-
+purpose use, targeting a wide range of users and applicable
+to various tasks across different fields. Meanwhile, purpose-
+specific GAI models are emerging, trained or fine-tuned with
+specific knowledge in vertical domains. For instance, Codex
+powers GitHub Copilot, providing developers with intelligent
+code completion and suggestions. In the communication and
+network domain, NetGPT [5] has been developed for under-
+standing and generating network traffic; Autonomous edge AI
+is raised in [6] for connected intelligence by using LLMs.
+Integrating GAI models with Open Networks offers signif-
+icant benefits for both UEs and MNOs. Near real-time gener-
+ative services can be delivered to UEs directly from the net-
+work, enabling low-latency applications such as conversational
+AI, augmented reality, and immersive media. Meanwhile,
+the network’s operation and management, such as resource
+allocation, network slicing, and reconfiguration, can be further
+automated and optimized through the reasoning and decision-
+making capabilities of in-network GAI models, improving
+efficiency and adaptability.
+C. Cloud-based GAI Pricing Schemes
+Cloud-based GAI usually charges per API call, token count,
+or monthly subscription. Additional fees often apply for ad-
+vanced fine-tuning or domain adaptation. However, standard
+billing mechanisms do not necessarily map well to in-network
+services where MNOs might need:
+• End-to-end resource accounting (e.g., GPU usage at edge
+nodes and RANs, memory, bandwidth).
+• Bundled telecom services (e.g., 5G/6G data packages plus
+generative chatbot subscriptions).
+• Regulatory compliance around data locality and real-time
+performance guarantees.
+D. Marketplace
+Marketplaces connect buyers and sellers in a digital plat-
+form, facilitating the discovery, purchase, and delivery of
+products or services, such as popular cloud marketplaces (e.g.,
+AWS, Azure) and app stores (e.g., Apple, Google). In a
+telecom GAI marketplace, participants may include:
+• MNOs providing network infrastructure and hosting ca-
+pabilities.
+3
+Standalone GAI
+Base GAI with Adapter
+Distributed GAI
+Collaborative GAI
+UE-led Generation
+Telecom GAI
+Marketplace 
+Chat
+Multi-modality 
+Generation
+Feature Extraction
+Info. Compression/
+Reconstruction
+Service 
+Mesh
+Cloud-based General-
+purpose GAI Service
+GAI Model Deployed on
+Private/Pulic Cloud 
+GAI Model Deployed on
+Edge Server
+GAI xApps/rApps on RICs
+of Open RAN
+Governance & QoS from
+MNOs & UEs
+Customized Monetization
+Strategies
+Intergration
+Functionalities
+APIs
+GAI API Mediation and
+traffic management
+GAI models and
+constrains
+Generative services to
+UEs
+Links the generative service providers and UEs over networks
+(a)
+Check
+Subscription Plan
+Subscription Plan and
+Policy Constraints,
+Compute Latency, QoS, Priority,
+Wireless Resources, etc.
+Plan Valid
+Reject Request
+Insufficient Plan
+Route to GAI Model
+(Standalone, MOE,
+Collaborative etc.)
+Model
+Generates
+Output
+Record Usage
+Tokens, GPU,
+Wireless Resources
+Calculate
+Billing
+Payment
+Gateway
+End
+GAI Request
+from, UE, xApps, App
+GAI Service Model
+Providers
+No
+Yes
+Revenue Share
+Publishes Plan
+Requirements
+Telecom GAI Marketplace
+(b)
+Fig. 1.
+(a) Illustration of our conceptual telecom marketplace platform for GAI model integration and service delivery. It supports model registration,
+container-based deployment, multi-cloud integration, and open APIs for usage and billing; (b) Flowchart illustrating the monetization process in the telecom
+GAI marketplace)
+• Third-party GAI developers publishing models for spe-
+cialized tasks.
+• Enterprise, xApps or end-users purchasing generative
+services as a subscription or pay-per-use model.
+Unlike general-purpose marketplaces, a telecom-focused GAI
+marketplace must handle tight service level agreements
+(SLAs), real-time traffic, and multi-tenant resource manage-
+ment.
+E. Key Challenges from the MNO Perspective
+Integrating GAI with open networks demands holistic solu-
+tions, especially from an MNO’s viewpoint:
+1) Monetization and Return on Investment (ROI): Deploy-
+ing large GAI is expensive and time-consuming. MNOs need
+robust revenue models that leverage AI-driven services to
+justify capital and operational expenditures. For example, they
+may bundle GAI capabilities into premium data plans or
+enterprise solutions.
+2) Control and Management Capability: Cloud-based solu-
+tions often offer limited control or transparency. MNOs require
+fine-grained oversight of GAI services to ensure compliance
+with telecom-grade reliability, security, and QoS requirements.
+They need also to orchestrate these services dynamically
+across RAN, edge, and core layers.
+3) Service Quality and Latency: GAI models can degrade
+end-user experience if requests are routed to distant cloud
+regions. Low latency, essential for interactive or real-time AI
+tasks, pushes GAI to be deployed closer to the user—i.e., at the
+network edge. MNOs thus need flexible, multi-cloud or edge-
+aware GAI orchestration to ensure predictable performance.
+4
+4) Regulatory and Data Privacy: Telecom data may con-
+tain sensitive user information. Guaranteeing compliance with
+privacy regulations (e.g., GDPR) and local data sovereignty
+requirements is crucial. MNOs must manage how and where
+GAI inferences occur and how user data is anonymized or
+protected in the pipeline.
+Addressing these challenges calls for an approach that sup-
+ports diverse GAI models with explicit monetization, strong
+management primitives, and policy compliance. The next sec-
+tions detail a marketplace-based solution aligning with open
+network principles.
+III. POTENTIAL METHODS OF GAI-OPEN NETWORK
+INTEGRATION
+Before introducing the marketplace, we briefly review
+prominent strategies for integrating large GAI models into
+telecom networks. These strategies hint at the breadth of
+design considerations (hardware, deployment, data) required
+for successful GAI operations in 6G.
+A. AI-native Network Architecture
+AI-native network architecture design is a vision for in-
+tegrating GAI into 6G networks, which involves embedding
+AI capabilities into network stacks, ensuring that AI-driven
+functionalities are an integral part of network operations. For
+instance, one study [7] explores an architecture that coordi-
+nates cloud AI, edge AI, and network AI to deliver intelligent,
+customized services in future 6G networks. Another work [8]
+introduces an open-source edge AI framework, embedding a
+AI plane within a multi-access edge computing framework.
+In this AI-native design, GAI can thus be launched or scaled
+automatically, though this approach alone might not resolve
+ecosystem or monetization hurdles.
+B. Goal-oriented and Semantic Communication
+Goal-oriented and semantic communication is an emerging
+paradigm that prioritizes the transmission of meaning over
+raw data [9], enabling more efficient and context-aware com-
+munication that surpasses traditional Shannon capacity. GAI
+is increasingly being considered as a backbone for semantic
+communication, serving as the semantic encoder/decoder and
+even as the knowledge base itself [10].
+Although valuable for next-generation wireless efficiency,
+existing efforts of semantic communication often focus on
+local model integration rather than the broader scope of multi-
+stakeholder marketplaces.
+C. Marketplace-Based Integration
+To fully leverage open networks and third-party contri-
+butions, we propose a marketplace-based approach. By us-
+ing an API-driven platform, MNOs can unify management,
+integration, and monetization for a wide spectrum of GAI
+services – ranging from stand-alone LLMs to collaborative
+inference pipelines. This strategy inherently supports multi-
+tenancy, flexible billing, resource orchestration, and regulatory
+compliance.
+IV. MARKETPLACE SOLUTION FOR GAI AND OPEN
+NETWORK INTEGRATION
+We now present the conceptual architecture and implemen-
+tation details of our telecoms GAI marketplace platform. As
+illustrated in Fig. 1a, it offers a robust ecosystem wherein
+MNOs, third-party developers, and enterprise customers can
+seamlessly deploy and consume GAI services across disag-
+gregated networks.
+A. Telecoms Marketplace Design Principles
+• Standalone Model Support: The marketplace manages and
+deploys large GAI models (e.g., LLMs or image generators)
+as self-contained services. Automated CI/CD pipelines allow
+MNOs or developers to release updates rapidly.
+• Base Model with Adapter Support: To enable cost-
+efficient adaptation, the marketplace supports parameter-
+efficient fine-tuning (PEFT) techniques such as LoRA, which
+attach small adapters to a general LLM. This helps domain
+specialists (e.g., enterprise developers) quickly customize
+GAI for telecom tasks, without full model retraining.
+• Distributed Model Support: Larger models can be par-
+titioned across multiple nodes (cloud, edge, RIC) to meet
+latency and compute constraints. The marketplace orches-
+trates these segments as a unified service.
+• Collaborative Model Inference: Multi-agent or mixture-of-
+experts GAI can be set up, where specialized “submodels”
+handle different request types. The platform coordinates
+routing and token-level streaming among these submodels,
+exploiting flexible compute availability in the network.
+• Service Mesh: A service mesh ensures efficient and se-
+cure operation of AI models in standalone, distributed,
+and collaborative environments. It manages communication
+between model components using proxies like Envoy, pro-
+vides intelligent traffic management, enhances security with
+mutual transport layer security (TLS) encryption, and offers
+real-time observability of AI services.
+Service mesh supports the complex interactions needed for
+collaborative AI models, ensuring that the marketplace can
+deliver scalable, high-performance, and secure AI services
+across telecoms networks.
+• UE-led Generation: In use cases demanding near-instant
+feedback (AR/VR, gaming), the user equipment (UE) could
+drive the prompt generation while the marketplace provides
+localized GAI inference. The marketplace’s flexible billing
+captures usage patterns even at the UE level.
+B. Monetization Process
+Fig. 1b illustrates how the telecom GAI marketplace handles
+monetization from end to end. A GAI request (from a user
+device, xApp, or third-party application) enters the market-
+place on the left. The GAI service/model provider pre-sets
+resource and policy constraints (e.g., compute, latency, QoS,
+and wireless resources), which define the subscription plan.
+The marketplace then checks whether the requestor’s plan
+is valid for those constraints. If the plan is insufficient, the
+request is rejected. Otherwise, it proceeds to the in-network
+GAI model from different routes for inference.
+5
+Choreo
+Marketplace
+Analytics
+Choreo cloud platform
+Stripe
+Marketplace
+x/rApps
+Choreo
+connect
+Service or App
+API invocation
+(RIC)
+API policies/
+subscriptions
+Docker CR
+In-network GAI
+Models
+Service Mesh
+Deploy agent
+iPaaS 
+platform
+Publisher
+Devportal
+Key
+manager
+APIM
+Local Catalogue 
+of GAI Models
+Consul server
+aPaaS 
+platform
+Publish API
+Subscribe App to API
+Fig. 2.
+Overall marketplace integration architecture with API invocation.
+Multiple distributed or collaborative GAI models can be handled seamlessly
+via centralized API publishing, management, and usage-based billing.
+Once the model generates an output, the marketplace
+records usage metrics such as token count, GPU time, and data
+traffic. These metrics feed into the billing engine, which cal-
+culates costs accordingly. The Payment Gateway finalizes the
+transaction, and an optional revenue-sharing mechanism com-
+pensates the provider. By tying resource constraints directly
+to usage data, the marketplace enforces policy compliance and
+simplifies monetization for both operators and third-party GAI
+model providers.
+C. Implementation Framework
+The marketplace implementation builds on the strategies
+outlined in [11], originally designed for the Open RAN ecosys-
+tem. It emphasizes an API-centric integration Platform-as-a-
+Service (iPaaS) model to facilitate the seamless integration,
+deployment, and monetization of GAI models, applications
+(x/rApps), and other services within a 5G Open RAN infras-
+tructure, leveraging Open RAN API standards. The key design
+features of this marketplace are as follows:
+1) API-Centric iPaaS Model: The marketplace uses an iPaaS
+approach, focusing on API-based integration to enable
+flexible deployment and monetization across different
+services and environments. This model provides fine-
+grained access control and monitoring, supporting var-
+ious business models like pay-per-use, subscriptions, and
+SLAs.
+2) Multiple Deployment Environments: The marketplace
+supports various runtime environments–edge, cloud, and
+hybrid setups. Deployment agents automate service de-
+ployment across these environments, improving flexibility
+and optimization.
+3) Integration Features: It utilizes WSO2 API management
+to enable easy integration and deployment of applications.
+API gateways using Choreo Connect and Envoy proxies
+manage access and ensure secure service communication.
+It implements a federated service mesh to facilitate secure
+interactions between cloud and edge data centers.
+4) Monitoring and Reconciliation: It incorporates robust
+monitoring and billing mechanisms with tools like Stripe
+RU
+F1
+DU
+CU
+E2
+Near-RT RIC
+xApps
+Service Management & Orchestration
+Non-RT RIC
+ Cloud LLM
+A1
+5G Core
+End-to-End 5G Open RAN System
+Marketplace
+API GW
+Meta Llama 70B
+Edge LLM
+H100
+GPU Server
+RU
+DU
+CU & Near-RT RIC
+Core 
+LAN connectivity
+Marketplace
+Server
+Fig. 3.
+Illustration of the experimental setup. The local LLM container is
+deployed on the edge server near the Open RAN CU. Requests are managed
+via the marketplace’s orchestrator.
+marketplace plugins, Choreo analytics, and Hyperledger
+blockchain for decentralized auditing, ensuring accurate
+performance tracking, billing, and compliance.
+Fig. 2 illustrates the overall marketplace integration archi-
+tecture. The WSO2 API manager handles the marketplace
+management APIs and portals, enabling API publishing and
+subscription, and the creation of API product bundles that
+represent integrated applications utilizing multiple GAI ser-
+vices. These bundles are propagated to marketplace billing
+platforms Stripe, allowing for the provision of optimized,
+ready-to-use services for specific application use cases. This
+is particularly valuable for non-developer users who prefer not
+to handle selection, evaluation, testing, and service integration
+themselves.
+GAI services and product bundles are deployed using
+YAML scripts from GitHub and containers from Docker Hub,
+Hugging Face, or other repositories. The Kubernetes-based
+YAML scripts used by the deployment agents are designed
+for low complexity and flexibility, featuring annotations for
+automated injection of service mesh sidecars and security
+configurations for different deployment environments. This
+approach allows users to integrate services without needing
+to be code developers.
+The Federated Consul service mesh is used to securely
+manage service interactions, with Consul server instances
+deployed for each environment. This lightweight and highly
+scalable solution is available as an open-source addition. For
+cross-tenant integration between isolated service mesh clusters
+deployed in different environments, the Choreo microgateway
+is used, leveraging the lightweight Envoy proxy.
+This GAI marketplace is highly scalable, leveraging cloud-
+based service distribution to dynamically allocate resources
+across edge, near-edge, and central cloud environments.
+6
+0 - 127
+128 - 255
+256 - 383
+384 - 511
+512 - 639
+640 - 767
+768 - 895
+896 - 1023
+1024 - 1151
+1152 - 1271
+Number of Tokens Range
+101
+102
+103
+104
+Count
+(a)
+0 - 409
+410 - 819
+820 - 1229
+1230 - 1639
+1640 - 2049
+2050 - 2459
+2460 - 2869
+2870 - 3279
+3280 - 3689
+3690 - 4096
+Number of Tokens Range
+101
+102
+103
+104
+Count
+Llama 3.1 8B
+Llama 3.1 70B
+(b)
+Fig. 4. Histograms of Input and Output token lengths for the Chatbot arena dataset with the Llama 3.1 8B and 70B models, wherein (a) indicates Log-scaled
+Histogram of Input Tokens, (b) show Log-scaled Histogram of Output Tokens for Llama 3.1 Models.
+V. CASE STUDY: LOCAL LLM DEPLOYMENT IN OPEN
+RAN TESTBED THROUGH MARKETPLACE
+To illustrate the marketplace approach, we present a proof-
+of-concept scenario where a local large language model is
+deployed at the network edge, managed via the telecoms
+marketplace. We compare its performance to cloud-based
+LLM endpoints under realistic loading.
+A. Experimental Setup
+The experiment has been conducted using an advanced end-
+to-end Open RAN testbed developed under the BEACON-
+5G project [12]. The setup, illustrated in Fig. 3, included
+an Open RAN system, and the LLM service agent which is
+responsible for handling requests and running GAI models.
+The LLM agent was deployed on an edge server linked to the
+Centralized Unit (CU) of the Open RAN. The management
+of the marketplace, including deployment and API billing
+components, was handled by the Non-Real-Time RIC (Non-
+RT RIC).
+1) Hardware and Software Specifications: The edge server
+is equipped with two Intel Xeon Platinum 8480+ CPUs (shared
+access) and two Nvidia H100 PCIe GPUs, each with 80
+GB VRAM. It hosts the vLLM agent [13]. LLM Models
+are deployed in a vLLM container (one at a time) for high-
+performance inference compatible with OpenAI APIs: Meta
+Llama 3.1 8B [14] is used for fast, high-throughput processing
+of latency-sensitive tasks with moderate reasoning needs.
+Meta Llama 3.1 70B is deployed for medium-throughput
+processing of complex reasoning tasks to evaluate edge per-
+formance.
+For the cloud deployment, the following models were de-
+ployed to Azure Cloud Cognitive Services: GPT-3.5 Turbo
+is deployed to an inference endpoint to serve as the cloud-
+based LLM for simple and quick tasks, equivalent in reasoning
+performance to the Llama 3.1 8B local model. GPT4o is
+deployed to an inference endpoint to serve as the cloud-
+based LLM for complex tasks, slightly superior in reasoning
+performance to the Llama 3.1 70B local model.
+2) Load Simulation: To simulate a realistic inference en-
+vironment, a constant background load was applied to the
+edge inference server using user-generated, chat-based open-
+response requests from the Chatbot Arena Dataset [15]. The
+system generated an average of 10 requests per second for the
+Llama 3.1 8B model and 3 requests per second for the Llama
+3.1 70B model, with request intervals following an exponential
+distribution to simulate a Poisson process.
+This setup resulted in an average of 44 concurrent back-
+ground requests for the 8B model and 42 for the 70B model.
+The average input prompt size was 85 tokens, with the 8B
+model generating an average of 351 tokens per request and
+the 70B model generating 327 tokens on average.
+As shown in Fig. 4a, the distribution of input token lengths
+from the Chatbot Arena dataset is concentrated at lower token
+counts. In contrast, Fig. 4b generally follows a similar trend
+but has a slightly higher concentration in 3690-4096 range due
+to the maximum token limit of 4096, which leads to output
+truncation and accumulation in the final bin. The 8B model
+also tends to generate longer responses, though this behavior
+was not specifically analyzed in this study.
+3) Request Configuration: The LLM models in both the
+edge and cloud setups were configured to handle requests with
+specific parameters. The input tokens were set to 10, while
+the maximum output tokens allowed were 1000. Streaming
+functionality was enabled, and where applicable, the models
+were configured to ignore the end of sequence (EOS) token.
+B. Testing Procedure
+To compare cloud-based and edge-based LLM deployments
+in terms of latency during content generation tasks, identical
+requests were sent to both under controlled conditions, and
+key latency metrics were assessed.
+7
+VLLM OpenAI
+API Inference
+Endpoint
+GAI Request
+Token Stream [1]
+GAI Request
+Allocation
+Token Stream [N]
+Stats and Close
+Token Stream [1]
+Token Stream [N]
+Token Stream [1]
+Token Stream [N]
+Stats and Close
+UE
+Token Stream [2]
+TFT
+TGen
+TAlloc
+TEval
++ ITT
+Choreo
+Gateway
+(Marketplace)
+5G Open
+RAN
+Inference
+Pool
+ITT
+Fig. 5. Illustration of the process of GAI content generation over marketplace
+platform and Open RAN testbed and time measurements, wherein TFT and
+ITT are the key metrics for comparison.
+1) Measurement Metrics: Time to First Token (TFT) mea-
+sures the time from when a request is sent to the API server
+until the first token is received by the UE. This metric is
+crucial for applications requiring quick response times, such
+as interactive systems and real-time communications.
+Inter-Token Time (ITT) measures the interval between
+successive tokens in the response stream. Consistent ITT is
+essential for applications that rely on continuous data streams,
+ensuring stable output rates 1.
+The GAI content generation process and timing measure-
+ments are illustrated in Fig. 5.
+2) Experimental Procedure: The experiment was designed
+with several key considerations. First, 100 identical requests
+were sent sequentially to both edge-based and cloud-based
+LLMs. The responses were streamed back to the UE, and
+the TFT and ITT were recorded for each token generated.
+To simulate real-world conditions, a continuous background
+load was maintained on the edge server. The TFT and ITT
+metrics were averaged over multiple runs, and the variations
+were analyzed to assess the consistency and reliability of both
+deployment strategies.
+C. Results
+The comparison focused on cloud-based versus edge-based
+LLM deployments through the marketplace, highlighting two
+key scenarios:
+1) GPT-3.5 Turbo vs. Llama 3.1 8B: As illustrated in
+Fig. 6a, the edge-based Llama 3.1 8B model outperformed
+the cloud-based GPT-3.5 Turbo on TFT whilst being slightly
+worse on ITT. The reason for this is the harsher synthetic
+load that we have set for the smaller 8B model assuming a
+higher usage. The Llama 3.1 8B model demonstrated lower
+TFT, providing faster initial responses, which is critical for
+time-sensitive applications like real-time interactive systems.
+Additionally, whilst the edge deployment exhibited inferior
+ITT, it had a reduced variability, making it well-suited for
+tasks requiring quick and reliable outputs, such as short text
+generation and classification.
+1We focus on local-deployment benefit metrics regarding latency and
+response times for PoC illustration. Other models, hardware configurations
+and inference engines would provide varying results.
+2) GPT-4o vs. Llama 3.1 70B: Fig. 6b presents a more
+nuanced comparison between the GPT-4o and Llama 3.1 70B
+models, showcasing the trade-offs between edge and cloud
+deployments. Similar to the smaller models, the edge-based
+Llama 3.1 70B exhibited a lower TFT, making it advantageous
+for quick, short responses, which is ideal for applications such
+as classification and short-form content generation.
+On the other hand, the cloud-based GPT-4o excelled in
+ITT, delivering faster and more consistent token generation
+for longer prompt completions. This makes it a better choice
+for tasks involving complex and lengthy content generation,
+where sustained output is more important than initial response
+speed.
+These findings underscore the importance of selecting the
+appropriate deployment strategy based on the specific require-
+ments of the application, balancing the trade-offs between ini-
+tial response speed and sustained generation performance. In
+this process, the GAI marketplace functions as a GAI service
+gateway, responsible for selecting, executing, and billing the
+appropriate GAI model. This process can be automated by the
+given application scenarios.
+VI. DISCUSSIONS
+A. Monetization Strategy
+The marketplace should allow multiple charging models.
+Beyond conventional per-API call or per-token billing, it can
+incorporate:
+• Resource Accounting. Operators track GPU hours, mem-
+ory, or bandwidth used, enabling usage-based cost sharing
+among tenants.
+• Vertical Bundles. GAI-based analytics or chatbots can be
+combined with 5G/6G data plans or edge slices. This fosters
+synergy between network subscription revenues and AI
+services.
+• Revenue Sharing. Third-party developers receive royalties
+if their adapters or models are actively invoked by paying
+clients.
+Token-level usage logs and policy enforcement can be imple-
+mented via the marketplace’s analytics, ensuring transparent
+cost reporting for all stakeholders.
+B. Service Access and Regulation
+The telecoms GAI marketplace presents a complex yet
+promising framework for integrating GAI services into tele-
+com networks. It facilitates the deployment of AI solutions
+directly within the network infrastructure, enabling dynamic
+scaling and updates based on demand and performance. This
+flexibility allows MNOs to adapt quickly to changing market
+needs and customer expectations.
+By centralizing model access in the marketplace, MNOs
+can more easily enforce data policies (e.g., restricting certain
+traffic to local edges for privacy) and authenticate/authorize
+third-party usage. However, operators must still address:
+• Privacy compliance. Potentially performing partial or fully
+anonymized inference.
+8
+0
+200
+400
+600
+800
+1000
+Number of Tokens
+0.0
+2.5
+5.0
+7.5
+10.0
+12.5
+15.0
+17.5
+Time (s)
+Local Avg Time
+Local ±2 Std Dev
+Azure Avg Time
+Azure ±2 Std Dev
+0
+25
+50
+75
+100
+125
+150
+0
+1
+2
+3
+Zoomed In
+(a)
+0
+200
+400
+600
+800
+1000
+Number of Tokens
+0
+10
+20
+30
+40
+50
+Time (s)
+Local Avg Time
+Local ±2 Std Dev
+Azure Avg Time
+Azure ±2 Std Dev
+0
+10
+20
+30
+40
+50
+0
+1
+2
+3
+Zoomed In
+(b)
+Fig. 6. Token timing comparisons for different models and deployment environments. (a) shows token timing comparison between cloud-based GPT-3.5 Turbo
+and edge-based Llama 3.1 8B models; (b) shows token timing comparison between cloud-based GPT-4o and edge-based Llama 3.1 70B models.
+• Data residency. Ensuring that GAI processing occurs within
+mandated geographic boundaries, especially for sensitive
+enterprise or government customers.
+• Fairness and transparency. Auditing generative outputs for
+bias or harmful content.
+C. Service Management
+Managing the lifecycle of GAI services in the marketplace
+requires careful planning and robust strategies. This includes
+monitoring performance, handling updates and patches, en-
+suring service continuity, and optimizing resource allocation.
+Effective management is essential for maintaining reliable
+and efficient GAI services, which directly affects customer
+satisfaction and operational costs. For MNOs, balancing these
+technical requirements with strategic goals like cost manage-
+ment, service innovation, and market competitiveness is vital
+to fully leveraging the telecoms GAI marketplace.
+D. Open Service Platform for Marketplace
+Open networks require the collaboration of multiple op-
+erators and service providers. In this context, the open ser-
+vice platform (OSP) is an option for coordinating network
+operations and GAI services. Integrating the OSP with the
+private marketplace provides a unified access point for service
+provisioning, enabling dynamic and flexible service offerings
+that can quickly respond to customer demands and operational
+needs.
+Aligning the OSP with marketplace mechanisms allows
+customers to easily discover, purchase, and configure ser-
+vices across different networks. The OSP also plays a key
+role in ensuring fairness by balancing GAI services from
+various providers, enabling comparisons, and detecting anti-
+competitive pricing strategies. This functions like a price
+comparison tool but with enhanced monitoring and evaluation
+of integrated services.
+The combination of the marketplace and OSP can enhance
+collaboration among service providers. This allows operators
+to expand their service offerings without significant infrastruc-
+ture investments, enabling scalable and flexible deployment of
+GAI services across diverse network environments.
+VII. CONCLUSIONS AND FUTURE DIRECTIONS
+In this article, we have presented a telecoms GAI market-
+place solution aimed at maximizing the benefits of large gen-
+erative AI models in open 6G networks. From an MNO stand-
+point, our approach addresses key hurdles in monetization,
+management, and service quality. By hosting, orchestrating,
+and billing GAI services directly within the network, operators
+can reduce dependencies on external cloud providers, gain
+finer control over latency and data governance, and co-create
+novel service bundles with third-party developers.
+Our proof-of-concept deployment in an Open RAN testbed
+shows promising latency advantages for local LLMs. Cloud-
+based solutions may retain strengths in sustained token
+throughput, underscoring the need for an intelligent market-
+place that routes requests according to specific application
+demands. The marketplace paradigm is readily extensible to
+future multi-modal models and advanced inference pipelines.
+Future work can delve into collaborative AI approaches
+(e.g., mixture-of-experts or hierarchical inference across mul-
+tiple edge servers), multi-operator interoperability, and ad-
+vanced data privacy frameworks such as homomorphic encryp-
+tion or differential privacy for GAI tasks. Close alignment with
+evolving 6G standards and open network specifications (e.g.,
+O-RAN Alliance, 3GPP, AI-RAN Alliance) will be critical to
+ensure that telecoms GAI marketplaces seamlessly integrate
+into next-generation architectures. We hope this article lays
+a foundation for broader adoption of generative AI in open
+6G networks, ultimately driving both technical innovation and
+new revenue opportunities for MNOs.
+REFERENCES
+[1] “IMT-2030 Vision - International Telecommunication Union (ITU),”
+https://www.itu.int/en/ITU-R/study-groups/rsg5/rwp5d/imt-2030/Pages/
+default.aspx, accessed: August 31, 2024.
+9
+[2] L. Bariah et al., “Large Generative AI Models for Telecom: The Next
+Big Thing?” IEEE Commun. Mag., 2024.
+[3] A. Maatouk et al., “Large Language Models for Telecom: Forthcoming
+Impact on the Industry,” IEEE Commun. Mag., 2024.
+[4] M. Polese et al., “Empowering the 6G Cellular Architecture With Open
+RAN,” IEEE J. Sel. Areas Commun., vol. 42, no. 2, pp. 245–262, 2024.
+[5] X. Meng et al., “Generative Pretrained Transformer for Network Traffic,”
+arXiv preprint arXiv:2304.09513, 2023.
+[6] Y. Shen et al., “Large Language Models Empowered Autonomous Edge
+AI for Connected Intelligence,” IEEE Commun. Mag., 2024.
+[7] Y. Yang et al., “6G Network AI Architecture for Everyone-Centric
+Customized Services,” IEEE Netw., vol. 37, no. 5, pp. 71–80, 2022.
+[8] L. Zhao et al., “Open-Source Edge AI for 6G Wireless Networks,” IEEE
+Netw., 2024.
+[9] P. Li and A. Aijaz, “Open RAN meets Semantic Communications: A
+Synergistic Match for Open, Intelligent, and Knowledge-Driven 6G,” in
+Proc. of IEEE CSCN.
+IEEE, 2023, pp. 87–93.
+[10] L. Xia et al., “Generative ai for semantic communication: Architecture,
+challenges, and outlook,” IEEE Wireless Communications, vol. 32, no. 1,
+pp. 132–140, 2025.
+[11] T. Farnham et al., “Demo: Integration of Marketplace for the 5G Open
+RAN Ecosystem,” in Proc. of IEEE ICNP, 2023, pp. 1–2.
+[12] A. Aijaz et al., “Open RAN for 5G Supply Chain Diversification: The
+BEACON-5G Approach and Key Achievements,” in Proc. of IEEE
+CSCN.
+IEEE, 2023, pp. 1–7.
+[13] W. Kwon et al., “Efficient Memory Management for Large Language
+Model
+Serving
+with
+PagedAttention,”
+2023.
+[Online].
+Available:
+https://arxiv.org/abs/2309.06180
+[14] A. Dubey et al., “The Llama 3 Herd of Models,” 2024. [Online].
+Available: https://arxiv.org/abs/2407.21783
+[15] L. Zheng et al., “Judging LLM-as-a-judge with MT-Bench and Chatbot
+Arena,” 2023.

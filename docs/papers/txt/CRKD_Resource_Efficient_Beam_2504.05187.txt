@@ -1,0 +1,1990 @@
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+1
+Resource-Efficient Beam Prediction in mmWave Communications
+with Multimodal Realistic Simulation Framework
+Yu Min Park, Member, IEEE, Yan Kyaw Tun Member, IEEE, Eui-Nam Huh, Member, IEEE
+Walid Saad, Fellow, IEEE, and Choong Seon Hong, Fellow, IEEE
+Abstract—Beamforming is a key technology in millimeter-wave
+(mmWave) communications that improves signal transmission
+by optimizing directionality and intensity. However, conventional
+channel estimation methods, such as pilot signals or beam sweep-
+ing, often fail to adapt to rapidly changing communication en-
+vironments. To address this limitation, multimodal sensing-aided
+beam prediction has gained significant attention, using various
+sensing data from devices such as LiDAR, radar, GPS, and RGB
+images to predict user locations or network conditions. Despite
+its promising potential, the adoption of multimodal sensing-aided
+beam prediction is hindered by high computational complexity,
+high costs, and limited datasets. Thus, in this paper, a novel
+resource-efficient learning framework is introduced for beam pre-
+diction, which leverages a custom-designed cross-modal relational
+knowledge distillation (CRKD) algorithm specifically tailored for
+beam prediction tasks, to transfer knowledge from a multimodal
+network to a radar-only student model, achieving high accuracy
+with reduced computational cost. To enable multimodal learning
+with realistic data, a novel multimodal simulation framework
+is developed while integrating sensor data generated from the
+autonomous driving simulator CARLA with MATLAB-based
+mmWave channel modeling, and reflecting real-world conditions.
+The proposed CRKD achieves its objective by distilling relational
+information across different feature spaces, which enhances beam
+prediction performance without relying on expensive sensor data.
+Simulation results demonstrate that CRKD efficiently distills
+multimodal knowledge, allowing a radar-only model to achieve
+94.62% of the teacher performance. In particular, this is achieved
+with just 10% of the teacher network’s parameters, thereby
+significantly reducing computational complexity and dependence
+on multimodal sensor data.
+Index Terms—Multimodal learning, simulation framework,
+beamforming, sensing-aided beam prediction, relational knowl-
+edge distillation, cross-modal learning.
+I. INTRODUCTION AND BACKGROUND
+Millimeter-wave (mmWave) communications are widely
+recognized as a key enabler for next-generation wireless
+systems, because of their ability to provide high data rates and
+support numerous bandwidth-intensive applications [1]. A cor-
+nerstone technology in mmWave communication is beamform-
+ing, which directs wireless signals to specific spatial directions
+to improve signal strength and transmission quality [2]. How-
+ever, mmWave signals experience high path loss and narrow
+beamwidth. This, in turn, makes it challenging to perform
+accurate beam alignment to maintain reliable links, particularly
+in dynamic or high mobility scenarios. A commonly employed
+solution for beam alignment is beam sweeping, in which the
+transmitter (Tx) and receiver (Rx) systematically scan multiple
+Yu Min Park is with the Department of Computer Science and Engineering,
+Kyung Hee University, Yongin-si, Gyeonggi-do 17104, Rep. of Korea, and
+also with the Bradley Department of Electrical and Computer Engineering,
+Virginia Tech, Alexandria, VA, 22305, USA, email: yumin0906@khu.ac.kr.
+Yan Kyaw Tun is with the Department of Electronic Systems, Aalborg
+University, A. C. Meyers Vænge 15, 2450 København, email: ykt@es.aau.dk.
+Walid Saad is with the Bradley Department of Electrical and Computer En-
+gineering, Virginia Tech, Alexandria, VA, 22305, USA, email: walids@vt.edu.
+Eui-Nam Huh and Choong Seon Hong are with the Department of Com-
+puter Science and Engineering, Kyung Hee University, Yongin-si, Gyeonggi-
+do 17104, Rep. of Korea, emails: johnhuh@khu.ac.kr, cshong@khu.ac.kr.
+beam directions to find the optimal alignment. Although this
+approach is straightforward to implement, it can be inefficient
+in rapidly changing environments, introducing considerable
+overhead in terms of time and energy [3].
+One promising approach for overcoming these limitations
+is to leverage multimodal sensing-aided beam prediction using
+data from sensors such as LiDAR, radar, GPS, and RGB cam-
+eras to monitor user trajectories and network conditions [4]. By
+incorporating this information, multimodal systems can forego
+or accelerate sequential beam scanning, allowing quicker and
+more flexible beam alignment with reduced overhead [5]. This
+technique is well-suited for applications that require low la-
+tency, such as autonomous driving and drone communications
+[6]. As such, multimodal sensing-aided beam prediction is be-
+coming an important technology for future wireless networks
+[7]. However, designing practical multimodal sensing-aided
+beam prediction approaches requires overcoming a number
+of key challenges. First, deploying high-resolution sensors
+such as LiDAR or high-frame rate cameras at every base
+station is costly, and extensive use of cameras also raises
+privacy concerns [8]. Second, large-scale transformer-based
+fusion models are often needed to effectively leverage sensor
+data, but they can be computationally heavy [9], [10]. Third,
+creating comprehensive multimodal datasets is non-trivial, as
+existing public datasets often lack certain sensing modalities
+or have environment-specific constraints.
+A. Prior Works
+There has been a number of works that attempted to address
+the aforementioned challenges [11]–[33], as detailed next.
+1) Traditional Approaches for mmWave Beamforming:
+Traditional beamforming in mmWave systems has largely
+relied on exhaustive beam sweeping or heuristic codebook-
+based methods [19]. Beam sweeping is the most established
+beam optimization technique in mmWave communications,
+in which the transmitter and receiver systematically scan
+multiple beam directions to determine the one that provides
+the highest signal strength [20]. In [21], the authors leveraged
+simultaneous localization and mapping (SLAM) techniques
+to significantly improve beam tracking and management in
+mmWave systems by incorporating geometric consistency and
+environmental features. Although straightforward to imple-
+ment and effective in static or low-mobility environments,
+beam sweeping can lead to considerable overhead and latency,
+which becomes problematic in high-speed or rapidly varying
+channels where real-time adaptability is essential [6]. To miti-
+gate this issue, heuristic methods have also been explored, such
+as codebook-based beam selection, where candidate beams
+are rapidly identified, and greedy approaches that pick the
+beam delivering the highest instantaneous signal strength [22].
+Although relatively simple and intuitive, these methods do
+not guarantee a global optimum and often fail in highly
+dynamic environments [6]. Consequently, relying solely on
+beam sweeping or heuristic approaches to overcome frequent
+arXiv:2504.05187v2  [cs.NI]  1 Dec 2025
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+2
+TABLE I: Typical measurement and simulation public datasets for multimodal wireless communication.
+Dataset
+Sensory data
+Communication data
+Weather
+Multi-Scenario
+Source
+RGB
+Depth map
+LiDAR
+Radar
+mmWave
+Massive MIMO
+Sunny, rainy, snowy
+DeepSense 6G [11]
+✓
+✗
+✓
+✓
+✓
+✓
+✓
+✓
+Measurement
+WLADO [12]
+✗
+✗
+✗
+✗
+✗
+✗
+✗
+✗
+Measurement
+Vi-Fi [13]
+✓
+✓
+✗
+✗
+✗
+✗
+✗
+✗
+Measurement
+NEU [5]
+✓
+✗
+✓
+✗
+✓
+✓
+✗
+✓
+Measurement
+DeepMIMO [14]
+✓
+✓
+✗
+✓
+✓
+✗
+✗
+✗
+Simulation
+LASSE [15]
+✓
+✓
+✓
+✗
+✓
+✓
+✗
+✓
+Simulation
+ViWi [16]
+✓
+✓
+✓
+✗
+✓
+✓
+✗
+✓
+Simulation
+V2X-Sim [17]
+✓
+✓
+✓
+✗
+✗
+✗
+✗
+✗
+Simulation
+e-Flash [18]
+✓
+✗
+✓
+✗
+✓
+✗
+✗
+✗
+Simulation
+blockages and severe path loss in mmWave systems can
+lead to increased communication delays and increased energy
+consumption, ultimately hampering the reliability of networks
+that demand rapid and continuous beam adaptation [23].
+2) Multimodal Sensing-aided Beam Prediction:
+To address the challenges of mmWave beamforming, recent
+studies propose to take advantage of sensor modalities such
+as LiDAR, radar, GPS, and RGB cameras for more accu-
+rate beamforming [24]–[30]. The works in [24]–[26] used
+multimodal learning approaches that integrate LiDAR, radar,
+RGB, and GPS data to improve beam prediction accuracy. In
+[27], the authors proposed a deep quantum transformer net-
+work that fuses multimodal sensing data for robust mmWave
+beam prediction in integrated sensing and communication
+systems, demonstrating notable performance gains in real-
+world V2I scenarios. However, practical deployment of the
+solutions in [25]–[27] is hindered by sensor cost, increased
+computational complexity, and scalability concerns. Many
+existing models [28]–[30] for beam prediction assume the
+availability of various multimodal data, which may not be
+feasible in real-world deployments where the infrastructure is
+restricted to limited sensor modalities. In particular, current
+LiDAR systems are often prohibitively expensive, and the
+widespread deployment of cameras raises significant privacy
+concerns. Moreover, while transformer architectures like the
+ones used in [25]–[28] can handle numerous multimodal tasks,
+they typically require significant computational resources to
+achieve fast inference. Without such hardware, real-world base
+stations cannot integrate such transformer-based solutions for
+beamforming purposes.
+3) Multimodal Datasets and Simulation Frameworks:
+To effectively train multimodal beam prediction models,
+comprehensive datasets containing multiple sensor modalities
+along with corresponding beamforming information are re-
+quired. Table I shows publicly available datasets for multi-
+modal learning in wireless communications. Moreover, these
+datasets can be broadly categorized into real-world and virtual
+environment datasets, each with its own significant limita-
+tions. In particular, publicly available datasets often lack
+the comprehensive multimodal data necessary for effective
+learning and evaluation. Among real-world datasets [5], [11]–
+[13], very few comprehensively include LiDAR, radar, and
+RGB data together. Hence, such approaches have very lim-
+ited applicability in multimodal learning and sensor fusion
+research. Furthermore, most datasets are designed with a
+specific research focus, limiting their adaptability to explore
+new communication paradigms beyond their original scope.
+In addition, virtual environment datasets [14]–[18], often gen-
+erated using network simulation tools such as MATLAB or
+Sionna, differ significantly from real-world datasets in terms
+of environmental complexity, sensor characteristics, and noise
+Sionna
+Physical Simulator
+Network Simulator
+Real Space
+Virtual Space
+Learning
+Applying
+Tuning
+Fig. 1: Model training in a virtual environment that combines
+multiple simulators.
+modeling. These discrepancies reduce the generalizability of
+models trained solely on synthetic data, making them less
+effective in practical deployment scenarios.
+To overcome these challenges, recent studies [31]–[33]
+proposed a realistic multimodal simulation framework that
+closely replicates real-world conditions in a virtual environ-
+ment by integrating sensor data with beamforming informa-
+tion. This framework bridges the gap between synthetic and
+real-world datasets, enabling more robust and generalizable
+multimodal learning models for beam prediction in next-
+generation communication systems. To enhance the accuracy
+and realism of the generated data, the realistic multimodal
+simulation framework integrates an autonomous driving simu-
+lation platform with network simulation tools, as illustrated in
+Fig. 1. The authors in [31] proposed a multimodal simulation
+framework for digital twin (DT) enabled vehicle-to-everything
+(V2X) communications, using CARLA for realistic sensor
+data generation and Remcom Wireless InSite for precise
+ray-tracing-based wireless channel modeling, demonstrated
+through a blockage handover task for V2X link restoration.
+Similarly, the work in [32] introduced M3SC, a comprehensive
+multimodal sensing-communication dataset, generated using
+AirSim, WaveFarer, and Wireless InSite, effectively aligning
+the physical space (LiDAR, RGB, radar) with the electro-
+magnetic space (mmWave, channel impulse response (CIR)
+matrices) under various weather conditions and frequency
+bands. Furthermore, in [33], the authors developed MVX-
+ViT, a co-simulation framework that integrates CARLA and
+Sionna to generate a multimodal V2X dataset, enabling AI-
+driven antenna position optimization. However, prior work has
+largely focused on perception tasks and lacks comprehensive
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+3
+experimentation on beamforming communication. To address
+this limitation, we propose a realistic multimodal simulation
+framework that combines CARLA with MATLAB, enabling
+detailed and diverse experiments on multimodal sensing and
+mmWave beamforming communication.
+4) Knowledge Distillation for Resource-Efficient Learning:
+Knowledge distillation (KD) compresses a high-capacity
+teacher model into a lightweight student model by training
+the student to mimic the teacher’s output, thus preserving
+performance while significantly reducing computational re-
+quirements [34]. This approach is particularly beneficial in
+resource-constrained environments, such as edge devices or
+mobile platforms, where large models are impractical due
+to limited memory and power budgets. In standard KD, the
+teacher’s probabilistic outputs (soft labels) guide the student,
+allowing it to learn richer data distributions than is typically
+possible with hard labels alone. Beyond logit-based distil-
+lation, other KD variants include feature-based distillation,
+which transfers intermediate representations, and relation-
+based distillation, which preserves the structural relationships
+between data points in the latent space of the teacher [35].
+Although most KD methods assume that both the teacher
+and the student share the same input modality, cross-modal
+knowledge distillation (CKD) extends KD to allow knowledge
+transfer between models trained in different sensor modalities
+[36]. In [37], the authors proposed a teacher model trained on
+LiDAR and RGB data that can transfer its learned representa-
+tions to a student model using radar and RGB input, thereby
+reducing the reliance on computationally expensive sensors
+during inference. Similarly, other CKD approaches [38] and
+[39] have been applied primarily to perception tasks such as
+object detection or classification. Although these works [37]–
+[39] demonstrate the potential of CKD for efficient inference,
+it does not explore or address beamforming communication.
+Thus, its applicability to real-time, resource-constrained beam
+prediction in 6G networks remains limited. To address these
+challenges, we investigate a radar-only student model for beam
+prediction that benefits from cross-modal relational knowledge
+distilled from transformer based multimodal teacher.
+B. Contributions
+The main contribution of this paper is a novel resource-
+efficient learning approach based on Cross-modal Relational
+Knowledge Distillation (CRKD) for optimal beam prediction
+in a multi-vehicle-to-infrastructure (V2I) environment. We first
+define the beam prediction problem, which aims to maximize
+the received signal strength (RSS) between multiple vehi-
+cles. To generate the necessary training data, we introduce
+a realistic multimodal simulation framework that integrates
+traditional communication tools (MATLAB) with autonomous
+driving simulators (CARLA). This framework enables diverse
+multimodal experiments using realistic sensor data. Using this
+multimodal dataset, we propose a CRKD-based approach for
+efficient radar-only beam prediction. Specifically, our method
+transfers knowledge from a teacher network trained in mul-
+tiple sensor modalities to a student network relying solely
+on radar data. The evaluation results demonstrate that the
+proposed CRKD-based model significantly improves the radar-
+only beam prediction performance. In particular, the student
+network substantially reduces the number of parameters com-
+pared to the teacher network, highlighting the effectiveness
+of our resource-efficient design. In summary, we make the
+following key contributions:
+• Multimodal realistic simulation framework: We integrate
+CARLA (to generate diverse sensor data) and MATLAB
+(to simulate mmWave channel communication) to create
+a virtual environment that accurately reflects real-world
+conditions, allowing robust performance evaluations.
+• Cross-modal relational knowledge distillation: We in-
+troduce a new beam prediction–specialized method that
+transfers relational features from a multimodal teacher
+model (trained with LiDAR, radar, GPS, and RGB)
+to a student with only radar. This approach preserves
+predictive accuracy while reducing sensor dependencies
+and computational complexity.
+• Analysis of generated multimodal data: We analyze the
+generated dataset. This analysis reveals the specific char-
+acteristics of the dataset, such as the distribution of
+beam indices across the entire dataset and the increased
+complexity of multi-lane scenarios with multiple strong
+signal paths. These insights highlight key challenges
+in beam prediction, such as dealing with skewed label
+distributions and maintaining accuracy in environments
+with higher multi-path variability.
+• Extensive performance evaluation: We validate our ap-
+proach using top-k accuracy, mean received signal
+strength (RSS) and mean percentile rank (MPR) in urban
+scenarios with multi-lane. Results show that our radar-
+only student model achieves over 94% of the teacher
+model’s accuracy with only 10% of the teacher network’s
+parameters. This demonstrates that cross-modal distilla-
+tion can effectively preserve predictive performance under
+strict resource constraints, even in complex environments
+with high multipath and mobility.
+The rest of this paper is organized as follows. Section II
+introduces the proposed multimodal sensing-based beam pre-
+diction system for multiple vehicles. Section III presents the
+realistic multimodal simulation framework, which is designed
+to generate multimodal sensing training data. In Section IV,
+we propose CRKD for training a single-modal beam prediction
+model. Section V analyzes the simulation results and, finally,
+Section VI concludes the paper with key findings and future
+directions.
+II. SYSTEM MODEL
+As illustrated in Fig. 2, we consider multimodal sensing-
+based beam prediction for downlink mmWave communications
+in multiple V2I environments, which consists of a mmWave
+beamformer with a uniform rectangular array (URA) system
+of N antennas and a set V of V vehicles, each with a single
+antenna. The beamformer employs a predefined beam code-
+book B = {c1, · · · , cB} of size B, where each cb corresponds
+to a beam pattern realized by a weight vector wb ∈CN.
+The beamformer selects the next optimal future beam index
+using a deep neural network (DNN) based on the sensing data
+from the previous observation window of size P. The sensing
+information at the channel sampling interval t ∈T can be
+written as X = {x[t −P + 1], · · · , x[t]}. We also consider two
+types of beamformers with different sensing configurations:
+• Multimodal Beamformer (equipped with LiDAR, radar,
+GPS, and camera): This beamformer can extract rich en-
+vironmental features such as 3D object shapes, distances,
+velocity information, and approximate location coordi-
+nates. This multimodal approach can produce highly ac-
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+4
+Sensor
+Sensing data
+(𝑡1~𝑡5)
+mmWave
+Beamformer
+Sensor
+mmWave
+Beamformer
+LiDAR
+Camera
+Radar
+GPS
+Radar
+Sensing data
+(𝑡1~𝑡5)
+Deep Neural Network
+⋯
+⋯
+⋯
+⋯
+Deep Neural Network
+⋯
+⋯
+⋯
+⋯
+Cross-modal
+Knowledge Distillation
+Fig. 2: System model for multi-beam prediction with cross-modal knowledge distillation.
+curate beam predictions, but requires significant hardware
+and computational resources.
+• Radar-Only Beamformer: This is a beamformer that is
+restricted to radar measurements, which are generally
+lower-cost and robust under various environmental con-
+ditions (e.g., fog, rain). However, it may lack certain
+positional or visual details that LiDAR or cameras could
+provide, potentially reducing its beam prediction accuracy
+if used in isolation.
+Despite these differences in sensing complexity, our goal is to
+develop a learning-based beam prediction method that mini-
+mizes performance loss when only radar sensing is available.
+A. Network model
+To model the characteristics of mmWave communica-
+tion, we adopt a geometric ray-tracing-based channel frame-
+work that captures sparse multipath, directional propagation,
+and frequency-selective path loss. All path-level parameters
+{βv,l, θl, ϕl, τl}L
+l=1 are generated using MATLAB’s raytrace
+function, which implements a 3D shoot–bounce–ray (SBR)
+solver consistent with 3GPP TR 38.901. This setup includes
+specular reflections, single-edge diffractions (up to order 2),
+and realistic urban materials (e.g., concrete, glass, metal),
+modeled in an urban microcell environment imported from
+CARLA.
+When applying a beamforming weight vector wb of a beam
+pattern cb ∈B, the magnitude of the response of the array for
+a vehicle v over the path l is calculated as:
+Rtx
+v,l(cb) = 10 log10
+wH
+b · av(θl, ϕl)
+ ,
+(1)
+where av(θl, ϕl) ∈CN is the array response vector at
+azimuth θl and elevation ϕl, and
+H denotes the Hermitian
+(conjugate transpose). This response reflects the directional
+gain of the array for a specific path.
+The total received signal strength (RSS) for vehicle v using
+beam pattern cb is determined by aggregating contributions
+from all L propagation paths, weighted by path losses:
+Sv(cb) =
+L
+X
+l=1
+
+Rtx
+v,l(cb) −P l
+v
+
+,
+(2)
+where P l
+v represents the path loss of the l-th path. This
+loss includes distance-based attenuation, material-dependent
+reflection loss, and large-scale fading. A common empirical
+model expresses this as follows:
+P l
+v(dB) = P0 + 10α log10(dv,l) + χσ,
+(3)
+where P0 is the reference path loss at 1 meter, α is the
+path loss exponent, dv,l is the distance of the l-th path, and
+χσ ∼N(0, σ2) models shadow effects.
+In addition, the effective channel gain for each path includes
+a carrier-dependent phase shift due to propagation delay τv,l,
+expressed as:
+hv,l =
+p
+βv,l e−j2πfcτv,l,
+(4)
+which is embedded in βv,l during the simulation. This realis-
+tic channel model reflects the sparse, high-directivity nature of
+mmWave environments and forms the foundation for evaluat-
+ing beam prediction accuracy under our proposed knowledge
+distillation framework. Importantly, this formulation ensures
+that beam prediction models are trained and evaluated under
+physically realistic and path-dependent conditions, allowing
+them to learn angular selectivity and NLoS behavior intrinsic
+to real-world mmWave propagation.
+B. Problem statement
+We will investigate how to effectively leverage the sensing
+information obtained from the beamformer sensors for the
+mmWave beam prediction problem. We aim to select an
+optimal beam pattern cb from the candidate beams in the
+codebook B that maximizes the sum of RSS of vehicles. In
+a practical mmWave downlink scenario, the base station (or
+beamformer) observes the dynamic environment and selects
+the beam pattern cb to maximize received strength across
+vehicles. For the effective channel hv of vehicle v, the weight
+vector wb ∈CN in B should be chosen to achieve a high
+inner product hH
+v wb. The challenge is that hv evolves quickly
+due to mobility, blockage, and reflections at mmWave fre-
+quencies, leading to frequent re-selection of the beam pattern.
+Exhaustive beam sweeping can be performed to identify c∗
+b,
+but this approach is time-consuming, particularly for large
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+5
+Define physical environment 
+with Sensor & Tx/Rx
+Define wireless environment 
+with Millimeter Antenna
+Multimodal Learning
+Physical Simulation
+Sensing Data
+(LiDAR, Radar, RGB)
+Wireless Simulation
+Communication Data
+(Ray, RSS, Beam info)
+Current State
+(Position,
+Rotation)
+Generate
+Current
+Scene
+Fig. 3: Multimodal realistic simulation framework based on
+autonomous driving tool CARLA and MATLAB.
+|B|. Therefore, sensing-aided beam prediction that uses radar,
+LiDAR, GPS, or camera data can help to infer the optimal
+beam directly from environmental observations. However, to
+train learning models for beam prediction, we require compre-
+hensive multimodal data, which we address in Section III.
+Hence, our goal is to develop a deep learning framework
+capable of predicting beams using the collected sensory data
+X. We consider two different models: one that uses multimodal
+sensing data and another that relies on radar only. The intended
+output of these deep learning models is a probability distri-
+bution p = [p1, p2, . . . , pB] over the beamforming codebook
+B. The beam pattern predicted by the model with the highest
+prediction probability is given by:
+ˆb = arg
+B
+max
+b
+pb.
+(5)
+For multi-vehicle scenarios, one may sum or average RSSv(cb)
+across all vehicles v ∈{1, . . . , V } to evaluate the utility of
+each beam pattern for the entire coverage area. Identifying
+the index corresponding to the highest sum of RSS across
+multiple vehicles, the optimal beam pattern is given by:
+b∗= arg
+B
+max
+cb
+V
+X
+v=1
+Sv(cb).
+(6)
+which gives us the beam pattern cb that maximizes the cumu-
+lative signal strength across all vehicles.
+The beam prediction model f(·) is parameterized by a set of
+parameters Θ. These parameters are learned from the training
+dataset {X, b∗} at the channel sampling interval t, which
+contains the sensing information along with the correspond-
+ing optimal beam patterns. Consequently, the optimization
+problem predicting the beam for the future channel sampling
+interval t + 1 can be written as [8]:
+f ∗(X, t+1; Θ∗) = arg max
+f(·),Θ
+P {f(X, t + 1; Θ) = b∗[t + 1]} . (7)
+The prediction models are referred to as fmulti(·) with pa-
+rameter Θmulti, which uses multimodal sensing information, and
+fmono(·), which uses radar-only sensing information, depending
+on the type of sensor used. Next, we present how to generate
+training data and learn multimodal models.
+III. MULTIMODAL REALISTIC SIMULATION FRAMEWORK
+FOR SENSING-AIDED COMMUNICATION
+We now present a realistic multimodal simulation frame-
+work designed to generate multimodal sensor data and perform
+wireless communication experiments in a detailed virtual
+urban environment. Fig. 3 illustrates the workflow of the
+proposed framework. We use the autonomous driving tool
+CARLA [40] to generate realistic sensing information, while
+MATLAB [41] is used for communication experiments. Next,
+we describe the overall workflow, including procedures for
+sensor data generation and digital environment reconstruction.
+We then discuss how the reconstructed environment supports
+multimodal sensor simulation and ray-tracing-based channel
+generation, ultimately producing the data required for cross-
+modal knowledge distillation.
+The proposed framework consists of four main stages:
+environment setup, sensing data generation, 3D map recon-
+struction, and wireless channel simulation. By integrating
+CARLA’s robust vehicular and sensor modeling capabilities
+with MATLAB’s communication toolboxes, we ensure realis-
+tic modeling of both sensor signals and mmWave propagation
+characteristics.
+Environment Setup: To simulate realistic urban scenarios,
+we place multiple vehicles and one or more base stations
+within the CARLA environment. The built-in traffic control
+and navigation functions of CARLA govern the autonomous
+movements of these vehicles, adhering to traffic signals, speed
+limits, and road geometry. This configuration provides dy-
+namic mobility patterns and a diverse range of sensing condi-
+tions to evaluate beamforming and channel characteristics:
+• Base Station Placement: We position the base station(s)
+at fixed points, such as roadside units or rooftop instal-
+lations, consistent with typical urban deployments.
+• Vehicle Distribution: Vehicles are spawned in random
+locations or traffic centers, allowing a variety of relative
+positions and velocities for a more comprehensive data
+collection.
+• Environmental Dynamics: Here, changes in lighting,
+weather, and traffic density have been introduced to sim-
+ulate different conditions (e.g., night, fog, heavy traffic).
+Sensing Data Generation: To capture the information re-
+quired for subsequent communication analysis, we instantiate
+multiple sensors at the base station, as well as in vehicles if
+needed. Using CARLA’s APIs, we configure sensor modalities
+such as:
+• LiDAR: It generates 3D point clouds, providing high-
+resolution distance and object shape information.
+• Radar: It offers lower-resolution distance and velocity
+measurements, robust in adverse weather or lighting
+conditions.
+• RGB Cameras: It provides rich color image data for vi-
+sual context (e.g. obstacle detection, object classification).
+• GPS: It logs positional coordinates and velocities.
+This multimodal data captures the dynamic movement of
+vehicles and environmental details such as buildings, roads,
+and other objects. Then, all sensing data are synchronized in
+time, ensuring consistent data alignment across LiDAR, radar,
+and camera outputs.
+Digital 3D Reconstruction: Although CARLA renders a
+realistic environment for autonomous driving simulations, it
+is required MATLAB for the compatible 3D model format
+to conduct wireless channel simulations. To harmonize these
+platforms, we perform a conversion of the CARLA maps using
+Blender API:
+• Map Export and Conversion: We export the CARLA
+environment, including roads and buildings, into an in-
+termediate 3D file format (e.g., FBX or OBJ).
+• Scripting in Blender: The Blender API is used for script-
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+6
+ing the conversion process, ensuring that the geometry,
+coordinates of the texture, and scale of the model are
+preserved.
+• MATLAB Import: The resulting 3D file is then imported
+into MATLAB, generating a mesh-based environment
+consistent with the virtual scene in CARLA.
+This process guarantees that the geometry, dimensions, and
+layout remain accurate on both simulation platforms.
+Wireless Channel Simulation: After importing the 3D en-
+vironment into MATLAB, we perform ray-tracing-based wire-
+less channel simulations to capture the propagation character-
+istics of mmWave. By tracing signal paths, reflections, diffrac-
+tions, and line-of-sight (LoS) or non-line-of-sight (NLoS)
+components, we gain detailed insights into how each beam
+pattern interacts with the reconstructed urban scene. Specifi-
+cally:
+• Ray-Tracing Algorithm: Multiple rays are cast from the
+base station in different directions, and their interactions
+with objects are calculated based on reflection, scattering,
+or diffraction coefficients.
+• Beam Pattern Evaluation: The received signal strength
+(RSS) is evaluated for each codebook beam at various
+vehicle positions, creating a labeled dataset linking spatial
+and sensing data to channel observations.
+• Dynamic Updates: As vehicles move, updated positional
+data from CARLA can be used to re-simulate or predict
+channel states, thus creating a time-series dataset of
+multimodal sensing and wireless measurements.
+We integrate the multimodal sensor data obtained from
+CARLA with the corresponding RSS and channel parameters
+from the MATLAB ray-tracing simulations. This fused dataset
+includes:
+• Sensor Streams (LiDAR, radar, RGB, GPS): High-
+dimensional observations of the environment.
+• Channel State Information (Ray-Tracing): Path loss, de-
+lay spread, angle of arrival (AoA), angle of departure
+(AoD), and RSS for each beam pattern.
+• Temporal and Positional Labels: Timestamps, vehicle IDs
+and spatial coordinates to enable sequential or spatial
+modeling.
+These data are the foundation for training and validating
+beam prediction algorithms, including the proposed cross-
+modal knowledge distillation approach.
+In summary, the proposed multimodal simulation frame-
+work (Fig. 3) seamlessly integrates autonomous driving and
+wireless communication simulations by generating dynamic
+and realistic urban scenarios through CARLA’s traffic control
+and sensor suite, reconstructing the resulting 3D environment
+in MATLAB for accurate ray-tracing analysis, and creation
+of a comprehensive dataset that encompasses both sensor
+observations and channel measurements. This unified approach
+lays the foundation for rigorous performance evaluation of
+sensing-aided beam prediction and enables advanced methods
+such as cross-modal knowledge distillation, which leverages
+rich multimodal data during training while reducing sensor
+dependencies at inference.
+IV. CROSS-MODAL RELATIONAL KNOWLEDGE
+DISTILLATION FROM MULTIMODAL TO MONOMODAL
+As illustrated in Fig. 4, our objective is to distill the
+knowledge from a teacher network trained on multimodal
+sensing information (LiDAR, radar, GPS, and RGB) into a
+student network that relies only on radar data. Our teacher
+model uses a transformer-based sensor fusion (with a ResNet
+backbone for images), resulting in 105 million parameters.
+In contrast, the student network is a radar-only multilayer
+perceptron (MLP) with 13 million parameters. In this section,
+we outline the preprocessing steps for the multimodal data and
+the training process of the teacher network. We then describe
+how the student network is trained using our cross-modal
+knowledge distillation.
+A. Multimodal preprocessing
+The teacher network, captured by fmulti(·), has four sensor
+modalities: LiDAR, radar, GPS, and RGB images. Each sensor
+type is pre-processed in a format that can be consistently fed
+into subsequent encoders:
+• LiDAR (Bird’s-Eye View (BEV)): Raw LiDAR point
+clouds
+x, y, z, intensity
+ are projected onto a 2D plane
+to form a BEV representation. This transformation high-
+lights object occupancy and relative positioning in a top-
+down image layout, filtering out ground reflections, and
+simplifying 3D geometry into 2D grids.
+• Radar (Highest Point Sampling (HPS)): To handle radar
+data
+velocity, azimuth, altitude, depth
+, we apply HPS,
+which downsamples radar point clouds to a fixed size,
+while ensuring consistency across different sampling in-
+tervals or noise conditions.
+• GPS: GPS coordinates are recorded as numerical features.
+These can be fed into fully connected layers or concate-
+nated with other high-level features to enrich the spatial
+context.
+• RGB Images: Camera images are processed with a stan-
+dard 2D convolutional neural network (CNN), such as a
+ResNet block, producing visual feature maps that capture
+color and texture information.
+B. Learning of the teacher network
+1) Transformer-Based Fusion:
+After separate backbone encoders extract the LiDAR/RGB
+and radar/GPS features, the resulting embeddings are fused
+using a Transformer module that captures cross-modal corre-
+lations:
+• Image-Based Encoding: LiDAR-BEV and RGB image
+features each pass through their own CNN backbone
+(e.g., ResNet). The output feature maps are flattened or
+pooled and then fed into a Transformer that learns global
+correlations among spatial patches.
+• Point-Based Encoding: Radar and GPS data undergo an
+attention-based layer to compress point-wise features,
+followed by an attention layer and a linear layer to reduce
+dimensionality. These intermediate embeddings are then
+processed by the same (or parallel) Transformer to align
+with the image-based features.
+By applying multi-head attention to the connected tokens of
+LiDAR, radar, RGB, and GPS, the Transformer separates
+and merges point-based and image-based data, resulting in a
+unified multimodal representation Zmulti that provides greater
+awareness of the environment.
+2) Beam Prediction and Focal Loss:
+The fused representation Zmulti is finally passed to a pre-
+diction layer to output a probability distribution on the beam-
+forming codebook B. The prediction model fmulti(·) uses a
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+7
+LiDAR
+RGB
+Radar
+GPS
+Pre-
+Processing
+Pre-
+Processing
+Prediction
+Model
+(MLP)
+Radar
+Pre-
+Processing
+Encoding Layer
+(MLP)
+Prediction
+Model
+(MLP)
+Prediction
+Result
+Prediction
+Result
+Teacher model with multi modal sensing
+Student model with radar-only
+Output
+layer
+Latent
+layer
+CNN
+CNN
+CNN
+CNN
+Pool
+CNN
+CNN
+CNN
+CNN
+Pool
+Transformer
+Transformer
+Attention
+Attention
+Embedding
+Embedding
+Pool
+Pool
+Transformer
+Transformer
+Resnet 18
+Resnet 34
+Parameter: 105M
+Parameter: 13M
+Fig. 4: The proposed structure of cross-modal knowledge distillation from multimodal (LiDAR, RGB, radar, and GPS) to
+monomodal (radar).
+focal loss function and uses stochastic gradient descent (SGD)
+for optimization. Focal loss is a modification of the standard
+cross-entropy loss designed to address the class imbalance
+problem. In datasets with imbalanced classes, the majority
+class can dominate the loss, leading to poor performance for
+the minority class. The focal loss function is formulated as
+follows:
+Lfocal = −
+ 1 −pb∗γ log
+ pb∗
+,
+(8)
+where pb is the predicted probability of selecting beam cb. b∗
+is the ground-truth beam index (i.e., the beam maximizing
+the sum-RSS), and γ = 2 is a focusing parameter in our
+experiments. In highly imbalanced datasets where certain
+beams dominate, the focal loss ensures more attention is given
+to challenging samples. The teacher network uses only the
+focal loss in (8) as a loss function.
+C. Learning of the student network
+The student network, fmono(·), operates exclusively on radar
+input. The student network is a feedforward multilayer percep-
+tron (MLP) with roughly 13 million parameters by default.
+The MLP of the student consists of 6 fully connected layers
+with ReLU activations. This monomodal design reduces sensor
+and computational overhead, but naturally yields less environ-
+mental awareness than the multimodal teacher. Training fmono
+purely with a label-based loss often leads to suboptimal beam
+predictions. Hence, we apply KD framework to significantly
+enhance the student’s performance while reducing the overall
+model size.
+1) Conventional Knowledge Distillation:
+Conventional KD aims to transfer knowledge from the
+teacher to the student network by minimizing the loss of
+distillation. The distillation loss is calculated based on the
+difference between the features of the teacher and student
+networks. To calculate this difference, the conventional KD
+methods use the Kullback-Leibler (KL) divergence, which is
+a statistical measure that quantifies how a feature distribution
+Fmono of the student network differs from a feature distribution
+Fmulti of the teacher network. For two feature distributions P
+and Q, the KL divergence is calculated as [42]:
+Lkl(P||Q) = −T 2
+F
+X
+f=1
+σ(P) log
+σ(P)
+σ(Q)
+
+,
+(9)
+where T is the temperature to control the distribution over fea-
+tures, to essentially smooth the distribution, thereby capturing
+the nuanced relationships between different features as learned
+by the teacher network. In our experiments, we set T = 2. F is
+the total number of features. σ(z) = ezi/P
+j ezj is the softmax
+function, where zi is the i-th element of the input vector z.
+To obtain more fine-grained knowledge from the teacher
+network, we incorporate not only the loss based on the
+final output features F end but also an additional loss term
+derived from the difference between the latent features Fmid
+in the encoding layers. As a result, the overall loss for the
+student network, including both the original label loss and the
+distillation loss, can be calculated as:
+Lkd = (1 −α)Lfocal + α
+X
+l∈{mid, end}
+Lkl
+
+f (l)
+t , f (l)
+s
+
+,
+(10)
+where α is a weight parameter that balances the importance
+of the original loss and the distillation loss. f (l)
+t
+and f (l)
+s
+are
+the teacher and student feature maps at layer l.
+2) Relational Knowledge Distillation:
+While conventional KD focuses on aligning outputs or
+feature representations on a per-sample basis, relational knowl-
+edge distillation (RKD) goes a step further by preserving
+pairwise relationships between samples in the feature space.
+This approach is especially beneficial in cross-modal knowl-
+edge distillation, where the teacher model operates on richer
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+8
+Teacher
+Model
+Student
+Model
+𝒓𝐞𝐮𝐜
+𝒓𝐜𝐨𝐬
+𝒓𝐡𝐲𝐩
+𝑳𝐦𝐚𝐧𝐢𝐟𝐨𝐥𝐝
+Mapping to Manifold
+Mapping to Manifold
+(a) Manifold-Based Relationship.
+Teacher
+Model
+Student
+Model
+Probability Distribution
+Probability Distribution
+𝑳𝐬𝐭𝐫𝐞𝐞𝐢𝐧𝐠
+(b) Beam Steering based Relationship.
+Fig. 5: Relational Knowledge Distillation with different relationships.
+multimodal data while the student has access to only a single
+modality (i.e., radar). In our framework, we implement two
+methods of relational knowledge distillation: (a) a manifold-
+based loss that aligns the latent feature geometry between
+teacher and student, and (b) a novel beam steering-based
+loss that captures the relational structure in the complex-
+valued beamspace at the output level. These complementary
+losses enable the student to better mimic the teacher’s internal
+representations and output behaviors under sensor constraints.
+a) Manifold-Based Relationship Measures:
+To extract deep features from various relationships of the
+latent layer, we adopted a method called DistilVPR [43].
+To capture higher-order relationships between feature embed-
+dings, DistilVPR computes pairwise distances or similarities
+in three distinct manifolds: Euclidean (flat), spherical (positive
+curvature), and hyperbolic (negative curvature). For any two
+feature vectors ti and tj, we denote:
+reuc(ti, tj),
+rcos(ti, tj),
+rhyp(ti, tj).
+The Euclidean distance (or ℓ2) is the most common metric
+to measure pairwise dissimilarity in a flat manifold as follows:
+reuc(ti, tj) =
+ti −tj
+
+2 =
+v
+u
+u
+t
+D
+X
+d=1
+ ti,d −tj,d
+2,
+(11)
+where ti, tj ∈RD and D is the feature dimension. In the
+context of knowledge distillation, matching these Euclidean
+distances in the teacher and student feature spaces ensures
+that if two samples (i, j) are close in the teacher’s embed-
+dings, they remain close in the student’s embeddings. While
+Euclidean distance captures raw feature differences, the cosine
+similarity is more sensitive to angular relationships and is often
+interpreted as measuring distance on a spherical manifold. To
+explore the spherical-based relationship, the cosine distance is
+given by:
+rcos(ti, tj) =
+⟨ti, tj⟩
+∥ti∥∥tj∥,
+(12)
+where ⟨·, ·⟩represents the inner (dot) product. In practice, one
+may use 1 −rcos as a distance-like measure. Cosine-based
+relationships are useful when the magnitude of vectors is less
+important than their direction, a scenario common in classifi-
+cation or retrieval tasks. We incorporate a hyperbolic measure
+using the Poincar´e ball model to capture hierarchical or tree-
+like structures and negative curvature. When ti, tj ∈RD, we
+can project each vector onto the Poincare space DD
+c
+(with
+curvature parameter c > 0) via an exponential mapping as
+follows:
+t(hyp)
+i
+= expc
+0(ti) = tanh
+√c ∥ti∥
+
+ti
+√c ∥ti∥.
+(13)
+Given two hyperbolic embeddings t(hyp)
+i
+, t(hyp)
+j
+∈DD
+c , their
+hyperbolic distance rhyp(·, ·) is computed as:
+rhyp
+ ti, tj
+
+= dhyp
+
+t(hyp)
+i
+, t(hyp)
+j
+
+=
+2
+√c arctanh
+√c
+ −t(hyp)
+i
+⊕c t(hyp)
+j
+
+
+,
+(14)
+where ⊕c is the M¨obius addition in the Poincar´e ball. The
+negative curvature of hyperbolic space often helps preserve
+hierarchical relationships in feature embeddings. We then
+compare these teacher relations to the corresponding student
+relations, e.g., reuc(si, sj). One can define a relational loss over
+all pairs (i, j) as:
+Llatent-rel =
+B
+X
+i,j=1
+h
+d
+ reuc(ti, tj), reuc(si, sj)
+
++ d
+ rcos(ti, tj), rcos(si, sj)
+
++ d
+ rhyp(ti, tj), rhyp(si, sj)
+i
+,
+(15)
+where d(·, ·) is a distance or divergence. This ensures that
+the student maintains the geometry of the higher order of the
+teacher, even if the absolute feature values differ because the
+teacher sees more modalities.
+b) Beam Steering based Relationship Measures:
+In addition to the latent space structure, we propose a novel
+relational distillation loss in the output domain by leverag-
+ing the domain-specific properties of mmWave beamforming.
+Each predicted beam index corresponds to a complex-valued
+steering vector, which defines the phase alignment of signals
+transmitted across antenna elements. These vectors capture the
+directionality of beamforming and inherently encode spatial
+relationships between users or signal paths. Since steering vec-
+tors represent spatial directionality, aligning their pairwise sim-
+ilarities enables the student to learn beam-space relationships
+that are critical for mmWave propagation, where multipath
+components and direction selectivity play a dominant role in
+determining communication performance.
+To preserve the relational structure of the beamspace, we
+compute a similarity matrix using the Hermitian inner product
+between normalized steering vectors. For two predicted beam
+indices ˆbi and ˆbj from the teacher model, their similarity is
+defined as:
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+9
+s(T )
+i,j =
+
+w(ˆbi)†w(ˆbj)
+∥w(ˆbi)∥· ∥w(ˆbj)∥
+ ,
+(16)
+where w(ˆbi) ∈CN is the steering vector for the beam index
+ˆbi, † denotes the Hermitian (conjugate transpose), and N is the
+number of antenna elements. The same operation is performed
+for the predicted beams of the student to yield s(S)
+i,j .
+We then define a beamspace relational loss to align the
+structural similarities of beam directions between teacher and
+student:
+Loutput-rel =
+B
+X
+i,j=1
+
+s(T )
+i,j −s(S)
+i,j
+2
+,
+(17)
+where B is the batch size. This loss ensures that, even
+without direct access to multimodal inputs, the radar-only
+student can mimic the teacher’s understanding of directional
+similarity across samples. In scenarios with domain shifts
+or multiple strong paths, preserving this angular relational
+structure is critical for robust beam prediction. To the best
+of our knowledge, this is the first application of relational
+knowledge distillation based on complex-valued beam steering
+vector similarities for mmWave communication. While prior
+work like DistilVPR focuses on latent space geometry, our
+proposed loss explicitly leverages directional structure at the
+output level, a domain-specific innovation tailored to beam-
+forming systems under sensor constraints. Consequently, we
+can replace the conventional KD term in (10) with relational
+loss as:
+Lrkd = (1 −α) Lfocal + α(Llatent-rel + Loutput-rel),
+(18)
+Similar to the conventional KD loss function (10), the parame-
+ter α balances the importance between the original supervised
+loss and the relational distillation losses.
+V. SIMULATION RESULTS AND ANALYSIS
+A simulation-based dataset was generated using the ‘Town
+10’ map in CARLA, designed to resemble an urban envi-
+ronment with up to 40 vehicles moving along 2-Lane or 3-
+Lane roads. Each scenario (2-Lane or 3-Lane) comprises 50
+episodes, spanning a maximum of 200 time steps sampled at
+100 ms intervals. This setup produces 18, 823 time samples
+(9, 073 in the 2-Lane scenario and 9, 750 in the 3-Lane sce-
+nario). To introduce additional variation, the simulation adjusts
+the time of day and weather: 30 episodes occur at noon, 10
+at night, and the remaining 10 episodes feature rain or fog
+in equal proportions. Figure 6 provides example RGB frames
+that illustrate these conditions.
+We train the networks in 70% of the generated samples,
+evaluated in 15%, and tested the remaining 15%. All results
+are reported in the test set. We implemented our models in
+PyTorch. The teacher network was trained for 50 epochs with
+a batch size of 64 and an initial learning rate of 5 × 10−4 with
+the learning rate decayed by an absolute amount of 5×10−6 per
+epoch. A learning rate decay starts at epoch 15, and a restart
+interval is applied every 10 epochs. The student was trained
+for 50 epochs in the same settings. We set the loss weight
+of the distillation α = 0.5. Within this virtual environment, a
+sensing-aided beamformer is used to serve the vehicles, and
+152 distinct beam patterns are defined to cover both single-
+beam and multi-beam configurations of up to three beams.
+Each beam pattern spans an elevation angle of 70◦and an
+azimuth angle of 180◦. At each time step, the beam pattern that
+maximizes the average received signal strength (RSS) across
+multiple vehicles is designated as optimal. In order to assess
+the performance of our beam prediction model from multiple
+perspectives, we employ three distinct metrics: Top-k accuracy,
+mean received signal strength (RSS) and the mean percentile
+rank (MPR).
+1) Top-k Accuracy: This metric checks whether the optimal
+beam y appears among the top candidates k predicted accord-
+ing to the model’s probability distribution p. Topk(p) is the set
+of beam indices with the highest probabilities k in p. Formally,
+we can express Top-k Accuracy as follows:
+Top-k Accuracy = 1
+N
+N
+X
+n=1
+I
+
+y(n) ∈Topk
+ p(n)
+,
+(19)
+where N is the total number of test samples, and I(·) is an
+indicator function that returns 1 if the condition is true and
+0 otherwise. A higher Top-k value indicates that the model’s
+probability distribution consistently assigns high scores to the
+correct beam within its top predictions.
+2) Mean RSS: Once the model selects ˆy as the predicted
+beam index, the system applies the corresponding beamformer,
+resulting in a received signal strength S(ˆy). We define the mean
+RSS as the average RSS achieved over the test set as follows:
+S = 1
+N
+N
+X
+n=1
+S
+
+ˆy(n)
+.
+(20)
+A higher value of S implies that the beam prediction model
+more often aligns with beam patterns maximizing signal
+strength across diverse scenarios.
+3) Mean Percentile Rank (MPR): The percentage rank offers
+another view of the prediction quality by examining the rank
+of the predicted beam among all B beams in terms of the
+actual RSS performance. We define the rank of ˆy as:
+rank
+ ˆy
+
+= 1 +
+B
+X
+b=1
+I
+
+S(b) > S(ˆy)
+
+,
+(21)
+so that a rank of 1 indicates the best (highest RSS) beam. We
+convert this rank to a percentile by:
+Percentile(ˆy) = B −rank(ˆy) + 1
+B
+,
+(22)
+which ranges from 0 to 1. The MPR over the test set can be
+written as:
+MPR = 1
+N
+N
+X
+n=1
+Percentile
+
+ˆy(n)
+.
+(23)
+MPR essentially measures how close the chosen beam is to
+optimal in terms of percentile. An MPR of 100% means the
+top-ranked beam was always chosen, whereas lower values
+indicate the prediction often fell short of the best beam. This
+measure is particularly useful when analyzing how close the
+prediction is to the truly optimal beam in a ranked sense, rather
+than a strict “correct vs. incorrect” classification.
+A. Dataset Analysis
+As shown in Fig. 7, the most frequently chosen beam
+indices tend to be single-beam solutions, especially in the
+2-Lane scenario, where line of sight or partial visibility to
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+10
+(a) RGB samples of camera sensors in the 2-Lane scenario.
+(b) RGB samples of camera sensors in the 3-Lane scenario.
+Fig. 6: RGB samples of camera sensors by episode type.
+20
+40
+60
+80
+100
+120
+140
+Optimal Beam Index
+-100
+-90
+-80
+-70
+-60
+Average Received Signal Strength (dBm)
+(a) Distribution of 2-Lane Scenario.
+20
+40
+60
+80
+100
+120
+140
+-100
+-90
+-80
+-70
+-60
+Average Received Signal Strength (dBm)
+Optimal Beam Index
+(b) Distribution of 3-Lane Scenario.
+20
+40
+60
+80
+100
+120
+140
+Optimal Beam Index
+-100
+-90
+-80
+-70
+-60
+Average Received Signal Strength (dBm)
+0
+0.2
+0.4
+0.6
+0.8
+(c) Distribution of all dataset.
+Fig. 7: Analysis of distributions of the generated dataset.
+Histogram of Optimal Beam Index
+0
+50
+100
+150
+Optimal Beam Index
+0
+1000
+2000
+3000
+4000
+Frequency
+Histogram of Average RSS (dBm)
+-110
+-100
+-90
+-80
+-70
+-60
+-50
+Average Received Signal Strength (dBm)
+0
+1000
+2000
+3000
+4000
+5000
+Frequency
+Fig. 8: Distribution analysis of the generated dataset.
+one dominant path is more likely. Although 3-Lane roads
+lead to more multibeam usage, single-beam choices remain
+prevalent. This indicates that in many time steps, one beam
+is sufficient to cover the dominant paths and using additional
+beams (while possible) does not substantially increase RSS.
+Hence, the optimal solution skews toward single beams. Multi-
+beam patterns are only chosen when vehicles or obstructions
+create multiple equally strong paths that a single beam cannot
+cover. The distribution of optimal beams in these experiments
+illustrates that multi-beam patterns, notably those with three
+closely spaced beams, are seldom chosen as they do not
+substantially improve average RSS compared to strong single-
+beam alignments.
+Figure 8 further shows a skew in the usage of beam
+indexes: certain indices appear far more frequently than others,
+indicating an inherent label imbalance. This imbalance reflects
+practical conditions where one or two strong angles can
+dominate the channel environment, rendering most other beam
+patterns suboptimal. This outcome highlights a key training
+consideration for learning-based beam prediction since models
+must handle real-world datasets where some classes (i.e.,
+certain beam indices) are heavily favored.
+B. Beam Prediction Accuracy
+Table II summarizes the performance of cross-modal knowl-
+edge distillation for beam prediction. The Teacher network, a
+transformer-based model trained on multimodal sensing input
+(LiDAR, radar, GPS, and RGB), achieves the highest-rank
+accuracies of 92.17%, 84.36%, and 88.41% in the scenarios
+tested. The 3-Lane scenario, having more complex multipath
+conditions, naturally results in lower accuracy across all mod-
+els (Teacher’s MPR drops by approximately 8 points compared
+to the 2-Lane scenario), highlighting the added difficulty. The
+WithoutKD model is a radar-only MLP network without any
+distillation. The WithoutKD model reaches 84.12%, 78.29%,
+and 82.02%, demonstrating a lower performance than Teacher.
+This gap underscores the value of multimodal sensor data in
+guiding beam selection. We apply distillation at two levels of
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+11
+TABLE II: Learning results of cross-modal relational knowledge distillation between models with the same training data (2-
+Lane, 3-Lane, All).
+Scenarios
+Methods
+2-Lane
+3-Lane
+All
+Latent
+Output
+MPR (%)
+RSS (dBm)
+MPR (%)
+RSS (dBm)
+MPR (%)
+RSS (dBm)
+Teacher (105M)
+92.172
+-77.753
+84.362
+-84.148
+88.410
+-81.276
+WithoutKD (13M)
+84.120
+-82.407
+78.288
+-86.803
+80.644
+-84.827
+KLdiv
+-
+83.776
+-82.561
+78.293
+-86.615
+82.019
+-84.538
+KD
+-
+KLdiv
+84.426
+-82.322
+79.503
+-86.551
+82.783
+-84.412
+KLdiv
+KLdiv
+86.329
+-81.399
+79.860
+-86.155
+82.336
+-84.209
+manifold
+-
+86.998
+-81.266
+79.525
+-86.395
+83.551
+-84.006
+-
+manifold
+85.844
+-81.627
+79.707
+-86.323
+83.463
+-84.158
+RKD
+manifold
+manifold
+87.210
+-81.084
+80.101
+-85.708
+83.658
+-83.603
+-
+beamStr
+87.185
+-80.690
+80.902
+-85.624
+83.276
+-83.979
+manifold
+beamStr
+87.502
+-80.610
+81.116
+-85.534
+83.972
+-83.526
+0
+10
+20
+30
+40
+50
+60
+70
+Top-K Accuracy (%)
+Teacher
+sRKD
+mRKD
+KD
+WithoutKD
+K=1
+K=5
+K=10
+Fig. 9: Comparative analysis of Top-K (1,5,10) prediction accuracy across models trained with all datasets.
+TABLE III: Comparison of MPR (%) with and without RKD
+across different student model sizes.
+Model Size
+Without KD
+With RKD
+Gain
+Student-S (6M)
+83.27
+86.77
++3.50
+Student-M (13M)
+84.20
+87.50
++3.30
+Student-L (34M)
+86.36
+88.45
++2.09
+TABLE IV: Comparison of model complexity and inference
+latency across platforms.
+Model
+#Params
+FLOPs
+GPU
+CPU1
+CPU2
+(ms)
+(ms)
+(ms)
+Teacher
+105.6M
+20.3G
+24.52
+30.03
+946.18
+Student-L
+34.2M
+34.2M
+0.66
+0.99
+7.99
+Student-M
+13.6M
+13.6M
+0.73
+1.10
+4.93
+Student-S
+6.8M
+6.8M
+0.59
+1.04
+2.21
+the network: the latent layer (the latent features, e.g. after the
+encoder or Transformer module) and the output layer (the final
+output logits before the softmax). Among the standard KD
+baselines (using KL divergence), KD (KLdiv+KLdiv) reaches
+up to 86.32%, 79.86%, and 82.34% but still underperforms
+compared to the RKD approaches. In the RKD section, various
+combinations of latent- and output-level relation transfer are
+explored: RKD (manifold+beamStr) achieves the highest stu-
+dent performance, with an MPR of 87.50% on the 2-Lane and
+83.97% in the overall dataset. This configuration also yields
+the best RSS values (e.g. −80.61 dBm in 2-Lane), confirming
+its superior beam selection accuracy. The improvement of
+RKD over traditional KD methods illustrates the importance of
+transferring structured relationships, especially those based on
+beamforming-specific steering vector similarities (beamStr).
+Overall, these results indicate that even a radar-only student
+network can achieve high accuracy if it benefits from cross-
+modal distillation of teacher feature relationships. In practical
+terms, this finding suggests that a small, cost-effective net-
+work, limited to radar sensing for real-time inference, can still
+approximate the performance of a more complex multimodal
+teacher.
+Fig. 9 illustrates the Top-K prediction accuracy (K
+=
+1, 5, 10) across five different models trained using all datasets.
+The baseline WithoutKD (radar-only MLP without distillation)
+shows the lowest performance across all K values, reflecting
+the limitations of lightweight monomodal learning. The KD
+model refers to conventional knowledge distillation using KL
+divergence at both the latent and output layers (KD (KL-
+div+KLdiv)). The KD improves the accuracy of Top-1 and
+Top-10 compared to baseline, but remains less effective in
+capturing spatial beam relationships. The mRKD model rep-
+resents relational knowledge distillation applied to both latent
+features (RKD (manifold+manifold), while sRKD applies RKD
+jointly on latent and output-level beam steering representations
+(RKD (manifold+beamStr)). Among the two, sRKD achieves
+superior performance, especially in Top-1 and Top-5 metrics,
+highlighting the benefit of beam-aware similarity modeling in
+the output space. The Teacher model, trained on full multi-
+modal input with transformer architecture, achieves the highest
+overall accuracy, serving as an upper bound. However, sRKD
+narrows the performance gap in Top-10 accuracy while main-
+taining a lightweight radar-only architecture, demonstrating
+the effectiveness of beam-aware relational distillation under
+resource constraints.
+Table III compares the performance of RKD in different
+model sizes for the student network. The results indicate that
+as the MLP architecture of the student grows, the overall pre-
+cision increases both for the baseline approach (WithoutKD)
+and the relational distillation approach (RKD). However, the
+relative improvement over KD is more pronounced in smaller
+student networks. In other words, while RKD achieves greater
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+12
+TABLE V: Comparison of beam prediction results under domain-same (2-Lane) and domain-shift (3-Lane to 2-Lane) scenarios.
+Domain Same (2-Lane)
+Domain Shift (3-Lane to 2-Lane)
+2-Lane
+2-Lane
+3-Lane
+Average
+Methods
+MPR (%)
+RSS (dBm)
+MPR (%)
+RSS (dBm)
+MPR (%)
+RSS (dBm)
+MPR (%)
+RSS (dBm)
+Teacher
+92.172
+-77.753
+85.496
+-81.782
+84.362
+-84.148
+84.929
+-82.965
+WithoutKD
+84.199
+-82.406
+53.307
+-94.567
+78.287
+-86.802
+65.797
+-90.685
+sRKD
+87.502
+-80.610
+54.781
+-94.088
+81.115
+-85.625
+67.802
+-90.177
+mRKD
+85.329
+-81.889
+55.037
+-93.998
+80.101
+-85.708
+66.838
+-90.383
+KD
+84.849
+-82.121
+54.901
+-94.007
+79.860
+-86.155
+66.348
+-90.476
+absolute accuracy with larger models, the performance gap be-
+tween WithoutKD and RKD is notably greater when the student
+model is small. This suggests that knowledge distillation can
+be especially advantageous in resource-constrained scenarios,
+where the student network is required to maintain a low param-
+eter count while striving to approximate the performance of a
+significantly more complex multimodal teacher. Consequently,
+compact radar-only models can benefit substantially from
+cross-modal distillation, realizing stronger beam prediction
+capabilities without incurring the computational overhead that
+larger networks demand.
+C. Resource Efficiency Analysis
+Table IV presents a comparison of model size, FLOPs, and
+inference latency for teacher and three student variants on three
+hardware platforms: a GPU (NVIDIA RTX 4070), a desktop
+CPU (AMD Ryzen 7 7800X3D @ 4.2GHz) and a mobile CPU
+(Intel i7-10510U @ 1.8GHz). While the teacher model, based
+on a Transformer architecture, incurs high computational cost
+(20.3G FLOPs) and latency up to 946.18ms on mobile CPUs,
+the student models are designed with lightweight MLPs. As a
+result, their FLOPs closely match their parameter counts (e.g.
+Student-S: 6.8M parameters ≈6.8M FLOPs), enabling sig-
+nificant speed up during inference. In particular, the smallest
+student model achieves 0.59ms on GPU and 1.04ms on CPU1,
+satisfying the sub-1ms latency target for 5G/6G beamform-
+ing, especially under ultra-reliable low-latency communication
+(URLLC) requirements. Moreover, given that standard 5G NR
+beam sweeping takes approximately 20ms, our method pro-
+vides over 30× faster inference with competitive accuracy. This
+indicates the practical deployability of our method for real-
+time mmWave beam prediction on edge and mobile devices,
+without compromising performance.
+D. Limitations under Domain Shift and Future Directions
+In addition to evaluating performance under matched train-
+ing and testing domains, we also investigate a domain-shift
+scenario to assess how well knowledge distillation withstands
+different environmental conditions. Specifically, the teacher
+network is trained on a 2-Lane dataset and then used to
+distill knowledge into a student network trained on a 3-Lane
+dataset. After this cross-domain distillation, the student model
+is evaluated in both the 2-Lane and 3-Lane test sets. Table V
+presents the beam prediction performance in both domain-
+matched (2-Lane) and domain-shifted scenarios, where the
+student model is trained on 3-Lane data and tested on 2-Lane
+and 3-Lane environments. The teacher model, trained on 2-
+Lane data, is also evaluated on both test sets for comparison.
+The Domain Shift setting specifically examines how well
+the student generalizes when trained and tested in different
+environments. The results show a noticeable drop in student
+performance (of up to 32.72%) under domain shift, especially
+in the 2-Lane test set, indicating limited generalization capac-
+ity. This performance degradation is more severe for the radar-
+only student due to its lower model capacity and restricted
+sensor input. In contrast, the multimodal teacher, with richer
+inputs and a transformer-based architecture, exhibits more
+stable performance across domains. These findings highlight
+the vulnerability of compact single-modal models to domain
+mismatch and underscore the importance of cross-domain
+robustness in real-world deployments.
+Although domain-shifted models show noticeable perfor-
+mance degradation compared to domain-matched training,
+particularly in radar-only settings, these results underscore the
+practical challenge of generalizing to unseen environments.
+In real-world deployments, sensing-aided beamformers are
+unlikely to encounter the same environmental conditions as
+those used during training, making robustness to domain
+shift a critical requirement. Our findings reveal that compact
+radar-only student models are particularly sensitive to such
+shifts, likely due to their limited input diversity and lower
+representational capacity. This highlights the need for more
+effective domain generalization strategies, such as domain-
+invariant feature learning, data augmentation across diverse
+scenarios, or lightweight fine-tuning mechanisms. In future
+work, we aim to explore these approaches in depth and
+incorporate domain-shift robustness as a core evaluation cri-
+terion, with the goal of enabling resource-constrained student
+models to maintain reliable performance across heterogeneous
+deployment environments.
+VI. CONCLUSION
+In this paper, we have developed a novel CRKD framework
+for efficient mmWave beam prediction, in which a multimodal
+teacher model (LiDAR, radar, GPS, and RGB) transfers rela-
+tional knowledge to a radar-only student. To achieve realistic
+evaluations, we have integrated CARLA-based sensor data
+generation with MATLAB-based mmWave channel modeling,
+creating a comprehensive simulation environment. Experimen-
+tal results in 2-Lane and 3-Lane road scenarios confirmed that
+a compact student model with radar can only approach the
+performance of a transformer-based teacher rich in sensors.
+This indicates that real-world applications remain viable even
+with fewer sensor modalities and a smaller network structure.
+In future work, we plan to incorporate domain adaptation
+techniques into the CRKD process to further enhance the
+generalization of the student model under changing conditions.
+We will also integrate additional sensors and more complex
+mobility patterns into our simulation framework, with the aim
+of maintaining high beam prediction accuracy in resource-
+constrained deployment scenarios and across diverse real-
+world environments.
+JOURNAL OF LATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2015
+13
+REFERENCES
+[1] H. Tataria, M. Shafi, A. F. Molisch, M. Dohler, H. Sj¨oland, and
+F. Tufvesson, “6g wireless systems: Vision, requirements, challenges,
+insights, and opportunities,” Proceedings of the IEEE, vol. 109, no. 7,
+pp. 1166–1199, 2021.
+[2] D. d. S. Brilhante, J. C. Manjarres, R. Moreira, L. de Oliveira Veiga,
+J. F. de Rezende, F. M¨uller, A. Klautau, L. Leonel Mendes, and F. A.
+P. de Figueiredo, “A literature survey on ai-aided beamforming and beam
+management for 5g and 6g systems,” Sensors, vol. 23, no. 9, p. 4359,
+2023.
+[3] Y.-N. R. Li, B. Gao, X. Zhang, and K. Huang, “Beam management
+in millimeter-wave communications for 5g and beyond,” IEEE Access,
+vol. 8, pp. 13 282–13 293, 2020.
+[4] D. Wen, Y. Zhou, X. Li, Y. Shi, K. Huang, and K. B. Letaief, “A
+survey on integrated sensing, communication, and computation,” IEEE
+Communications Surveys & Tutorials, 2024.
+[5] B. Salehi, G. Reus-Muns, D. Roy, Z. Wang, T. Jian, J. Dy, S. Ioannidis,
+and K. Chowdhury, “Deep learning on multimodal sensor data at the
+wireless edge for vehicular network,” arXiv preprint arXiv:2201.04712,
+2022.
+[6] Z. Xiao, L. Zhu, Y. Liu, P. Yi, R. Zhang, X.-G. Xia, and R. Schober, “A
+survey on millimeter-wave beamforming enabled uav communications
+and networking,” IEEE Communications Surveys & Tutorials, vol. 24,
+no. 1, pp. 557–610, 2021.
+[7] M. Q. Khan, A. Gaber, P. Schulz, and G. Fettweis, “Machine learning
+for millimeter wave and terahertz beam management: A survey and open
+challenges,” IEEE Access, vol. 11, pp. 11 880–11 902, 2023.
+[8] S. Jiang, G. Charan, and A. Alkhateeb, “Lidar aided future beam
+prediction in real-world millimeter wave v2i communications,” IEEE
+Wireless Communications Letters, vol. 12, no. 2, pp. 212–216, 2022.
+[9] S. Wu, M. Alrabeiah, C. Chakrabarti, and A. Alkhateeb, “Blockage
+prediction using wireless signatures: Deep learning enables real-world
+demonstration,” IEEE Open Journal of the Communications Society,
+vol. 3, pp. 776–796, 2022.
+[10] X. Cheng, H. Zhang, J. Zhang, S. Gao, S. Li, Z. Huang, L. Bai, Z. Yang,
+X. Zheng, and L. Yang, “Intelligent multi-modal sensing-communication
+integration: Synesthesia of machines,” IEEE Communications Surveys &
+Tutorials, vol. 26, no. 1, pp. 258–301, 2023.
+[11] A.
+Alkhateeb,
+G.
+Charan,
+T.
+Osman,
+A.
+Hredzak,
+J.
+Morais,
+U. Demirhan, and N. Srinivas, “Deepsense 6g: A large-scale real-world
+multi-modal sensing and communication dataset,” IEEE Communica-
+tions Magazine, vol. 61, no. 9, pp. 122–128, 2023.
+[12] S. Blandino, “Dataset of channels and received ieee 802.11ay signals for
+sensing applications in the 60ghz band,” National Institute of Standards
+and Technology, 2021.
+[13] H. Liu, A. Alali, M. Ibrahim, B. B. Cao, N. Meegan, H. Li, M. Gruteser,
+S. Jain, K. Dana, A. Ashok et al., “Vi-fi: Associating moving subjects
+across vision and wireless sensors,” in 2022 21st ACM/IEEE Inter-
+national Conference on Information Processing in Sensor Networks
+(IPSN).
+IEEE, 2022, pp. 208–219.
+[14] A. Alkhateeb, “DeepMIMO: A generic deep learning dataset for mil-
+limeter wave and massive MIMO applications,” in Proc. of Information
+Theory and Applications Workshop (ITA), San Diego, CA, Feb 2019,
+pp. 1–8.
+[15] A. Klautau, P. Batista, N. Gonz´alez-Prelcic, Y. Wang, and R. W. Heath,
+“5G MIMO data for machine learning: Application to beam-selection
+using deep learning,” in 2018 Information Theory and Applications
+Workshop (ITA).
+IEEE, 2018, pp. 1–9.
+[16] M. Alrabeiah, A. Hredzak, Z. Liu, and A. Alkhateeb, “ViWi: A deep
+learning dataset framework for vision-aided wireless communications,”
+in submitted to IEEE Vehicular Technology Conference, Nov. 2019.
+[17] Y. Li, D. Ma, Z. An, Z. Wang, Y. Zhong, S. Chen, and C. Feng, “V2x-
+sim: Multi-agent collaborative perception dataset and benchmark for
+autonomous driving,” IEEE Robotics and Automation Letters, vol. 7,
+no. 4, pp. 10 914–10 921, 2022.
+[18] D. Steinmetzer, D. Wegemer, M. Schulz, J. Widmer, and M. Hollick,
+“Compressive millimeter-wave sector selection in off-the-shelf ieee
+802.11 ad devices,” in Proceedings of the 13th International Conference
+on emerging Networking EXperiments and Technologies, 2017, pp. 414–
+425.
+[19] S. Kutty and D. Sen, “Beamforming for millimeter wave communica-
+tions: An inclusive survey,” IEEE communications surveys & tutorials,
+vol. 18, no. 2, pp. 949–973, 2015.
+[20] Y. Heng, J. G. Andrews, J. Mo, V. Va, A. Ali, B. L. Ng, and J. C. Zhang,
+“Six key challenges for beam management in 5.5 g and 6g systems,”
+IEEE Communications Magazine, vol. 59, no. 7, pp. 74–79, 2021.
+[21] H. Que, J. Yang, C.-K. Wen, S. Xia, X. Li, and S. Jin, “Joint beam
+management and slam for mmwave communication systems,” IEEE
+Transactions on Communications, vol. 71, no. 10, pp. 6162–6179, 2023.
+[22] J. Zhang, Y. Huang, Q. Shi, J. Wang, and L. Yang, “Codebook design
+for beam alignment in millimeter wave communication systems,” IEEE
+Transactions on Communications, vol. 65, no. 11, pp. 4980–4995, 2017.
+[23] M. Alrabeiah, Y. Zhang, and A. Alkhateeb, “Neural networks based
+beam codebooks: Learning mmwave massive mimo beams that adapt
+to deployment and hardware,” IEEE Transactions on Communications,
+vol. 70, no. 6, pp. 3818–3833, 2022.
+[24] Y. Bian, J. Yang, S. Xia, and S. Jin, “3-d lidar and gps aided beam
+tracking in millimeter wave vehicular communications,” IEEE Wireless
+Communications Letters, 2024.
+[25] J. Nie, Q. Zhou, J. Mu, and X. Jing, “Vision and radar multimodal aided
+beam prediction: Facilitating metaverse development,” in Proceedings
+of the 2nd Workshop on Integrated Sensing and Communications for
+Metaverse, 2023, pp. 13–18.
+[26] Y. Cui, J. Nie, X. Cao, T. Yu, J. Zou, J. Mu, and X. Jing, “Sensing-
+assisted high reliable communication: A transformer-based beamforming
+approach,” IEEE Journal of Selected Topics in Signal Processing, 2024.
+[27] S. Tariq, B. E. Arfeto, U. Khalid, S. Kim, T. Q. Duong, and H. Shin,
+“Deep quantum-transformer networks for multi-modal beam prediction
+in isac systems,” IEEE Internet of Things Journal, 2024.
+[28] Y. Tian, Q. Zhao, F. Boukhalfa, K. Wu, F. Bader et al., “Multimodal
+transformers for wireless communications: A case study in beam pre-
+diction,” arXiv preprint arXiv:2309.11811, 2023.
+[29] G. Charan, T. Osman, A. Hredzak, N. Thawdar, and A. Alkhateeb,
+“Vision-position multi-modal beam prediction using real millimeter
+wave datasets,” in 2022 IEEE Wireless Communications and Networking
+Conference (WCNC).
+IEEE, 2022, pp. 2727–2731.
+[30] Q. Zhu, Y. Wang, W. Li, H. Huang, and G. Gui, “Advancing multi-modal
+beam prediction with cross-modal feature enhancement and dynamic
+fusion mechanism,” IEEE Transactions on Communications, 2025.
+[31] L. Cazzella, F. Linsalata, M. Magarini, M. Matteucci, and U. Spagnolini,
+“A multi-modal simulation framework to enable digital twin-based
+v2x communications in dynamic environments,” in 2024 IEEE 100th
+Vehicular Technology Conference (VTC2024-Fall).
+IEEE, 2024, pp.
+1–6.
+[32] X. Cheng, Z. Huang, L. Bai, H. Zhang, M. Sun, B. Liu, S. Li,
+J. Zhang, and M. Lee, “M 3 sc: A generic dataset for mixed multi-
+modal (mmm) sensing and communication integration,” China Commu-
+nications, vol. 20, no. 11, pp. 13–29, 2023.
+[33] G. Gharsallah and G. Kaddoum, “Mvx-vit: Multimodal collaborative
+perception for 6g v2x network management decisions using vision
+transformer,” IEEE Open Journal of the Communications Society, 2024.
+[34] G. Hinton, “Distilling the knowledge in a neural network,” arXiv preprint
+arXiv:1503.02531, 2015.
+[35] J. Gou, B. Yu, S. J. Maybank, and D. Tao, “Knowledge distillation: A
+survey,” International Journal of Computer Vision, vol. 129, no. 6, pp.
+1789–1819, 2021.
+[36] C. Yang, X. Yu, Z. An, and Y. Xu, “Categories of response-based,
+feature-based, and relation-based knowledge distillation,” in Advance-
+ments in Knowledge Distillation: Towards New Horizons of Intelligent
+Systems.
+Springer, 2023, pp. 1–32.
+[37] L. Zhao, J. Song, and K. A. Skinner, “Crkd: Enhanced camera-radar
+object detection with cross-modality knowledge distillation,” in Pro-
+ceedings of the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition, 2024, pp. 15 470–15 480.
+[38] F. Huo, W. Xu, J. Guo, H. Wang, and S. Guo, “C2kd: Bridging the
+modality gap for cross-modal knowledge distillation,” in Proceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern Recognition,
+2024, pp. 16 006–16 015.
+[39] J. Ni, R. Sarbajna, Y. Liu, A. H. Ngu, and Y. Yan, “Cross-modal knowl-
+edge distillation for vision-to-sensor action recognition,” in ICASSP
+2022-2022 IEEE International Conference on Acoustics, Speech and
+Signal Processing (ICASSP).
+IEEE, 2022, pp. 4448–4452.
+[40] A. Dosovitskiy, G. Ros, F. Codevilla, A. Lopez, and V. Koltun,
+“CARLA: An open urban driving simulator,” in Proceedings of the 1st
+Annual Conference on Robot Learning, 2017, pp. 1–16.
+[41] T. M. Inc., “Matlab version: 9.13.0 (r2022b),” Natick, Massachusetts,
+United States, 2022. [Online]. Available: https://www.mathworks.com
+[42] S. Kullback and R. A. Leibler, “On information and sufficiency,” The
+annals of mathematical statistics, vol. 22, no. 1, pp. 79–86, 1951.
+[43] S. Wang, R. She, Q. Kang, X. Jian, K. Zhao, Y. Song, and W. P. Tay,
+“Distilvpr: Cross-modal knowledge distillation for visual place recogni-
+tion,” in Proceedings of the AAAI conference on artificial intelligence,
+vol. 38, no. 9, 2024, pp. 10 377–10 385.

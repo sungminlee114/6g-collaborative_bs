@@ -1,0 +1,2044 @@
+IEEE TRANSACTIONS ON WIRELESS COMMUNICATIONS, VOL. 24, NO. 1, JANUARY 2025
+309
+Channel Estimation and Reconstruction in Fluid
+Antenna System: Oversampling Is Essential
+Wee Kiat New , Member, IEEE, Kai-Kit Wong , Fellow, IEEE, Hao Xu , Member, IEEE,
+Farshad Rostami Ghadi, Member, IEEE, Ross Murch , Fellow, IEEE, and Chan-Byoung Chae , Fellow, IEEE
+Abstract— Fluid antenna system (FAS) has recently surfaced
+as a promising technology for the upcoming sixth generation
+(6G) wireless networks. Unlike traditional antenna system (TAS)
+with fixed antenna location, FAS introduces a flexible component
+in which the radiating element can switch its position within a
+predefined space. This capability allows FAS to achieve additional
+diversity and multiplexing gains. Nevertheless, to fully reap the
+benefits of FAS, obtaining channel state information (CSI) over
+the predefined space is crucial. In this paper, we study the system
+with a transmitter equipped with a traditional fixed antenna and
+a receiver with a fluid antenna by considering an electromagnetic-
+compliant channel model. We address the challenges of channel
+estimation and reconstruction using Nyquist sampling and maxi-
+mum likelihood estimation (MLE) methods. Our analysis reveals
+a fundamental tradeoff between the accuracy of the reconstructed
+channel and the number of estimated channels, indicating that
+half-wavelength sampling is insufficient for perfect reconstruction
+and that oversampling is essential to enhance accuracy. Despite
+its advantages, oversampling can introduce practical challenges.
+Consequently, we propose a suboptimal sampling distance that
+facilitates efficient channel reconstruction. In addition, we employ
+the MLE method to bound the channel estimation error by ϵ,
+with a specific confidence interval (CI). Our findings enable us
+to determine the minimum number of estimated channels and
+the total number of pilot symbols required for efficient channel
+reconstruction in a given space. Lastly, we investigate the rate
+Received 24 May 2024; revised 30 August 2024 and 20 October 2024;
+accepted 1 November 2024. Date of publication 12 November 2024; date of
+current version 10 January 2025. The work of Wee Kiat New, Kai-Kit Wong,
+Hao Xu, and Farshad Rostami Ghadi was supported by the Engineering and
+Physical Sciences Research Council (EPSRC) under Grant EP/W026813/1.
+The work of Ross Murch was supported by Hong Kong Research Grants
+Council Area of Excellence under Grant AoE/E-601/22-R. The work of
+Chan-Byoung Chae was supported by the Institute for Information and Com-
+munication Technology Planning and Evaluation (IITP)/NRF grant funded by
+the Ministry of Science and ICT (MSIT), South Korea, under Grant RS-2024-
+00428780 and Grant 2022R1A5A1027646. The associate editor coordinating
+the review of this article and approving it for publication was L. Dai.
+(Corresponding author: Kai-Kit Wong.)
+Wee Kiat New, Hao Xu, and Farshad Rostami Ghadi are with the Depart-
+ment of Electronic and Electrical Engineering, University College London,
+WC1E 6BT London, U.K. (e-mail: a.new@ucl.ac.uk; hao.xu@ucl.ac.uk;
+f.rostamighadi@ucl.ac.uk).
+Kai-Kit Wong is with the Department of Electronic and Electrical Engineer-
+ing, University College London, WC1E 6BT London, U.K., and also with
+the Yonsei Frontier Laboratory, Yonsei University, Seoul 03722, South Korea
+(e-mail: kai-kit.wong@ucl.ac.uk).
+Ross Murch is with the Department of Electronic and Computer Engineering
+and Institute for Advanced Study (IAS), The Hong Kong University of Science
+and Technology, Hong Kong, SAR, China (e-mail: eermurch@ust.hk).
+Chan-Byoung Chae is with the School of Integrated Technology, Yonsei
+University, Seoul 03722, South Korea (e-mail: cbchae@yonsei.ac.kr).
+Color versions of one or more figures in this article are available at
+https://doi.org/10.1109/TWC.2024.3491507.
+Digital Object Identifier 10.1109/TWC.2024.3491507
+performance of FAS and TAS and demonstrate that FAS with
+imperfect CSI can outperform TAS with perfect CSI. In contrast
+to existing works, we also show that there is an optimal fluid
+antenna size that maximizes the achievable rate when considering
+the energy and bandwidth overheads for full CSI acquisition.
+Index Terms— 6G, fluid antenna system, channel estimation,
+channel reconstruction, electromagnetic field, Nyquist sampling.
+I. INTRODUCTION
+F
+LUID antenna system (FAS) represents the new paradigm
+of shape-and-position-flexible antenna technologies that
+benefit from the new forms of reconfigurable antennas such as
+liquid-based antennas [1], [2], reconfigurable radio-frequency
+(RF) pixels [3], [4] or mechanical movable antenna struc-
+tures [5]. The concept of FAS was originally brought into
+wireless communication systems in 2020 [6] and its appli-
+cation to the upcoming sixth-generation (6G) was discussed
+in [7], [8], and [9]. Unlike a traditional antenna system (TAS),
+where the antenna location is fixed, FAS refers to any antenna
+structures that can intelligently adapt their shape and position
+to reconfigure the gain, radiation patterns, and other radia-
+tion characteristics to enhance communication performance.
+Recent articles in [10] and [11] have reported experimental
+results on FAS.
+Recent efforts have treated FAS as a new degree of free-
+dom (DoF) which is dictated by its size and the number
+of flexible positions (a.k.a. ports). Early attempts have been
+to investigate the fundamental performance limits of FAS,
+revealing considerable gains over TAS [12], [13], [14], [15],
+[16], [17]. Most recently, the diversity and multiplexing gain
+for the multiple-input multiple-output (MIMO) FAS setup was
+also understood [18]. Promising results by optimizing FAS in
+different setups can be found in [19], [20], [21], and [22].
+Furthermore, there has been great interest in combining FAS
+with other technologies, such as reconfigurable intelligent sur-
+faces [23], physical layer security [24], [25], non-orthogonal
+multiple access [26], [27], full-duplex radios [28], and index
+modulation [29], [30], [31]. A more complete list of recent
+works is included in [32].
+However, most existing studies rely on full channel state
+information (CSI) to fully exploit the benefits of FAS. Recent
+advances in CSI acquisition have greatly benefited from
+sophisticated signal processing methods such as array pro-
+cessing [33], machine learning [34], the Bayesian learning
+framework [35], compressive sensing [36] and etc. Exploita-
+1536-1276 © 2024 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission.
+See https://www.ieee.org/publications/rights/index.html for more information.
+Authorized licensed use limited to: Yonsei Univ. Downloaded on March 04,2026 at 08:45:00 UTC from IEEE Xplore.  Restrictions apply. 
+310
+IEEE TRANSACTIONS ON WIRELESS COMMUNICATIONS, VOL. 24, NO. 1, JANUARY 2025
+tion of channel statistics, sparsity, and correlation has also
+enhanced channel estimation performance by a lot [37], [38],
+[39]. These techniques, nonetheless, focus on scenarios with
+fixed radiating element locations, thereby often limiting the
+number of channel estimations. In contrast, in FAS scenarios,
+acquiring the CSI of a predefined space (i.e., full CSI) is
+more challenging as it involves both channel estimation and
+reconstruction (either interpolation or extrapolation, or both).
+To obtain the full CSI, latest research has delved into the
+channel estimation and reconstruction problem for FAS. For
+example, in [28], the authors devised a sequential linear min-
+imum mean square error (MMSE)-based channel estimation
+method for large-scale fluid antenna-aided full-duplex cellular
+networks whereas [40] employed deep learning techniques to
+reconstruct the channels of the unobserved ports based on the
+estimated channels from a few known ports. Besides, [41]
+and [42] used recurrent neural networks (RNNs) and condi-
+tional generative adversarial networks (cGANs), respectively,
+to tackle the channel reconstruction and port selection issues in
+FAS. In scenarios where the channel is sparse, [43] illustrated
+that low-sample-size sparse channel reconstruction techniques
+are effective for obtaining the full CSI. Additionally, a succes-
+sive Bayesian reconstructor was introduced in [44] and [45]
+with kernel-based sampling and regression techniques, and
+compressed sensing methods were utilized in [46].
+Collectively, these studies indicate that traditional channel
+estimation schemes originally designed for TAS are inadequate
+for FAS, as they would incur unbearable pilot overhead due
+to the possibility of positioning the radiating element at
+near-infinitely many locations. To reduce the pilot overhead,
+state-of-the-art methods typically only estimate the channels at
+a few locations and reconstruct the FAS channel over a finite
+space based on these initial estimates. This can be achieved by
+leveraging the spatial correlation of the channels, their sparsity,
+or any other implicit structural characteristics. Despite con-
+siderable efforts, the minimum number of estimated channels
+and the minimum distance between these estimated channels
+required to perfectly reconstruct the FAS channel over a given
+space remain unknown. This challenge persists partly because
+existing channel models provide limited insights for more
+fundamental analysis, especially for the continuous FAS case
+(i.e., when the number of ports is infinite for a given space).
+Note that most literature on FAS has observed that increasing
+the number of estimated channels or decreasing the minimum
+distance between the estimated channels typically enhances
+the accuracy of channel reconstruction.
+However, recent findings in holographic MIMO and electro-
+magnetic information theory present a contrasting perspective.
+Specifically, the functional DoF represents the minimum num-
+ber of samples required to reconstruct a given electromagnetic
+field [47]. This metric is closely tied to the transmission
+capacity of an electromagnetic system, as the maximum
+number of complex values that can be transmitted within a
+single electromagnetic channel is equivalent to the minimum
+number of required samples to reconstruct a given electro-
+magnetic field [47], [48]. It was thus argued in [47], [48],
+[49], and [50] that half-wavelength sampling suffices to per-
+fectly reconstruct an arbitrary electromagnetic field with any
+specified precision in the far-field because the electromagnetic
+field is band-limited. This argument is supported by analyses
+in the space-wave number domain or through the Petersen-
+Middleton’s sampling theorem, both of which are closely
+related to the Nyquist sampling theorem. In the near-field,
+however, sampling at intervals smaller than half a wavelength
+is considered beneficial [50].
+Unlike existing studies, this paper answers two key ques-
+tions: What is the minimum number of estimated channels
+and the minimum distance between these estimated channels
+needed to perfectly reconstruct the FAS channel over a given
+space? Furthermore, using the answers to these questions,
+can FAS still outperform TAS? To this end, we consider a
+scenario in which a transmitter equipped with a traditional
+antenna serves a receiver equipped with a fluid antenna over
+an electromagnetic-compliant channel model. Specifically, the
+electromagnetic-compliant channel helps us understand that
+the channel is band-limited when an infinite plane is consid-
+ered. However, considering the properties of the antenna, such
+as its size and shape, reveals that the channel impinging on the
+receive antenna experiences spectral leakage, causing it to no
+longer be band-limited. Additionally, the channel is affected
+by receiver noise, further complicating the channel estimation
+and reconstruction processes. Leveraging these properties,
+we address the channel estimation and reconstruction problem
+in FAS using tractable methods such as Nyquist sampling and
+maximum likelihood estimation (MLE).
+Through these model and methods, we show that perfect
+reconstruction is impossible, revealing a fundamental tradeoff
+between the accuracy of the reconstructed channel and the
+number of estimated channels. This highlights the necessity
+of oversampling in FAS, even in far-field propagation sce-
+narios. Furthermore, we identify the minimum number of
+estimated channels and the suboptimal distance between these
+estimated channels necessary for efficient reconstruction of the
+FAS channel over a finite space. Afterwards we study the
+rate of FAS with the channel estimation and reconstruction
+problem, illustrating that FAS with imperfect channels still
+outperforms TAS despite the necessity to estimate the CSI
+over a given space. Additionally, we demonstrate that there is
+an optimal fluid antenna size that maximizes the achievable
+rate. Our key contributions are summarized as follows:
+• We have developed an electromagnetic-compliant channel
+model for FAS for the first time, covering both one-
+dimensional (1D) and two-dimensional (2D) fluid antenna
+surfaces. This model is applicable to reconfigurable pixel-
+based fluid antennas in which the radiating elements
+are adjusted in discrete manner, as well as to movable
+antennas or liquid-based fluid antennas, where the num-
+ber of ports approaches infinity, allowing the radiating
+element to be repositioned continuously. More impor-
+tantly, we have considered the effects of antenna size
+and shape, as well as noise, on channel estimation and
+reconstruction.
+• Utilizing the Nyquist sampling theorem, we demonstrate
+a fundamental tradeoff between the accuracy of the recon-
+structed channel and the number of estimated channels.
+This finding underscores the necessity of oversam-
+Authorized licensed use limited to: Yonsei Univ. Downloaded on March 04,2026 at 08:45:00 UTC from IEEE Xplore.  Restrictions apply. 
+NEW et al.: CHANNEL ESTIMATION AND RECONSTRUCTION IN FAS: OVERSAMPLING IS ESSENTIAL
+311
+pling in FAS to ensure accurate channel reconstruction.
+Furthermore, by employing the MLE method, we illus-
+trate that the error of the estimated channels can be
+bounded within a specific confidence interval (CI).
+Through MLE, we also prove that the error of imperfect
+channels can be modeled as Gaussian noise only at
+positions where channel estimation is performed.
+• To strike a balance between the accuracy of the recon-
+structed channel and the number of estimated channels,
+we propose a suboptimal sampling distance. This strategy,
+combined with MLE, allows us to determine the mini-
+mum number of estimated channels needed for a given
+space and obtain the number of pilot symbols required to
+efficiently estimate and reconstruct the FAS channel.
+• We present comprehensive simulation results that demon-
+strate the practicality and efficiency of estimating and
+reconstructing the FAS channel on both 1D and 2D fluid
+antenna surfaces. Additionally, our results highlight the
+relationships between various parameters, such as sam-
+pling distance, number of pilot symbols per sub-block,
+signal-to-noise ratio (SNR) and CI. More importantly,
+we show that FAS with imperfect CSI can outperform
+TAS with perfect CSI in a point-to-point scenario, and
+there exists an optimal fluid antenna size that maximizes
+the achievable rate after considering the overheads.
+Note that FAS can be conceptually viewed as a holographic
+MIMO system with antenna selection. The reconstructed elec-
+tromagnetic field can be interpreted as the reconstructed FAS
+channel (i.e., channels over a continuous space with infinitely
+many ports), while the sampling points in the electromagnetic
+field can be seen as the estimated channels in FAS. However,
+it is crucial to distinguish that an electromagnetic field is
+proven to be band-limited (half-wavelength sampling sufficient
+for perfect reconstruction) and the estimated FAS channels are
+affected by noise. Leveraging ports that are less than half a
+wavelength apart can also be interpreted as oversampling [14].
+The
+remainder
+is
+organized
+as
+follows.
+Section
+II
+presents the electromagnetic-compliant channel model for
+FAS. In Section III, we discuss the channel estimation and
+reconstruction methods while deriving important parameters,
+relationships, tradeoffs, and rates. Simulation results are pro-
+vided in Section IV. Finally, the conclusion is drawn in
+Section V.
+II. ELECTROMAGNETIC-COMPLIANT CHANNEL MODEL
+As shown in Fig. 1, this paper considers a point-to-point
+scenario in which a transmitter serves a receiver. We assume
+that the transmitter is equipped with a traditional fixed antenna,
+while the receiver employs a fluid antenna. Unless otherwise
+stated, we assume that the fluid antenna surface is 2D and has
+a size of Xλ × Y λ where λ denotes the carrier wavelength.
+Furthermore, the fluid antenna has only one active radiat-
+ing element. In liquid-based FAS [2], the radiating element
+can move to any location on the 2D fluid antenna surface.
+In the case of a pixel-based antenna [4], this means that
+certain pixels can be activated to form an active radiating
+element. Compared to existing works, this paper considers
+an electromagnetic-compliant channel model to gain better
+Fig. 1.
+A point-to-point scenario with a traditional fixed antenna at the
+transmitter and a 2D FAS at the receiver.
+understanding into the channel estimation and reconstruction
+problem.1
+According to [51], the electromagnetic nature of small-scale
+fading requires that each realization channel, h (x, y, z), satis-
+fies the scalar Helmholtz equation, where (x, y, z) represents
+the Cartesian coordinate in a three-dimensional (3D) space.
+This stipulates that
+ ∇2 + κ2
+h (x, y, z) = 0,
+(1)
+where (1) is a second-order linear partial differential equation
+with constant coefficients, ∇2 is the Laplace operator, and κ =
+2π/λ is the wavenumber. Based on their Fourier properties,
+it is evident from (1) that the following condition must be met:
+k2
+x + k2
+y + k2
+z −κ2 = 0.
+(2)
+Given kx and ky, we know that
+kz = ±kz (kx, ky) = ±
+q
+κ2 −k2x −k2y.
+(3)
+By superposition, the general solution to (1) is given by [53]
+h (x, y, z) =
+Z Z
+D(κ)
+H+ (kx, ky) ej(kxx+kyy+kz(kx,ky)z)
++ H−(kx, ky) ej(kxx+kyy−kz(kx,ky)z)dkxdky,
+(4)
+where H+ (kx, ky) , H−(kx, ky) are unknown constants and
+D (κ) =
+
+(kx, ky) ∈R | k2
+x + k2
+y ≤κ2	
+.2
+The spatial autocorrelation function is given as
+ch (x, y, z) = E {h (x + x′, y + y′, z + z′) h∗(x′, y′, z′)} .
+(5)
+Consequently, the power spectral density in the wavenumber
+domain can be derived as
+Sh (kx, ky, kz) =
+Z Z
+ch (x, y, z) e−j(kxx+kyy+kzz)dxdydz.
+(6)
+1It is worth highlighting that [51] and [52] are two pioneering works
+that established electromagnetic-compliant channel models for holographic
+MIMO. Motivated by these remarkable contributions, this paper adopts a
+similar approach to develop an electromagnetic-compliant channel model for
+FAS, applicable to both 1D and 2D surfaces.
+2By assuming that k2
+x + k2
+y ≤κ2, we are focusing on the far-field
+propagation. In the near-field, where k2
+x + k2
+y > κ2, it is evident that
+oversampling is useful [50]. However, as we will show later in this paper,
+oversampling remains essential even in the far-field.
+Authorized licensed use limited to: Yonsei Univ. Downloaded on March 04,2026 at 08:45:00 UTC from IEEE Xplore.  Restrictions apply. 
+312
+IEEE TRANSACTIONS ON WIRELESS COMMUNICATIONS, VOL. 24, NO. 1, JANUARY 2025
+Using the inverse Fourier transform, the power spectral density
+in the wavenumber domain can be converted back into the
+spatial autocorrelation function in the spatial domain by
+ch (x, y, z) =
+1
+(2π)3
+ZZZ
+Sh (kx, ky, kz)
+× ej(kxx+kyy+kzz)dkxdkydkz.
+(7)
+Due to (1) and the translation-invariant property, applying the
+Helmholtz operators to both sides of (5) results in
+ ∇2 + κ2
+ch (x, y, z) = 0.
+(8)
+By applying the Fourier transform to both sides of (8), then
+we obtain
+ k2
+x + k2
+y + k2
+z −κ2
+Sh (kx, ky, kz) = 0.
+(9)
+This implies that Sh (kx, ky, kz) = 0 except at the wavenum-
+ber support, which is defined as
+S =
+
+(kx, ky, kz) ∈R3 | k2
+x + k2
+y + k2
+z = κ2	
+.
+(10)
+Since k2
+x + k2
+y + k2
+z = κ2 and kz is determined by kx and
+ky, as shown in (2) and (3), respectively, we can simplify
+Sh (kx, ky, kz) as
+Sh (kx, ky) =A2 (kx, ky) δ
+ k2
+x + k2
+y + k2
+z −κ2
+,
+(11)
+where A2 (kx, ky) is the non-negative real function. Using (3),
+we can define
+A2 (kx, ky)
+=
+(
+A2
++ (kx, ky) , kz (kx, ky) ≥0,
+A2
+−(kx, ky) , kz (kx, ky) < 0,
+(kx, ky) ∈D. (12)
+According to [54], the Dirac delta function can be split into
+the sum of two delta functions as
+δ
+ k2
+x + k2
+y + k2
+z −κ2
+= δ (kz −kz (kx, ky))
+2kz (kx, ky)
++ δ (ky + kz (kx, ky))
+2kz (kx, ky)
+.
+(13)
+Substituting (12) and (13) into (11), and then taking the inverse
+Fourier transform with respect to (w.r.t.) kz, we obtain
+1
+2π
+Z
+Sh (kx, ky) ej(kzz)dkz
+(14)
+= A2
++ (kx, ky) e+j(kz(kx,ky)z)
+4πkz (kx, ky)
++ A2
+−(kx, ky) e−j(kz(kx,ky)z)
+4πkz (kx, ky)
+(15)
+=
+Z Z
+ch (x, y, z) e−j(kxx+kyy)dxdy.
+(16)
+Note that in (15), we can define
+S±
+h (kx, ky) = A2
+± (kx, ky)
+4πkz (kx, ky), (kx, ky) ∈D (κ) ,
+(17)
+as the plane-wave spectrum.
+According to [51], the random small-scale fading effect can
+be modeled as
+h (x, y, z) = 1
+2π
+Z Z
+H (kx, ky)
+× ej(kxx+kyy+kz(kx,ky)z)dkxdky,
+(18)
+= 1
+2π
+Z Z X
+i=±
+q
+Si
+h (kx, ky)Wi (kx, ky)
+× ej(kxx+kyy±kz(kx,ky)z)dkxdky
+(19)
+=
+1
+2√πκ
+Z Z
+D(κ)
+X
+i=±
+ej(kxx+kyy)
+ κ2 −k2x −k2y
+1/4 Wi (kx, ky)
+× e±kz(kx,ky)zdkxdky
+(20)
+where H (kx, ky) is the spectrum of h (x, y). Furthermore,
+(20) is obtained by considering a 3D isotropic channel and
+assuming that h (x, y, z) has a unit power, which yields
+A± (kx, ky) =
+2π
+√κ. Also, Wi (kx, ky) in (19) and (20) are
+the white Gaussian random process with unit variance, used
+to model the stochastic nature of the propagation.3 With this,
+we can express the unknown constants as
+H± (kx, ky)
+=
+( p
+Si
+h(kx,ky)Wi(kx,ky),
+(kx,ky)∈D(κ),
+0,
+otherwise.
+(21)
+If we let z = 0, then (20) can be rewritten as
+h (x, y, 0) = 1
+2π
+Z Z X
+i=±
+p π
+k
+ κ2 −k2x −k2y
+1/4 Wi (kx, ky)
+× ej(kxx+kyy)dkxdky.
+(22)
+This implies
+S±
+h (kx, ky) =
+π
+k
+ κ2 −k2x −k2y
+1/2 , (kx, ky) ∈D (κ) , (23)
+and we can further simplify (22) as
+h (x, y) = 1
+2π
+Z Z X
+i=±
+q
+Si
+h (kx, ky)Wi (kx, ky)
+× ej(kxx+kyy)dkxdky.
+(24)
+To approximate h (x, y), we divide the integration interval
+of (24) uniformly with frequency spacing ∆kx =
+2π
+Lx and
+∆ky = 2π
+Ly so that
+h (x, y) ≈
+κLy
+2π −1
+X
+¯y=−
+κLy
+2π
+κLx
+2π −1
+X
+¯x=−κLx
+2π
+X
+i=±
+Hi
+¯x,¯ye
+j2π
+
+¯x
+Lx x+
+¯y
+Ly y
+
+,
+(25)
+where (¯x, ¯y) ∈E,
+E =
+(
+(¯x, ¯y) ∈Z2
+
+ ¯xλ
+Lx
+2
++
+ ¯yλ
+Ly
+2
+≤1
+)
+,
+(26)
+and
+Hi
+¯x,¯y
+=
+Z
+2π(¯y+1)
+Ly
+2π¯y
+Ly
+Z
+2π(¯x+1)
+Lx
+2π¯x
+Lx
+s
+Si
+h (kx, ky)
+(2π)2
+Wi (kx, ky) dkxdky.
+(27)
+3In (20), it is evident that the z-direction only introduces a phase difference.
+Therefore, no additional functional DoF is actually introduced, even if a
+3D antenna surface is considered. In other words, a 3D antenna surface
+does not fundamentally enhance the functional DoF when the channel is
+electromagnetically compliant.
+Authorized licensed use limited to: Yonsei Univ. Downloaded on March 04,2026 at 08:45:00 UTC from IEEE Xplore.  Restrictions apply. 
+NEW et al.: CHANNEL ESTIMATION AND RECONSTRUCTION IN FAS: OVERSAMPLING IS ESSENTIAL
+313
+Here, Lx and Ly are the number of discretized intervals in kx
+and ky dimensions, while Hi
+¯x,¯y computes the corresponding
+(¯x, ¯y) interval of Hi (kx, ky).
+Note that Hi
+¯x,¯y is a Gaussian random variable with zero
+mean and variance σ2
+i,¯x,¯y. The variance σ2
+i,¯x,¯y, can be com-
+puted as
+σ2
+i,¯x,¯y =
+Z
+2π(¯y+1)
+Ly
+2π¯y
+Ly
+Z
+2π(¯x+1)
+Lx
+2π¯x
+Lx
+Si
+h (kx, ky)
+(2π)2
+dkxdky,
+(28)
+= 1
+4π
+Z
+(¯y+1)λ
+Ly
+¯yλ
+Ly
+Z
+(¯x+1)λ
+Lx
+¯xλ
+Lx
+1D(1) (kx, ky)
+(1 −kx2 −ky2)1/2 dkxdky,
+(29)
+From the above derivations, it can be verified that h (x, y)
+is band-limited because H (kx, ky) ∈D (κ). According to
+the Nyquist sampling theorem [55], if h (x, y) contains no
+frequencies higher than κ in either kx or ky dimensions, then
+h (x, y) can be perfectly reconstructed by uniformly sampling
+the channel with Dx, Dy ≤
+2π
+2κ =
+λ
+2 distance. This is also
+known as the Nyquist sampling rate.
+It is known that when a 3D isotropic channel is observed
+over an infinite line, the electromagnetic field is 2D. We can
+use similar steps to show that4
+h (x) ≈
+κLx
+2π −1
+X
+l=−κLx
+2π
+X
+i=±
+Hi
+l ej2π
+l
+Lx x,
+(30)
+where l ∈El,
+El =
+(
+l ∈Z
+
+ lλ
+Lx
+2
+≤1
+)
+,
+(31)
+Hi
+l =
+Z
+2π(l+1)
+Lx
+2πl
+Lx
+r
+Si
+h (kx)
+2π
+Wi (kx) dkx,
+(32)
+and its variance, σ2
+i,l, can be computed as
+σ2
+i,l = 1
+π
+
+arcsin
+l + 1
+Lx
+
+−arcsin
+ l
+Lx
+
+.
+(33)
+Similarly, h (x) can be perfectly reconstructed by uniformly
+sampling the signal with Dx = λ
+2 distance.
+III. CHANNEL ESTIMATION AND RECONSTRUCTION
+USING NYQUIST SAMPLING AND MLE
+As shown in Fig. 2, we consider a slow flat fading channel
+within a coherence time of Z ≫0 digital symbols such that
+Z = Zp + Zq, where Zp and Zq are the total number of
+symbols used for channel estimation and data transmission,
+respectively. The total number of pilot symbols, Zp, are further
+divided into N ⋆
+d sub-blocks and each sub-block is dedicated to
+estimating the channel at a predetermined location represented
+by (nxDx, nyDy), where nw ∈Z and Dw represents the
+sampling distance in w ∈{x, y} dimension. Each sub-block
+includes zp pilot symbols for channel estimation purposes
+(e.g., using MLE). For brevity, we focus our analysis on the
+4Note that A± (kx) = 2√π when h (x, y) has a unit power.
+Fig. 2.
+A schematic of the proposed channel estimation and reconstruction
+processes within a coherence time.
+real part of the channel in this section as similar methodology
+can be applied to the imaginary part in parallel.
+Without loss of generality, let us treat hFAS (x, y) as the
+real part of the channel of the FAS receiver at position
+(x, y). As it is infeasible to estimate hFAS (x, y) for −X
+2 λ ≤
+x ≤
+X
+2 λ and −Y
+2 λ ≤y ≤
+Y
+2 λ at every possible loca-
+tion, we leverage the Nyquist sampling method for channel
+reconstruction. Using this method, we can then determine the
+minimum value of N ⋆
+d to efficiently reconstruct ˆhFAS (x, y)
+from ˆhFAS (nxDx, nyDy) , ∀nx,ny. Furthermore, we adopt the
+MLE method to estimate ˆhFAS (nxDx, nyDy). This technique
+ensures that the estimation error for ˆhFAS (nxDx, nyDy)
+remains within a bound of ε, with a specific CI. This approach
+ultimately enables us to determine the total number of pilot
+symbols required for channel estimation and reconstruction
+in FAS. Subsequently, we can analyze the effects of channel
+estimation and reconstruction on the rate of FAS.
+A. 2D Nyquist Sampling Method
+To reconstruct ˆhFAS (x, y), we use the 2D Nyquist sampling
+method. As discussed in Section II, h (x, y) can be perfectly
+reconstructed by uniformly sampling the channel with λ
+2 dis-
+tance since H (kx, ky) ∈D (κ). Nevertheless, a FAS receiver
+can only observe h (x, y) over a 2D fluid antenna surface,
+which has a finite space of Xλ × Y λ. This is equivalent to
+multiplying h (x, y) by a 2D rectangular window function
+u (x, y) =
+
+
+
+1,
+−X
+2 λ ≤x ≤X
+2 λ, −Y
+2 λ ≤y ≤Y
+2 λ,
+0,
+otherwise.
+(34)
+As a result, the channel experienced at the FAS receiver is5
+hFAS (x, y) = h (x, y) u (x, y) .
+(35)
+In the frequency domain, the spectrum of hFAS (x, y) can be
+expressed as6
+HFAS (kx, ky) = H (kx, ky) ⊛U (kx, ky) ,
+(36)
+5Compared to [51] and [52], it is essential to consider the antenna
+properties, such as the size and shape, in FAS.
+6Note that the terms “frequency domain” and “wavenumber domain”
+actually refer to the same conceptual domain. More concretely, the term
+“frequency domain” is commonly used in signal processing, whereas
+“wavenumber domain” is more frequently used in the context of physics.
+In this paper, we use these terms interchangeably.
+Authorized licensed use limited to: Yonsei Univ. Downloaded on March 04,2026 at 08:45:00 UTC from IEEE Xplore.  Restrictions apply. 
+314
+IEEE TRANSACTIONS ON WIRELESS COMMUNICATIONS, VOL. 24, NO. 1, JANUARY 2025
+where ⊛is the 2D convolution operator. It can be easily
+verified that
+U (kx, ky) = sin
+  kx
+2 Xλ
+
+kx
+2
+sin
+
+ky
+2 Y λ
+
+ky
+2
+,
+(37)
+where the domain of U (kx, ky) spans over the entire R2.
+Now, substituting (37) into (36) suggests that HFAS (kx, ky)
+is no longer band-limited. As a matter of fact, U (kx, ky) leads
+to the spectral leakage issue. This observation aligns with the
+uncertainty principle [56], which states that a spatially limited
+signal cannot be simultaneously a band-limited signal and vice
+versa. This means that perfect reconstruction of hFAS (x, y)
+is impossible when the FAS receiver only observes h (x, y)
+over a finite space of Xλ × Y λ. Thus, although the Nyquist
+sampling rate of λ
+2 is optimal for h (x, y), it is not optimal
+in the context of FAS, i.e., for hFAS (x, y). In other words,
+oversampling is essential in FAS to improve the accuracy of
+the reconstructed channel.
+This raises a fundamental tradeoff between the accuracy
+of reconstructed channel and the number of estimated chan-
+nels. Increasing the latter can introduce hardware challenges
+and rate degradation. For instance, a movable antenna or
+liquid-based fluid antenna would need to switch positions
+more frequently, leading to higher energy consumption, while
+a reconfigurable RF pixel-based fluid antenna might be subject
+to stronger mutual coupling. In both cases, the computational
+complexity of the CSI acquisition also increases. To strike
+a balance, we therefore propose a suboptimal method for
+channel reconstruction that aims to capture most of the energy
+of the mainlobe of HFAS (kx, ky). In particular, the spec-
+tral leakage of the mainlobe of U (kx, ky) in the kx- and
+ky-dimensions are
+2π
+Xλ and
+2π
+Y λ, respectively [57]. Therefore,
+the spectral leakage of the mainlobe of HFAS (kx, ky) should
+extend to κ + 2π
+Xλ and κ + 2π
+Y λ, respectively. This means that
+the suboptimal sampling distance can be derived as
+D⋆
+x,0 =
+2π
+2
+ κ + 2π
+Xλ
+ =
+λ
+2 + 2
+X
+,
+(38)
+D⋆
+y,0 =
+2π
+2
+ κ + 2π
+Y λ
+ =
+λ
+2 + 2
+Y
+.
+(39)
+Intuitively, we can improve the channel reconstruction by
+further capturing the spectrum energy up to the d-th sidelobe
+at a cost of smaller sampling distance.7 Since the spectral
+spreading of the d-th sidelobe in the kx- and ky-dimensions
+are simply (d + 1) 2π
+Xλ and (d + 1) 2π
+Y λ, respectively [57], the
+d-th suboptimal sampling distance can be expressed as
+D⋆
+x,d =
+λ
+2 + 2
+X (d + 1),
+(40)
+D⋆
+y,d =
+λ
+2 + 2
+Y (d + 1).
+(41)
+Note that (38)–(41) can be regarded as the oversampling rate
+since it is smaller than λ
+2 [14]. Because the size of the 2D fluid
+antenna surface is fixed (e.g., Xλ×Y λ), we can determine the
+7In practice, the propagation may not be entirely isotropic. Sampling at a
+smaller distance thus ensures a higher reconstruction accuracy.
+number of estimated channels or sampling points for a given
+space, denoted as N ⋆
+d = N ⋆
+x,dN ⋆
+y,d, where
+N ⋆
+x,d =
+$
+Xλ
+D⋆
+x,d
+%
+,
+(42)
+N ⋆
+y,d =
+$
+Y λ
+D⋆
+y,d
+%
+.
+(43)
+Very importantly, N ⋆
+x,d and N ⋆
+y,d are the minimum numbers
+of estimated channels that include the spectral leakage of the
+mainlobe or d-th sidelobe of the spectrum in the x and y
+dimensions, respectively.
+The sampled signal can be expressed as
+hs
+FAS (x, y) =
+X
+nx∈Z
+X
+ny∈Z
+ˆhFAS
+ nxD⋆
+x,d, nyD⋆
+y,d
+
+× δ
+ x −nxD⋆
+x,d
+
+δ
+ y −nyD⋆
+y,d
+
+,
+(44)
+where ˆhFAS(nxD⋆
+x,d, nyD⋆
+y,d) represents the estimated chan-
+nel at location (nxD⋆
+x,d, nyD⋆
+y,d). In the frequency domain,
+we have
+Hs
+FAS (kx, ky)
+=
+X
+nx∈Z
+X
+ny∈Z
+ˆhFAS
+ nxD⋆
+x,d, nyD⋆
+y,d
+
+e−j(kxnxD⋆
+x,d+kynyD⋆
+y,d)
+=
+1
+D⋆
+x,dD⋆
+y,d
+X
+lx∈Z
+X
+ly∈Z
+HFAS
+ 
+kx −2π
+D⋆
+x,d
+lx, ky −2π
+D⋆
+y,d
+ly
+!
+.
+(45)
+Following the Nyquist sampling method, ˆhFAS (x, y) can be
+reconstructed using a low-pass filter as
+ˆHFAS (kx, ky) = Hs
+FAS (kx, ky) f (kx, ky) ,
+(46)
+where
+f (kx, ky)
+=
+
+
+
+1,
+−2π
+D⋆
+x,d
+≤kx ≤
+2π
+D⋆
+x,d
+, −2π
+D⋆
+y,d
+≤ky ≤
+2π
+D⋆
+y,d
+,
+0,
+otherwise.
+(47)
+Finally, we can obtain ˆhFAS (x, y) for −X
+2 λ ≤x ≤X
+2 λ and
+−Y
+2 λ ≤y ≤Y
+2 using the inverse Fourier transform as
+ˆhFAS (x, y)
+= 1
+2π
+Z Z
+ˆHFAS (kx, ky) e−j(kxx+kyy)dxdy.
+(48)
+The
+normalized
+mean
+square
+error
+(NMSE)
+between
+ˆhFAS (x, y) and hFAS (x, y) can be computed as
+NMSE =
+R Y
+2 λ
+−Y
+2 λ
+R X
+2 λ
+−X
+2 λ
+
+ˆhFAS (x, y) −hFAS (x, y)
+2
+dxdy
+R Y
+2 λ
+−Y
+2 λ
+R X
+2 λ
+−X
+2 λ (hFAS (x, y))2 dxdy
+.
+(49)
+The 1D counterpart can be derived in a similar fashion as will
+be elaborated in Appendix I.
+Authorized licensed use limited to: Yonsei Univ. Downloaded on March 04,2026 at 08:45:00 UTC from IEEE Xplore.  Restrictions apply. 
+NEW et al.: CHANNEL ESTIMATION AND RECONSTRUCTION IN FAS: OVERSAMPLING IS ESSENTIAL
+315
+B. MLE
+For brevity, let us denote (Dn) = (nxDx, nyDy). Suppose
+the radiating element of the FAS receiver is located at (Dn).
+Then the received signal at symbol z can be expressed as
+rz (Dn) = hFAS (Dn) qz + ωz (Dn) , z = 1, . . . , zp, (50)
+where hFAS (Dn) is the unknown constant channel coefficient
+within the coherence time, while qz and ωz (Dn) is, respec-
+tively, the pilot symbol and additive white Gaussian noise
+(AWGN) during symbol z. For simplicity, we assume that
+|qz|2 = P
+2 and ωz (Dn) is an independent Gaussian random
+variable with zero mean and variance of N0
+2 , where P and N0
+is the transmit power and noise level, respectively.
+To proceed, we can rewrite (50) as
+r (Dn) = qhFAS (Dn) + ω (Dn) .
+(51)
+where
+
+
+
+
+
+r (Dn) =
+
+r1 (Dn) · · · rzp (Dn)
+T ,
+q =
+
+q1, . . . , qzp
+T
+ω (Dn) =
+
+ω1 (Dn) , . . . , ωzp (Dn)
+T .
+(52)
+In (51), ω (Dn) is a Gaussian random vector with zero vector
+mean and covariance of
+N0
+2 I. Hence, the joint probability
+density function (pdf) of ω [n] is given by
+fω (w)
+=
+1
+πN
+zp
+2
+0
+exp
+(
+−
+zp
+X
+z=1
+(rz (Dn) −qzhFAS (Dn))2
+N0
+)
+. (53)
+Note that (53) can be interpreted as the likelihood function of
+the unknown parameter hFAS (Dn). Thus, the log likelihood
+of hFAS (Dn) can be found as
+L (r (Dn) |hFAS (Dn))
+= −zp
+2 ln (πN0) −
+" zp
+X
+z=1
+(rz (Dn) −qzhFAS (Dn))2
+N zp
+0
+#
+.
+(54)
+The optimal condition for maximizing (54) w.r.t. hFAS (Dn)
+(i.e., the MLE) is given by8
+ˆhFAS (Dn) = qHr (Dn)
+∥q∥2
+,
+= hFAS (Dn) + ˆωz (Dn) ,
+(55)
+where ˆωz (Dn) =
+qH
+∥q∥2 ω (Dn). It can be easily verified that
+ˆhFAS (Dn) is also a Gaussian random variable. Specifically,
+it has a mean of hFAS (Dn) and a variance of (zp SNR)−1.
+This implies that the estimator is unbiased and the average
+mean square error is (zp SNR)−1. Using statistics, we can
+8Due to the electromagnetic properties, we assume that the distribution of
+hFAS (Dn) is not known as a priori. If the distribution of hFAS (Dn) is
+known, one can resort to the MMSE approach to further improve the channel
+estimation performance.
+ensure that the estimation error of ˆhFAS (Dn) is less than
+ε > 0 with a CI of
+P
+nˆhFAS (Dn) −hFAS (Dn)
+ < ε
+o
+= erf
+ 
+ε
+r
+zp SNR
+2
+!
+,
+(56)
+where erf (·) is the error function.9 Since the error function is
+an increasing function, this suggests that we can increase the
+CI either by increasing ε, zp or SNR. For some fixed ε, SNR,
+and γ-CI, it is worth noting that we can find the minimum
+value via a 1D searching method as
+z∗
+p =
+(
+min zp
+erf
+ 
+ε
+r
+zp SNR
+2
+!
+≥γ
+)
+.
+(57)
+Thus, the total number of pilot symbols required for channel
+estimation and reconstruction in FAS can be obtained as
+Zp = zpN ⋆
+d .
+(58)
+Note that if Z is not significantly larger than Zp (e.g., fast-
+fading channel), adjustments can be made to parameters such
+as ε, SNR, and γ-CI to reduce the required symbols. Other
+options include employing other state-of-the-art channel esti-
+mation methods or fixing the antenna location (i.e., reducing
+FAS to TAS for a robust communication performance).10
+Remark 1: In practice, the fast Fourier transform (FFT) and
+inverse fast Fourier transform (IFFT) are typically employed.
+With a frequency resolution of F > N ⋆
+d , the FFT and IFFT
+have a time complexity of O (F log2 (F)). In addition, the
+low-pass filter has a time complexity of O (F), and MLE
+for each location has a time-complexity of O (zp). Since F
+and zp are independent parameters, the overall time complex-
+ity of the proposed Nyquist sampling and MLE method is
+O (F log2 (F) + N ⋆
+d zp).
+C. Data Transmission
+To maximize the data rate, we assume that the radiating
+element of FAS is activated at the location with the maximum
+amplitude. In the case of perfect CSI, the optimal position is
+(x∗, y∗) = arg max
+(x,y)
+n
+|hFAS (x, y)|2o
+.
+(59)
+The received signal is expressed as
+rperfect = hFAS (x∗, y∗) q + ω,
+(60)
+where q is the random information signal and ω is the AWGN.
+The capacity of the FAS receiver is given as
+R∗
+FAS = B log2
+
+1 + |hFAS (x∗, y∗)|2 SNR
+B
+
+,
+(61)
+where B is the system bandwidth and SNR =
+P
+N0 . In the case
+of imperfect CSI, it is necessary to estimate the channel using
+9It is worth noting that outside the positions where channel estimation
+is performed, the error depends on the reconstruction method and may not
+necessarily follow a Gaussian distribution.
+10If the channel remains band-limited, the proposed method can be extended
+to a MIMO setup with multiple fixed-position antennas at the transmitter. The
+channel estimation and reconstruction for MIMO-FAS, however, remains a
+complicated problem and requires more detailed analysis.
+Authorized licensed use limited to: Yonsei Univ. Downloaded on March 04,2026 at 08:45:00 UTC from IEEE Xplore.  Restrictions apply. 
+316
+IEEE TRANSACTIONS ON WIRELESS COMMUNICATIONS, VOL. 24, NO. 1, JANUARY 2025
+the proposed Nyquist sampling and MLE methods. After that,
+the FAS receiver can select its port based on the estimated and
+reconstructed channel. The suboptimal position is
+(x⋆, y⋆) = arg max
+(x,y)
+ˆhFAS (x⋆, y⋆)
+
+2
+.
+(62)
+With imperfect CSI, we have the received signal [58]
+rimperfect = ˆhFAS (x⋆, y⋆) q + ω,
+(63)
+and the achievable rate can be obtained as [59]
+R⋆
+FAS = B
+
+1 −N ⋆
+d zp
+Z
+
+log2
+ 
+1 + |hFAS (x⋆, y⋆)|2 SNR
+|ϵ|2 SNR + B
+!
+,
+(64)
+where the additional pre-log factor accounts for the remaining
+symbols that can be used for data transmission per coherence
+time, and ϵ = hFAS (x⋆, y⋆) −ˆhFAS (x⋆, y⋆) accounts for the
+estimation error. Clearly, (64) shows that there is a funda-
+mental tradeoff between high data rate and accurate channel
+estimation and reconstruction.
+In addition, we can further consider FAS where the position
+of the radiating element is fixed. This is equivalent to TAS,
+and the capacity of TAS with perfect CSI is [58]
+RTAS = B log2
+
+1 + |hFAS (x, y)|2 SNR
+B
+
+,
+(65)
+where (x, y) is an arbitrary fixed position throughout the time.
+IV. RESULTS AND DISCUSSION
+In this section, we evaluate the performance of the pro-
+posed Nyquist sampling and MLE methods for both channel
+estimation and reconstruction, as well as rate. For simplicity,
+we consider a symmetric setting; therefore, we denote W as
+the size and D as the sampling distance per dimension. Unless
+otherwise stated, we assume that Z = 1200, B = 30 KHz,
+zp = 7, SNR = 20 dB, Lx = Ly = 32, W = X = Y = 2,
+and D = D⋆
+0 = D⋆
+x,0 = D⋆
+y,0.
+We first explore the fundamental effects of different param-
+eters on the 1D channel estimation and reconstruction case,
+with X = 4. For the sake of brevity, we focus only on the
+real part, as similar behaviors are observed in the imaginary
+part. As we can see in Fig. 3, the SNR influences the variation
+of the received signals, while zp determines the amount of
+pilot training. When the SNR is low, a higher zp can improve
+the accuracy of estimated channels or sampling points by
+averaging out the noise effects with MLE. However, the
+accuracy of the reconstructed channel strongly depends on
+both the accuracy of MLE at sampling points and the sampling
+distance. As observed in Fig. 3(b), if the sampling distance is
+too large, the inaccuracies in the reconstructed channel could
+be much more significant than those caused by the SNR,
+(i.e., the variation of the received signals). This suggests that
+the sampling distance is equally, if not more, important than
+the accuracy of MLE at the sampling points. Moreover, this
+result clearly highlights that a sampling distance of D = λ
+2 is
+insufficient to perfectly reconstruct the channel.
+Fig. 3.
+The fundamental effects of different parameters on a 1D channel
+estimation and reconstruction using: a) D⋆
+0 sampling distance; and b) D = λ
+2
+sampling distance.
+Fig. 4 shows the 2D channel estimation and reconstruction
+of hFAS (x, y) using different values of D. Similarly, we only
+focus on the real part as similar behaviors can be observed
+in the imaginary part. As it is illustrated, the FAS channel
+can be well estimated at each sampling point and efficiently
+reconstructed using the suboptimal sampling distance D⋆
+0. This
+is because the effect of noise can be averaged out through the
+MLE, while the suboptimal sampling distance is capable of
+capturing most of the energy of the spectrum. The latter can
+be verified by further analyzing the power spectrum density as
+shown in Fig. 5. When using the sampling distance D⋆
+0, it is
+observed that the sampled and reconstructed spectra are able
+to capture the spectral leakage of the mainlobe. Nevertheless,
+a crucial part of spectral leakage of the mainlobe cannot be
+captured when using sampling distance of D = λ
+2 , leading to
+inaccurate channel reconstruction. For example, due to severe
+aliasing, we can see that D = λ
+2 sampling distance has more
+compact repetition in the sampled spectrum than D⋆
+0 sampling
+distance. Moreover, the reconstructed spectrum of D =
+λ
+2
+sampling distance does not fit well with the FAS spectrum.
+Fig. 6 presents the tradeoff between the average NMSE
+and sampling distance, D. The sampling distance is closely
+Authorized licensed use limited to: Yonsei Univ. Downloaded on March 04,2026 at 08:45:00 UTC from IEEE Xplore.  Restrictions apply. 
+NEW et al.: CHANNEL ESTIMATION AND RECONSTRUCTION IN FAS: OVERSAMPLING IS ESSENTIAL
+317
+Fig. 4.
+The 2D channel estimation and reconstruction using: a) D⋆
+0 sampling
+distance; b) D = λ
+2 sampling distance.
+related to the number of estimated channels, as revealed in (42)
+and (43). Since |HFAS (kx, ky)| spans over the entire domain,
+the average NMSE generally decreases as the sampling dis-
+tance decreases. However, if the MLE is inaccurate, decreasing
+the sampling distance may not decrease the average NMSE as
+shown in the low SNR case. Moreover, it is seen that if the
+MLE is accurate, then the decrease of the average NMSE is
+almost concave in a log-log scale when the sampling distance
+is larger than D⋆
+0 and in contrast, the decrement of the average
+NMSE is approximately convex when the sampling distance
+is smaller than D⋆
+0. Although smaller sampling distance
+decreases the average NMSE, it is worth noting that a smaller
+sampling distance comes with implementation complexity
+since it could lead to frequent position switching for liquid-
+based fluid antenna or strong mutual coupling for pixel-based
+fluid antenna. Moreover, it would also cause significant rate
+degradation. Thus, we suggest using the suboptimal sampling
+distance D⋆
+0 as it is the largest sampling distance that at least
+covers the mainlobe of |HFAS (kx, ky)|.
+Fig. 7(a) highlights the sensitivity of the sampling distance
+over different values of W in terms of the average NMSE.
+As anticipated, the average NMSE of D =
+λ
+2 is evidently
+higher than that of D⋆
+0 when W is small. We may think that the
+Fig. 5.
+The 2D power spectrum density of ˆhFAS (x, y) using: a) D⋆
+0
+sampling distance; b) D = λ
+2 sampling distance.
+Fig. 6.
+The tradeoff between the average NMSE and sampling distance, D.
+average NMSE of D = λ
+2 may converge to that of D⋆
+0 when
+W is large. Nevertheless, our results show that there is still a
+large gap between D⋆
+0 and D = λ
+2 even when W is increased
+to 10. The reason is that D⋆
+0 only converges to λ
+2 at a rate
+proportional to
+1
+W , as seen in Fig. 7(b). Thus, extremely large
+W is still required to make λ
+2 sufficient for an efficient channel
+Authorized licensed use limited to: Yonsei Univ. Downloaded on March 04,2026 at 08:45:00 UTC from IEEE Xplore.  Restrictions apply. 
+318
+IEEE TRANSACTIONS ON WIRELESS COMMUNICATIONS, VOL. 24, NO. 1, JANUARY 2025
+Fig. 7.
+The sensitivity of sampling distance: a) the average NMSE versus
+W; b) D⋆
+0 versus W.
+reconstruction. This suggests that a minor variation in the
+sampling distance can affect the average NMSE substantially
+when W is large. Note that when W is extremely large, the
+FAS receiver might be located at the near-field region. In that
+case, a smaller sampling distance is always useful [50].
+Fig. 8 demonstrates the effects of zp, SNR, and ε. As it
+is seen, the average NMSE always decreases as zp or SNR
+increases. However, the effect of zp is less substantial than the
+SNR. This is because in practice, zp could only be adjusted
+linearly while the SNR usually ranges in the logarithmic scale.
+Furthermore, the numerical CI closely matches the analytical
+CI, and thus we can guarantee that the channel estimation error
+is bounded by ε with a tractable CI, γ, implying that we can
+determine the value of z∗
+p given some fixed ε, SNR, and γ-CI.
+Fig. 9 evaluates the rates of FAS and TAS over different
+values of zp. To highlight the tradeoff between high data rate
+and accurate channel estimation and reconstruction, we fix
+the SNR to 10 dB. For ease of exposition, we represent the
+proposed Nyquist sampling and MLE methods as FAS with
+imperfect CSI. As observed, FAS with perfect CSI delivers the
+highest data rate, followed by FAS with imperfect CSI, and
+finally TAS with perfect CSI. This result shows that on one
+hand, FAS can significantly outperform TAS while considering
+Fig. 8.
+The effects of MLE based on different values of: a) zp; b) SNR;
+and c) ε.
+the channel estimation and reconstruction problem. On the
+other hand, there is an optimal value of zp that maximizes
+the rate of FAS with imperfect CSI. Nevertheless, the optimal
+zp that maximizes the achievable rate intricately depends on
+the system parameters D, W, Z, and SNR. Note that FAS can
+Authorized licensed use limited to: Yonsei Univ. Downloaded on March 04,2026 at 08:45:00 UTC from IEEE Xplore.  Restrictions apply. 
+NEW et al.: CHANNEL ESTIMATION AND RECONSTRUCTION IN FAS: OVERSAMPLING IS ESSENTIAL
+319
+Fig. 9.
+The rates of FAS and TAS versus zp.
+Fig. 10.
+The rates of FAS and TAS versus W.
+outperform TAS with perfect CSI because it can exploit the
+spatial diversity within a given space, while TAS cannot [60].
+Fig. 10 compares the rate of FAS and TAS across different
+values of W. While existing studies suggest that increasing
+W is preferable for improving the FAS performance, thanks
+to the additional spatial diversity gain, the consideration of
+channel estimation alters this conclusion. Specifically, there
+is an optimal W that maximizes the achievable rate of FAS.
+This is because a larger W requires more estimated channels
+to efficiently reconstruct the FAS channel, which can lead to
+rate degradation. Therefore, a smaller W or few estimated
+channels may be more promising in practice.
+Remark 2: Our studies discover that the initial discrep-
+ancies stem from subtle differences in the research focus.
+In fields such as holographic MIMO or electromagnetic infor-
+mation theory, the primary concern is maximizing transmission
+performance. This focus often leads to the utilization of the
+entire continuous antenna aperture for transmission, enabling
+researchers to concentrate exclusively on the electromagnetic
+field, as the channel properties become the limiting factor
+for transmission efficiency. In contrast, FAS typically does not
+employ the entire antenna aperture for transmission. However,
+obtaining the full CSI is crucial to optimizing the performance
+of FAS. Since a FAS receiver only observes the electromagnetic
+field across a finite space, the received signal is not band-
+limited. Moreover, the channel itself might not be inherently
+band-limited in practice. Therefore, oversampling is essential
+for accurate channel reconstruction.
+V. CONCLUSION
+In this paper, we investigated the problem of channel
+estimation and reconstruction in FAS using the Nyquist
+sampling and MLE methods. In contrast to prior studies,
+we incorporated an electromagnetic-compliant channel model
+to enhance our understanding in this problem. Our analysis
+indicated that using a half-wavelength sampling distance,
+though fundamental, proved inefficient in terms of NMSE
+due to the limited spatial reception of the FAS receiver.
+This spatial constraint necessitated oversampling to achieve
+accurate channel reconstruction, establishing a critical tradeoff
+between the accuracy of the reconstructed channel and the
+number of estimated channels. To strike a balance between
+these metrics, we derived closed-form expressions for the
+suboptimal sampling distance and the total number of esti-
+mated channels needed for a given space. This suboptimal
+approach was designed to capture the majority of the energy
+from the mainlobe or d-th sidelobe of the channel spectrum.
+Additionally, we employed MLE to estimate the channel at
+predetermined locations, ensuring that the channel estimation
+error remained within a bound of ε, with a tractable CI. Our
+analysis further revealed the relationships between ε, zp, SNR,
+and γ-CI. Utilizing these techniques allowed us to effectively
+determine the total number of pilot symbols required for the
+channel estimation and reconstruction process in FAS. Finally,
+we demonstrated that FAS with imperfect CSI can significantly
+outperform TAS with perfect CSI using the proposed Nyquist
+sampling and MLE methods. Furthermore, there exists an
+optimal W that maximizes the rate of FAS with imperfect CSI,
+as increasing W requires more estimated channels, potentially
+leading to rate degradation.
+APPENDIX I: 1D NYQUIST SAMPLING METHOD
+Let us denote the spatial spectrum of h (x) as H (kx). In a
+1D fluid antenna surface, the receiver can only observe h (x)
+over a finite length of Xλ. Thus, it is necessary to consider
+the following 1D rectangular window function
+u (x) =
+
+
+
+1,
+−X
+2 λ ≤x ≤X
+2 λ,
+0,
+otherwise.
+(66)
+The channel observed at the FAS receiver is given by
+hFAS (x) = h (x) u (x) .
+(67)
+In the frequency domain, the spectrum of hFAS (x) can be
+expressed as
+HFAS (kx) = H (kx) ⊛U (kx) ,
+(68)
+where
+U (kx) = sin
+  kx
+2 Xλ
+
+kx
+2
+.
+(69)
+Authorized licensed use limited to: Yonsei Univ. Downloaded on March 04,2026 at 08:45:00 UTC from IEEE Xplore.  Restrictions apply. 
+320
+IEEE TRANSACTIONS ON WIRELESS COMMUNICATIONS, VOL. 24, NO. 1, JANUARY 2025
+Apparently, HFAS (kx) is no longer band-limited. Using sim-
+ilar steps as the 2D Nyquist sampling method, we can obtain
+the d-th efficient sampling distance and the minimum number
+of estimated channels as
+D⋆
+d =
+λ
+2 + 2
+X (d + 1).
+(70)
+and
+N ⋆
+d =
+Xλ
+D⋆
+d
+
+,
+(71)
+respectively.
+The sampled signal in the 1D case can be expressed as
+hs
+FAS (x) =
+N ⋆
+d
+X
+n=0
+ˆhFAS (nD⋆
+d) δ (x −nD⋆
+d) .
+(72)
+In the frequency domain, we hence have
+Hs
+FAS (k) =
+N⋆
+d
+X
+n=0
+ˆhFAS (nD⋆
+d) e−jknD⋆
+d
+(73)
+=
+1
+D⋆
+d
+N⋆
+d
+X
+n=0
+HFAS (k −nk⋆
+s) ,
+(74)
+where k⋆
+s = 2π
+D⋆
+d denotes the sampling frequency. Furthermore,
+ˆhFAS (x) can be reconstructed using a low-pass filter as
+ˆHFAS (k) = Hs
+FAS (k) f (k) ,
+(75)
+where
+f (k) =
+
+
+
+1,
+−2π
+D⋆
+d
+≤k ≤2π
+D⋆
+d
+,
+0,
+otherwise.
+(76)
+Finally, we can obtain ˆhFAS (x) for −X
+2 λ ≤x ≤X
+2 λ using
+the inverse Fourier transform as
+ˆhFAS (x) = 1
+2π
+Z
+ˆHFAS (k) e−jkxxdx.
+(77)
+The NMSE between ˆhFAS (x) and hFAS (x) is simplified as
+NMSE =
+R X
+2 λ
+−X
+2 λ
+
+ˆhFAS (x) −hFAS (x)
+2
+dx
+R X
+2 λ
+−X
+2 λ (hFAS (x))2 dx
+.
+(78)
+REFERENCES
+[1] S. Dash, C. Psomas, and I. Krikidis, “Selection of metallic liquid in
+sub-6 GHz antenna design for 6G networks,” Sci. Rep., vol. 13, no. 1,
+p. 20551, Nov. 2023.
+[2] Y. Shen, K.-F. Tong, and K.-K. Wong, “Radiation pattern diversified
+single-fluid-channel surface-wave antenna for mobile communications,”
+in Proc. IEEE-APS Topical Conf. Antennas Propag. Wireless Commun.
+(APWC), Cape Town, South Africa, Sep. 2022, pp. 049–051.
+[3] B. A. Cetiner, H. Jafarkhani, J.-Y. Qian, H. J. Yoo, A. Grau, and
+F. D. Flaviis, “Multifunctional reconfigurable MEMS integrated anten-
+nas for adaptive MIMO systems,” IEEE Commun. Mag., vol. 42, no. 12,
+pp. 62–70, Dec. 2004.
+[4] L. Jing, M. Li, and R. Murch, “Compact pattern reconfigurable
+pixel antenna with diagonal pixel connections,” IEEE Trans. Antennas
+Propag., vol. 70, no. 10, pp. 8951–8961, Oct. 2022.
+[5] S. Basbug, “Design and synthesis of antenna array with movable
+elements along semicircular paths,” IEEE Antennas Wireless Propag.
+Lett., vol. 16, pp. 3059–3062, 2017.
+[6] K. Wong, K. Tong, Y. Zhang, and Z. Zhongbin, “Fluid antenna system
+for 6G: When Bruce Lee inspires wireless communications,” Electron.
+Lett., vol. 56, no. 24, pp. 1288–1290, Nov. 2020.
+[7] K.-K. Wong, K.-F. Tong, Y. Shen, Y. Chen, and Y. Zhang, “Bruce lee-
+inspired fluid antenna system: Six research topics and the potentials for
+6G,” Frontiers Commun. Netw., vol. 3, Mar. 2022, Art. no. 853416.
+[8] A. Shojaeifard et al., “MIMO evolution beyond 5G through recon-
+figurable intelligent surfaces and fluid antenna systems,” Proc. IEEE,
+vol. 110, no. 9, pp. 1244–1265, Sep. 2022.
+[9] J. Zheng et al., “Flexible-position MIMO for wireless communications:
+Fundamentals, challenges, and future directions,” IEEE Wireless Com-
+mun., vol. 31, no. 5, pp. 18–26, Oct. 2024.
+[10] Y. Shen et al., “Design and implementation of mmWave surface wave
+enabled fluid antennas and experimental results for fluid antenna multi-
+ple access,” 2024, arXiv:2405.09663.
+[11] J.
+Zhang
+et
+al.,
+“A
+novel
+pixel-based
+reconfigurable
+antenna
+applied
+in
+fluid
+antenna
+systems
+with
+high
+switching
+speed,”
+IEEE Open J. Antennas Propag., early access, Nov. 1, 2024, doi:
+10.1109/OJAP.2024.3489215.
+[12] K. Wong, A. Shojaeifard, K. Tong, and Y. Zhang, “Fluid antenna
+systems,” IEEE Trans. Wireless Commun., vol. 20, no. 3, pp. 1950–1962,
+Mar. 2021.
+[13] M. Khammassi, A. Kammoun, and M.-S. Alouini, “A new analytical
+approximation of the fluid antenna system channel,” IEEE Trans. Wire-
+less Commun., vol. 22, no. 12, pp. 8843–8858, Dec. 2023.
+[14] P. Ramírez-Espinosa, D. Morales-Jimenez, and K.-K. Wong, “A
+new
+spatial
+block-correlation
+model
+for
+fluid
+antenna
+systems,”
+IEEE Trans. Wireless Commun., early access, Aug. 1, 2024, doi:
+10.1109/TWC.2024.3434509.
+[15] W. K. New, K.-K. Wong, H. Xu, K. Tong, and C. B. Chae, “Fluid
+antenna system: New insights on outage probability and diversity gain,”
+IEEE Trans. Wireless Commun., vol. 23, no. 1, pp. 128–140, Jan. 2024.
+[16] P. D. Alvim et al., “On the performance of fluid antennas systems under
+α-µ fading channels,” IEEE Wireless Commun. Lett., vol. 13, no. 1,
+pp. 108–112, Jan. 2024.
+[17] J. D. Vega-Sánchez, A. E. López-Ramírez, L. Urquiza-Aguiar, and
+D. P. M. Osorio, “Novel expressions for the outage probability and
+diversity gains in fluid antenna system,” IEEE Wireless Commun. Lett.,
+vol. 13, no. 2, pp. 372–376, Feb. 2024.
+[18] W. K. New, K.-K. Wong, H. Xu, K.-F. Tong, and C.-B. Chae, “An
+information-theoretic characterization of MIMO-FAS: Optimization,
+diversity-multiplexing tradeoff and q-outage capacity,” IEEE Trans.
+Wireless Commun., vol. 23, no. 6, pp. 5541–5556, Jun. 2024.
+[19] Y. Chen, S. Li, Y. Hou, and X. Tao, “Energy-efficiency optimization
+for slow fluid antenna multiple access using mean-field game,” IEEE
+Wireless Commun. Lett., vol. 13, no. 4, pp. 915–918, Apr. 2024.
+[20] L. Zhu, W. Ma, B. Ning, and R. Zhang, “Movable-antenna enhanced
+multiuser communication via antenna position optimization,” IEEE
+Trans. Wireless Commun., vol. 23, no. 7, pp. 7214–7229, Jul. 2024.
+[21] H. Xu et al., “Capacity maximization for FAS-assisted multiple access
+channels,” 2023, arXiv:2311.11037.
+[22] C. Wang et al., “Fluid antenna system liberating multiuser MIMO for
+ISAC via deep reinforcement learning,” IEEE Trans. Wireless Commun.,
+vol. 23, no. 9, pp. 10879–10894, Sep. 2024.
+[23] F. R. Ghadi, K.-K. Wong, W. K. New, H. Xu, R. Murch, and Y. Zhang,
+“On performance of RIS-aided fluid antenna systems,” IEEE Wireless
+Commun. Lett., vol. 13, no. 8, pp. 2175–2179, Aug. 2024.
+[24] B. Tang, H. Xu, K.-K. Wong, K.-F. Tong, Y. Zhang, and C.-B. Chae,
+“Fluid antenna enabling secret communications,” IEEE Commun. Lett.,
+vol. 27, no. 6, pp. 1491–1495, Jun. 2023.
+[25] J.
+D.
+Vega-Sánchez,
+L.
+F.
+Urquiza-Aguiar,
+H.
+R.
+C.
+Mora,
+N. V. O. Garzón, and D. P. M. Osorio, “Fluid antenna system: Secrecy
+outage probability analysis,” IEEE Trans. Veh. Technol., vol. 73, no. 8,
+pp. 11458–11469, Aug. 2024.
+[26] L. Tlebaldiyeva, S. Arzykulov, T. A. Tsiftsis, and G. Nauryzbayev, “Full-
+duplex cooperative NOMA-based mmWave networks with fluid antenna
+system (FAS) receivers,” in Proc. Int. Balkan Conf. Commun. Netw.
+(BalkanCom), Istanbul, Turkey, Jun. 2023, pp. 1–6.
+[27] W. K. New, K.-K. Wong, H. Xu, K.-F. Tong, C.-B. Chae, and
+Y. Zhang, “Fluid antenna system enhancing orthogonal and non-
+orthogonal multiple access,” IEEE Commun. Lett., vol. 28, no. 1,
+pp. 218–222, Jan. 2024.
+[28] C. Skouroumounis and I. Krikidis, “Fluid antenna-aided full duplex
+communications: A macroscopic point-of-view,” IEEE J. Sel. Areas
+Commun., vol. 41, no. 9, pp. 2879–2892, Sep. 2023.
+Authorized licensed use limited to: Yonsei Univ. Downloaded on March 04,2026 at 08:45:00 UTC from IEEE Xplore.  Restrictions apply. 
+NEW et al.: CHANNEL ESTIMATION AND RECONSTRUCTION IN FAS: OVERSAMPLING IS ESSENTIAL
+321
+[29] J. Zhu, G. Chen, P. Gao, P. Xiao, Z. Lin, and A. U. Quddus, “Index
+modulation for fluid antenna-assisted MIMO communications: System
+design and performance analysis,” IEEE Trans. Wireless Commun.,
+vol. 23, no. 8, pp. 9701–9713, Aug. 2024.
+[30] Y. Chen and T. Xu, “Fluid antenna index modulation communications,”
+IEEE Wireless Commun. Lett., vol. 13, no. 4, pp. 1203–1207, Apr. 2024.
+[31] H. Yang et al., “Position index modulation for fluid antenna system,”
+IEEE Trans. Wireless Commun., early access, Aug. 27, 2024, doi:
+10.1109/TWC.2024.3446658.
+[32] L. Zhu and K.-K. Wong, “Historical review of fluid antenna and movable
+antenna,” 2024, arXiv:2401.02362v2.
+[33] M. Wang, F. Gao, S. Jin, and H. Lin, “An overview of enhanced massive
+MIMO with array signal processing techniques,” IEEE J. Sel. Topics
+Signal Process., vol. 13, no. 5, pp. 886–901, Sep. 2019.
+[34] D. Neumann, T. Wiese, and W. Utschick, “Learning the MMSE channel
+estimator,” IEEE Trans. Signal Process., vol. 66, no. 11, pp. 2905–2917,
+Jun. 2018.
+[35] L. Cheng, F. Yin, S. Theodoridis, S. Chatzis, and T.-H. Chang, “Rethink-
+ing Bayesian learning for data analysis: The art of prior and inference
+in sparsity-aware modeling,” IEEE Signal Process. Mag., vol. 39, no. 6,
+pp. 18–52, Nov. 2022.
+[36] M. F. Duarte and Y. C. Eldar, “Structured compressed sensing: From
+theory to applications,” IEEE Trans. Signal Process., vol. 59, no. 9,
+pp. 4053–4085, Sep. 2011.
+[37] G. Zhou, C. Pan, H. Ren, P. Popovski, and A. L. Swindlehurst, “Channel
+estimation for RIS-aided multiuser millimeter-wave systems,” IEEE
+Trans. Signal Process., vol. 70, pp. 1478–1492, 2022.
+[38] G. Zhou et al., “A framework of robust transmission design for IRS-
+aided MISO communications with imperfect cascaded channels,” IEEE
+Trans. Signal Process., vol. 68, pp. 5092–5106, 2020.
+[39] Z. Peng et al., “Two-stage channel estimation for RIS-aided multiuser
+mmWave systems with reduced error propagation and pilot overhead,”
+IEEE Trans. Signal Process., vol. 71, pp. 3607–3622, 2023.
+[40] H. Zhang et al., “Learning-induced channel extrapolation for fluid
+antenna systems using asymmetric graph masked autoencoder,” IEEE
+Wireless Commun. Lett., vol. 13, no. 6, pp. 1665–1669, Jun. 2024.
+[41] N. Waqar, K. Wong, K. Tong, A. Sharples, and Y. Zhang, “Deep
+learning enabled slow fluid antenna multiple access,” IEEE Commun.
+Lett., vol. 27, no. 3, pp. 861–865, Mar. 2023.
+[42] M. Eskandari, A. G. Burr, K. Cumanan, and K.-K. Wong, “CGAN-
+based slow fluid antenna multiple access,” IEEE Wireless Commun. Lett.,
+vol. 13, no. 10, pp. 2907–2911, Oct. 2024.
+[43] H. Xu et al., “Channel estimation for FAS-assisted multiuser mmWave
+systems,” IEEE Commun. Lett., vol. 28, no. 3, pp. 632–636, Mar. 2024.
+[44] Z. Zhang, J. Zhu, L. Dai, and R. W. Heath Jr., “Successive Bayesian
+reconstructor for channel estimation in fluid antenna systems,” in Proc.
+IEEE Wireless Commun. Netw. Conf., Dubai, United Arab Emirates,
+Apr. 2024, pp. 21–24.
+[45] Z. Zhang, J. Zhu, L. Dai, and R. W. Heath Jr., “Successive Bayesian
+reconstructor for channel estimation in fluid antenna systems,” 2023,
+arXiv:2312.06551.
+[46] W. Ma, L. Zhu, and R. Zhang, “Compressed sensing based channel
+estimation for movable antenna communications,” IEEE Commun. Lett.,
+vol. 27, no. 10, pp. 2747–2751, Oct. 2023.
+[47] J. Zhu, Z. Wan, L. Dai, M. Debbah, and H. V. Poor, “Electromagnetic
+information theory: Fundamentals, modeling, applications, and open
+problems,” IEEE Wireless Commun., vol. 31, no. 3, pp. 156–162,
+Jun. 2024.
+[48] E. Björnson et al., “Towards 6G MIMO: Massive spatial multiplexing,
+dense arrays, and interplay between electromagnetics and processing,”
+2024, arXiv:2401.02844.
+[49] A. Pizzo, A. D. J. Torres, L. Sanguinetti, and T. L. Marzetta, “Nyquist
+sampling and degrees of freedom of electromagnetic fields,” IEEE Trans.
+Signal Process., vol. 70, pp. 3935–3947, 2022.
+[50] M. Di Renzo and M. D. Migliore, “Electromagnetic signal and
+information theory–on electromagnetically consistent communication
+models for the transmission and processing of information,” 2023,
+arXiv:2311.06661.
+[51] T. L. Marzetta, “Spatially-stationary propagating random field model for
+massive MIMO small-scale fading,” in Proc. IEEE Int. Symp. Inf. Theory
+(ISIT), Vail, CO, USA, Jun. 2018, pp. 391–395.
+[52] A. Pizzo, T. L. Marzetta, and L. Sanguinetti, “Spatially-stationary
+model for holographic MIMO small-scale fading,” IEEE J. Sel. Areas
+Commun., vol. 38, no. 9, pp. 1964–1979, Sep. 2020.
+[53] F. B. Hildebrand, Advanced Calculus for Applications, 2nd ed., London,
+U.K.: Pearson, 1962.
+[54] V. Balakrishnan, “All about the Dirac delta function(?),” Resonance,
+vol. 8, no. 8, pp. 48–58, Aug. 2003.
+[55] C. E. Shannon, “Communication in the presence of noise,” Proc. IRE,
+vol. 37, no. 1, pp. 10–21, Jan. 1949.
+[56] H. J. Landau, “An overview of time and frequency limiting,” in Fourier
+Techniques and Applications, J. F. Price, Ed., Boston, MA, USA:
+Springer, 1985, pp. 201–220, doi: 10.1007/978-1-4613-2525-3_12.
+[57] B. P. Lathi and R. A. Green, Linear Systems and Signals, vol. 2. New
+York, NY, USA: Oxford Univ. Press, 2005.
+[58] M. Medard, “The effect upon channel capacity in wireless communica-
+tions of perfect and imperfect knowledge of the channel,” IEEE Trans.
+Inf. Theory, vol. 46, no. 3, pp. 933–946, May 2000.
+[59] E. Biglieri, J. Proakis, and S. Shamai (Shitz), “Fading channels:
+Information-theoretic and communications aspects,” IEEE Trans. Inf.
+Theory, vol. 44, no. 6, pp. 2619–2692, Oct. 1998.
+[60] W. K. New et al., “A tutorial on fluid antenna system for 6G networks:
+Encompassing communication theory, optimization methods and hard-
+ware designs,” 2024, arXiv:2407.03449.
+(Aven) Wee Kiat New (Member, IEEE) received
+the B.I.T. degree in data communications and net-
+working from Multimedia University, the M.Eng.Sc.
+degree in electrical engineering from the University
+of Malaya, and the Ph.D. degree in electrical engi-
+neering from Universiti Teknologi Malaysia. He was
+a Visiting Researcher with Lancaster University and
+the University of Cyprus. He is currently a Research
+Fellow with the Department of Electronic and Elec-
+trical Engineering, University College London, U.K.
+His research interests include information theory,
+optimization, stochastic processes, and machine learning, and their applica-
+tions in emerging areas of communications. He was a recipient of the 2021
+IEEE Malaysia Comsoc/VTS Best Paper Award and the 2020 and 2021 IEEE
+Malaysia AP/MTT/EMC Best Paper Awards.
+(Kit) Kai-Kit Wong (Fellow, IEEE) was born
+in Hong Kong in 1973. He received the B.Eng.,
+M.Phil., and Ph.D. degrees in electrical and elec-
+tronic engineering from The Hong Kong University
+of Science and Technology, Hong Kong, in 1996,
+1998, and 2001, respectively. After graduation,
+he took up academic and research positions at The
+University of Hong Kong, Hong Kong, Lucent Tech-
+nologies, Bell-Labs, Holmdel, the Smart Antennas
+Research Group, Stanford University, USA, and the
+University of Hull, U.K. He is currently the Chair
+Professor of Wireless Communications with the Department of Electronic and
+Electrical Engineering, University College London, U.K. He is a fellow of IET.
+He has served as the Editor-in-Chief for IEEE WIRELESS COMMUNICATIONS
+LETTERS from 2020 to 2023. He is the Subject Editor-in-Chief for Wireless
+Communications of IET Electronics Letters, an Advisory Board Member of
+IEEE COMMUNICATIONS LETTERS, and a Steering Committee Member of
+IEEE WIRELESS COMMUNICATIONS LETTERS.
+Hao
+Xu
+(Member,
+IEEE)
+received
+the
+B.S.
+degree
+in
+communication
+engineering
+from
+Nanjing University of Science and Technology,
+Nanjing, China, in 2013, and the Ph.D. degree in
+information and communication engineering from
+the National Mobile Communications Research
+Laboratory, Southeast University, Nanjing, in 2019.
+From 2019 to 2021, he was an Alexander von
+Humboldt (AvH) Post-Doctoral Research Fellow
+with the Faculty of Electrical Engineering and
+Computer Science, Technical University of Berlin,
+Germany. He is currently a Marie Skłodowska-Curie Actions (MSCA)
+Individual
+Fellow
+with
+the
+Department
+of
+Electronic
+and
+Electrical
+Engineering, University College London, U.K. His research interests include
+information theory, mathematical optimization, MIMO systems, and physical
+layer security in wireless networks.
+Authorized licensed use limited to: Yonsei Univ. Downloaded on March 04,2026 at 08:45:00 UTC from IEEE Xplore.  Restrictions apply. 
+322
+IEEE TRANSACTIONS ON WIRELESS COMMUNICATIONS, VOL. 24, NO. 1, JANUARY 2025
+Farshad Rostami Ghadi (Member, IEEE) received
+the Ph.D. degree (Hons.) in electrical commu-
+nication systems engineering from the Ferdowsi
+University of Mashhad, Mashhad, Iran, in 2021.
+He was a Post-Doctoral Research Fellow with the
+Department of Communication Engineering, Uni-
+versity of Malaga, Malaga, Spain, in 2021. He is
+currently a Research Fellow with the Department
+of Electronic and Electrical Engineering, University
+College London, London, U.K. His current research
+interests include analyzing wireless communication
+systems, network information theory, and copula theory, with an emphasis on
+wireless channel modeling and physical layer security.
+Ross Murch (Fellow, IEEE) received the bachelor’s
+and Ph.D. degrees in electrical and electronic
+engineering from the University of Canterbury,
+Christchurch, New Zealand.
+From 1990 to 1992, he was a Post-Doctoral Fellow
+with the Department of Mathematics and Computer
+Science, University of Dundee, U.K. He was the
+Department Head with HKUST, from 2009 to 2015.
+He has spent sabbaticals with MIT, USA; AT&T,
+USA; Allgon Mobile Communications, Sweden; and
+Imperial College London. He is known for his
+research on multiple antenna technology, including multiuser-MIMO, compact
+multiport antennas, and multiport energy harvesting. He is currently a Chair
+Professor with the Department of Electronic and Computer Engineering and
+a Senior Fellow with the Institute of Advanced Study, The Hong Kong
+University of Science and Technology (HKUST), Hong Kong, where he joined
+as an Assistant Professor in 1992. His current research focus is creating
+new RF wave technology for making a better world and this includes RF
+imaging, ambient RF systems, energy harvesting, electromagnetic information
+theory, 6G, the IoT, multiport antenna systems, and reconfigurable intelligent
+surfaces. His unique expertise lies in his combination of knowledge from both
+wireless communication systems and electromagnetics and he has published
+in both areas. In total his research contributions include over 200 journal
+publications and more than 20 patents, while successfully supervising more
+than 50 research students. He also has a strong interest in education and enjoys
+teaching and has won five teaching awards.
+Prof. Murch is a fellow of IET, HKIE, and FHKEng. He has been a David
+Bensted Fellow of Simon Fraser University, Canada; and an HKTIIT Fellow of
+Southampton University, U.K. He received the IEEE Communications Society
+Wireless Communications Technical Committee Recognition Award in 2023.
+He has served in IEEE in various positions, including an IEEE area editor,
+the technical program chair, a distinguished lecturer, and a fellow evaluation
+committee.
+Chan-Byoung Chae (Fellow, IEEE) received the
+Ph.D. degree in electrical and computer engineering
+from The University of Texas at Austin (UT), USA,
+in 2008.
+Prior to joining UT, he was a Research Engi-
+neer with the Telecommunications Research and
+Development Center, Samsung Electronics, Suwon,
+South Korea, from 2001 to 2005. He is currently
+an Underwood Distinguished Professor with the
+School of Integrated Technology, Yonsei Univer-
+sity, South Korea. Before joining Yonsei Univer-
+sity, he was with Bell Labs, Alcatel-Lucent, Murray Hill, NJ, USA,
+from 2009 to 2011, as a member of Technical Staff; and Harvard University,
+Cambridge, MA, USA, from 2008 to 2009, as a Post-Doctoral Research
+Fellow.
+Dr. Chae was a recipient/co-recipient of the CES Innovation Award in
+2023, the IEEE ICC Best Demo Award in 2022, the IEEE WCNC Best
+Demo Award in 2020, the Best Young Engineer Award from the National
+Academy of Engineering of Korea (NAEK) in 2019, the IEEE DySPAN
+Best Demo Award in 2018, the IEEE/KICS Journal of Communications
+and Networks Best Paper Award in 2018, the IEEE INFOCOM Best Demo
+Award in 2015, the IEIE/IEEE Joint Award for Young IT Engineer of the
+Year in 2014, the KICS Haedong Young Scholar Award in 2013, the IEEE
+Signal Processing Magazine Best Paper Award in 2013, the IEEE ComSoc
+AP Outstanding Young Researcher Award in 2012, and the IEEE VTS
+Dan. E. Noble Fellowship Award in 2008. He was the Editor-in-Chief of
+IEEE TRANSACTIONS ON MOLECULAR, BIOLOGICAL, AND MULTI-SCALE
+COMMUNICATIONS from 2019 to 2022 and has been a Senior Editor of IEEE
+WIRELESS COMMUNICATIONS LETTERS since 2020. He has served/serves
+as an Editor for IEEE Communications Magazine since 2016, IEEE TRANS-
+ACTIONS ON WIRELESS COMMUNICATIONS from 2012 to 2017, and IEEE
+WIRELESS COMMUNICATIONS LETTERS since 2016. He was an IEEE
+ComSoc Distinguished Lecturer from 2020 to 2021 and from 2022 to 2023.
+Authorized licensed use limited to: Yonsei Univ. Downloaded on March 04,2026 at 08:45:00 UTC from IEEE Xplore.  Restrictions apply. 

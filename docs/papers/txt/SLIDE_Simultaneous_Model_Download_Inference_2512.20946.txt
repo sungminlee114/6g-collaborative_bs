@@ -1,0 +1,3114 @@
+1
+SLIDE: Simultaneous Model Downloading and
+Inference at the Wireless Network Edge
+Guanqiao Qu, Graduate Student Member, IEEE, Tao Li, Qian Chen, Member, IEEE,
+Xianhao Chen, Member, IEEE, Sheng Zhou, Senior Member, IEEE
+Abstract—To support on-device inference, the next-generation
+mobile networks are expected to support real-time model down-
+loading services to mobile users. However, powerful AI models
+typically have large model sizes, resulting in excessive end-to-
+end (E2E) downloading-and-inference (DAI) latency. To address
+this issue, we propose a simultaneous model downloading and
+inference (SLIDE) framework, which allows users to perform
+inference with downloaded layers while simultaneously receiving
+the remaining layers of the model. To this end, we formulate
+a task throughput maximization problem by jointly optimiz-
+ing model provisioning, spectrum bandwidth allocation, and
+computing resource allocation for multi-user downlink systems.
+Unlike traditional DAI frameworks, SLIDE introduces recursive
+dependencies across layers, where inference latency depends
+recursively on the downloading bandwidth and computing re-
+source allocation for each of the preceding layers. To solve
+this challenging problem, we design an efficient algorithm that
+acquires the optimal solution with polynomial-time complex-
+ity. Simulation results demonstrate that the proposed SLIDE
+framework significantly improves task throughput under latency
+and communication resource constraints compared with the
+conventional model downloading schemes.
+Index Terms—Edge AI, edge computing, 6G, model download-
+ing, bandwidth allocation, task throughput maximization.
+I. INTRODUCTION
+With mounting concerns about privacy and the increasing
+computing power of mobile devices, on-device inference has
+become a prevalent paradigm, enabling users to run AI models
+directly on their end devices [1], [2]. In this respect, AI model
+downloading has emerged as an essential service in next-
+generation mobile networks to support ubiquitous on-device
+inference [3], [4]. Unlike the traditional model (or mobile app)
+downloading, which is often time-consuming, the future model
+downloading is expected to be a real-time service [5]. For
+instance, the 5G standard specifies model downloading latency
+requirements as low as 1 second for time-sensitive applications
+such as autonomous driving and robotics [3]. Real-time model
+downloading benefits on-device inference in the following
+aspects. (i) Storage efficiency: Due to the diverse range of AI
+applications and the large size of models, users prefer not to,
+or simply cannot, pre-store all the AI models that they might
+need in advance. For example, Google’s on-device language
+Guanqiao Qu, Tao Li, Qian Chen, and Xianhao Chen are with the
+Department of Electrical and Electronic Engineering, University of Hong
+Kong, Hong Kong SAR, China. (e-mail: gqqu@eee.hku.hk; litao@eee.hku.hk;
+qchen@eee.hku.hk; xchen@eee.hku.hk. Sheng Zhou is with the Depart-
+ment of Electronic Engineering, Tsinghua University, Beijing, China. (e-
+mail: sheng.zhou@tsinghua.edu.cn). The work was supported in part by the
+Research Grants Council of Hong Kong under Grant 27213824 and CRS
+HKU702/2. (Corresponding author: Xianhao Chen.)
+model Gemini Nano-2 remains 1.51 GB even after 4-bit
+quantization [6]. Real-time model downloading enables users
+to fetch models on demand from off-site locations, thereby
+saving on-device storage. (ii) Just-in-time intelligence: Real-
+time downloading is crucial for time-sensitive applications
+when pre-downloading is infeasible, particularly when user
+demands are unpredictable or specific model versions are
+not available in advance. For example, mobile network is
+expected to download region-specific models to users, such as
+localized models for augmented reality [7] and autonomous
+driving [8]. In such cases, since the downloading of the
+context-aware model can occur only when users enter the
+region, real-time model downloading is essential to ensure low
+service latency for users. Moreover, while recent advances in
+large language models (LLMs) have promoted the deployment
+of on-device foundation models that can be reused across
+multiple applications, such a paradigm does not eliminate the
+need for real-time model parameter downloading. In practice,
+since foundation models face inherent tradeoffs between model
+size and generality, they cannot be optimally specialized for
+all tasks under limited resource budgets. Therefore, users often
+request task-specific parameters (such as LoRA matrices [9])
+for their requested tasks. As a result, dynamic and real-time
+model downloading is essential for providing flexible, timely,
+and up-to-date on-device intelligence to end users.
+Challenges: However, while a model is nothing but just one
+type of digital content, existing content downloading schemes
+can hardly fulfill the real-time requirements of model down-
+loading. Specifically, all prior content transmission schemes,
+including model downloading schemes [10], focus solely on
+data transmission without considering downloading-inference
+co-design. Nonetheless, the end-to-end (E2E) latency is what
+really matters. Imagining that a vehicle enters an area request-
+ing a region-specific navigation model from a base station [11],
+the service cannot be fulfilled until an entire download-and-
+inference (DAI) process has been accomplished. In practical
+wireless networks, DAI entails significant model downloading
+latency before inference, leading to excessive E2E service
+latency, as echoed by 3GPP findings [3]. Considering the
+typical 5G download speed of 170.1 Mbps [12], downloading
+a ResNet-18 model takes about 2.1 seconds, and inference
+using such a ResNet-18 on a Raspberry Pi 4 with two images
+takes about 2 seconds [13]. As a result, the separated design
+of downloading and inference in DAI may render E2E latency
+intolerant to time-sensitive applications.
+Our solution: To reduce E2E service latency, our key
+idea lies in overlapping communication and computing in
+arXiv:2512.20946v2  [cs.NI]  26 Jan 2026
+2
+ResNet-18
+ResNet-34
+ResNet-50
+0.0
+0.4
+0.8
+1.2
+1.6
+2.0
+2.4
+33.8%
+31.2%
+E2E latency (s)
+Model structure
+Memory-preloading inference (on-device)
+Disk-loading inference (on-device)
+SLIDE (downloading)
+Conventional DAI (downloading)
+32.4%
+Fig. 1. The E2E latency in wireless networks, where an end user downloads an
+AI model from a BS to perform local inference. The E2E latency comprises
+downloading and inference latency. We assume the BS downloads models
+with a transmit power spectral density of -29 dBm/Hz [16] over a 30-MHz
+channel, and the distance is set to 100 m. The inference is executed on a
+Jetson Orin Nano with a GPU frequency of 624.75 MHz, using the CIFAR-
+10 dataset [17], a batch size of 1, and models from the ResNet family [18].
+DAI, called simultaneous model downloading and inference
+(SLIDE). Unlike the conventional DAI paradigm that initiates
+inference only after the entire model is downloaded, our frame-
+work enables users to start inference with the downloaded
+layers while simultaneously receiving the remaining layers.
+The advantages of this framework are evident. In Fig. 1, we
+demonstrate the performance gain of SLIDE by comparing
+the E2E latency for different approaches, including: (i) disk-
+loading inference, where the model is stored on the disk
+of the user device and is loaded from the disk into system
+memory and then into GPU memory for inference [14]; (ii)
+memory-preloading inference, where the model is already in
+system memory due to page cache or prior requests and can
+be directly loaded into GPU memory for inference [15]; and
+(iii) conventional DAI, where inference begins after the model
+has been fully downloaded from a base station (BS) [10]. As
+shown in Fig. 1, the proposed SLIDE significantly reduces
+the E2E latency by 32.5% on average compared with the
+conventional DAI, while being only 0.2 times slower than the
+disk-loading inference approach!
+With the innovative SLIDE paradigm, in this paper, we
+consider a multi-user downlink system where a BS delivers
+models to users for on-device inference with limited spectrum
+bandwidth. We formulate a joint model provisioning, spec-
+trum bandwidth allocation, and computing resource allocation
+problem to maximize the number of completed AI tasks (task
+throughput) under E2E deadline constraints. The problem turns
+out to be a mixed integer nonlinear programming problem.
+Note that the optimization problem is highly challenging,
+as the E2E latency in SLIDE follows a recursive expres-
+sion across layers: Inference on a layer starts only after
+downloading the current layer and completing inference of
+the previous layer. Despite the challenges, we develop an
+efficient algorithm to find the optimal solution to SLIDE with
+polynomial time complexity. Concretely, we first decouple the
+computing resource allocation from the original joint problem.
+For any fixed bandwidth allocation, we then determine the
+corresponding model provisioning and computing resource
+allocation. Subsequently, we obtain the minimum feasible
+bandwidth allocation for each user under latency constraints,
+based on which we determine the optimal solution to maximize
+the number of served users. The contributions of this paper are
+summarized as follows.
+1) We propose the SLIDE framework, which enables users
+to start inference with the downloaded AI model lay-
+ers while simultaneously receiving the remaining layers.
+Moreover, we formulate an optimization problem of
+model provisioning, spectrum bandwidth allocation, and
+computing resource allocation in a multi-user downlink
+wireless system to maximize the number of completed
+tasks under the latency requirements of users. The prob-
+lem is a mixed-integer nonlinear programming problem.
+2) To facilitate efficient solution finding, we first derive the
+model provisioning and computing resource allocation for
+each user under a given spectrum bandwidth allocation.
+Then, we show that solving the original problem is
+equivalent to solving the spectrum bandwidth allocation
+problem based on the model provisioning and computing
+resource allocation decisions. Finally, we propose an
+iterative algorithm that leverages the problem properties
+to derive the minimum feasible bandwidth allocation for
+each user, followed by an efficient algorithm that incre-
+mentally constructs the optimal solution to the original
+problem.
+3) Our experiments have demonstrated that the proposed
+SLIDE significantly boosts the system performance com-
+pared with conventional AI model downloading schemes.
+The rest of this paper is organized as follows. Section II
+reviews the related work. Section III introduces the proposed
+SLIDE framework and formulates the task throughput maxi-
+mization problem. In Section IV, we present an algorithm to
+obtain the optimal solution. Section V provides the numerical
+results, and Section VI concludes this paper.
+II. RELATED WORK
+AI model downloading is an emerging field, attracting
+growing attention. We review the relevant resource allocation
+methods below.
+Model downloading: In existing DAI frameworks, users
+download the required AI models from edge servers (e.g., BSs)
+for local inference [19]. To reduce model downloading latency,
+Wu et al. leveraged parameter sharing across models to enable
+BS to broadcast shared model blocks to users [10]. Moreover,
+to better utilize computing resources of both user devices
+and edge servers, cooperative edge inference splits AI models
+into user-side and server-side sub-models [20], allowing users
+to download and run the user-side sub-model and upload
+intermediate features to the server for further inference [21],
+[22]. In these studies, on-device inference begins only after
+model downloading completes, which can hence be reduced
+to conventional resource allocation problems. However, these
+approaches fall short for SLIDE since they do not consider
+the overlapping of model downloading and local inference.
+This overlapping introduces recursive dependencies across
+layers in the E2E latency of SLIDE, making the latency
+jointly influenced by bandwidth allocation, layer sizes, and
+computing workload. This indicates that SLIDE requires a
+tailored resource allocation strategy.
+3
+The idea of “simultaneous delivery and processing”, similar
+to that of SLIDE, has been explored in prior work, yet
+in different fields. We elaborate on why they fall short of
+supporting SLIDE at the wireless edge as follows.
+Video streaming: Video streaming techniques divide videos
+into multiple segments, allowing users to download the video
+segments and consume the video simultaneously [23], [24].
+This progressive downloading enables users to start playback
+before downloading the full video. However, this approach
+is inapplicable to downloading and inference. Although AI
+models can similarly be divided into layers, users can only
+benefit from the models upon inference completion for the
+entire model. Moreover, unlike video segments, which are
+uniformly timed [25], [26], computing workloads and data
+sizes vary across layers. These factors prevent the application
+of video streaming schemes to SLIDE.
+Layer-wise inference: In computer architecture, layer-wise
+inference sequentially transfers model layers from disk/system
+memory to GPU memory, allowing the GPU to perform infer-
+ence with each layer once being loaded [27], [28]. Similar to
+SLIDE, loading of the subsequent layer can begin concurrently
+with the computation of the current layer [29]. Moreover, in
+wireless edge networks, AI models can be partitioned into
+user-side and server-side sub-models for split inference by
+uploading intermediate features from end devices to edge
+servers [30]. To improve efficiency, this framework executes
+pipelined inference, allowing user-side inference to proceed
+in parallel with server-side inference on previously uploaded
+features. However, these methods focus on on-device inference
+and overlook the challenges of model downloading in wireless
+edge networks, where users share limited spectrum. In such
+settings, downlink rates are typically limited to hundreds of
+Mbps [12], far below the several to tens of GB/s available
+for on-device model loading [31]. Thus, joint spectrum and
+computing resource allocation must be judiciously determined
+to support model downloading and inference in multi-user
+scenarios in wireless edge networks.
+III. THE SLIDE FRAMEWORK AND PROBLEM
+FORMULATION
+This section introduces the SLIDE framework, including the
+multi-user wireless edge network scenario and the procedure
+of SLIDE, formulates the E2E latency and energy consump-
+tion, and presents the task throughput maximization problem.
+A. Network Scenario
+As shown in Fig. 2, we consider a wireless network where
+multiple users K = {1, 2, . . . , K} connect to a BS with a
+cache hosting a model library I = {1, 2, . . . , I}. We consider
+each user requests an inference service with an E2E latency
+requirement ¯Tk, and can be served by a subset of models in
+I, denoted by Ik, where both ¯Tk and Ik are known to the
+BS. For instance, a user performing a classification task with
+a given accuracy requirement might be served by a number of
+model architectures, such as ResNet models or Transformer
+models with different bit widths. Without loss of generality,
+we only consider users who do not pre-store the models in
+Model downloading
+Inference 
+Layer pending downloading
+Downloaded layer
+Base
+station
+Model library
+...
+Model 1 Model 2
+User 2
+Request
+model 2
+User 1
+Request
+model 1
+Time
+Time
+Fig. 2.
+The proposed SLIDE framework, where users start inference with
+downloaded layers while simultaneously receiving the remaining layers.
+Ik locally and should download a model from the BS via
+wireless channels to serve their needs. Let a binary variable
+xk,i indicate the model provisioning of the BS, where xk,i = 1
+represents that the BS provisions model i to user k, and 0
+otherwise. The variable xk,i satisfies the constraint
+X
+i∈Ik
+xk,i ≤1, ∀k ∈K,
+(1)
+which ensures that user k is provisioned at most one model
+from Ik.
+The frequently used notations are summarized in Table I.
+Remark 1. Although a user can perform inference using the
+downloaded models multiple times, our optimization frame-
+work focuses on optimizing the first-time model downloading
+when the user does not store the model locally. As discussed in
+the Introduction, it is generally infeasible to pre-store or per-
+sistently cache all potentially requested models. Consequently,
+model cache misses are unavoidable in practice, and SLIDE
+serves as an enabling step to efficiently deliver the missing
+model from the BS by overlapping model downloading with
+inference, after which model caching, prefetching, and reuse
+can take place.
+B. The Procedure of SLIDE
+As shown in Fig. 2, SLIDE overlaps model downloading
+and inference, allowing users to simultaneously perform infer-
+ence with the downloaded layers while receiving the remaining
+layers of the model. This contrasts with conventional DAI
+(Fig. 3, top), where downloading and inference are separated.
+The detailed procedure of SLIDE, as demonstrated in the
+lower part of Fig. 3, is illustrated as follows. Suppose that
+user k is provisioned with model i, with {1, 2, . . . , Li} being
+the ordered set of layers of model i. In SLIDE, a layer
+represents a model component (e.g., an individual model layer,
+a block, or a group of consecutive blocks), depending on
+the model architecture and chosen granularity. Starting from
+time 0, user k continuously downloads the layers of model
+i in the order of li to the last layer Li, while simultaneously
+performing layer-wise inference using the already downloaded
+layers. To further reduce the E2E latency, user k moves task
+4
+TABLE I
+FREQUENTLY USED NOTATIONS
+Symbol
+Description
+K
+Set of users.
+I, Ik
+Model library and set of models requested by user k.
+K, I, Li
+Number of users, models, and layers of model i.
+k, i, li
+User index, model index, and layer index of model i.
+xk,i ∈X
+Model provisioning indicator variable.
+yk ∈Y
+Spectrum bandwidth allocation for user k.
+zk,li ∈Z
+GPU frequency allocation scaling factor of user k
+for layer li.
+Zk,i
+Vector of per-layer zk,li for user k and model i.
+Sli
+Data size of layer li.
+B
+Total bandwidth of the BS.
+Rk, γk
+Spectral efficiency and channel gain between user k
+and the BS.
+P, N0
+Transmit power spectral density and noise power
+spectral density.
+¯Tk, Qk
+End-to-end latency requirement and maximum
+inference energy budget of user k.
+τk,li
+Time for user k to download layer li.
+Tk,i
+ zk,li
+
+Inference latency of user k for layer li.
+V1 (k, li)
+Time required for user k to transfer layer li from
+system memory to GPU memory.
+Wli
+Computation workload of layer li for processing
+one data sample.
+bk, κk, fk, Ψk
+Inference batch size, computing intensity, GPU
+clock frequency, and power coefficient of user k.
+tk,li
+ yk, Zk,i
+
+,
+tk,Li
+ yk, Zk,i
+
+Time when user k obtains the output of layer li and
+the end-to-end latency of user k.
+ek,i
+ Zk,i
+
+Inference energy consumption of user k for model i.
+e1 (k, i)
+Energy consumption of user k for model
+instantiation, data movement, and model transfer to
+GPU memory.
+ek (Xk, Zk)
+Total inference energy consumption of user k.
+x∗
+k ∈X∗,
+y∗
+k ∈Y∗,
+z∗
+k,li ∈Z∗
+Optimal model provisioning, spectrum bandwidth
+allocation, and computing resource allocation.
+data to the GPU memory and executes model instantiation
+when downloading the first layer. Intuitively, the inference of
+user k for layer li begins at the latest of the following two
+events: (i) the completion of downloading layer li; and (ii)
+the completion of inference for the preceding layer li −1.
+As an exception, inference for layer 1 starts after the layer
+has been downloaded and the process of data movement and
+model instantiation is completed. Once the inference for layer
+Li is completed, user k obtains the final inference result.
+Note that for model components whose internal computation
+is non-sequential (e.g., residual connections or parallel sub-
+module computation), SLIDE abstracts each such component
+as a single layer and incorporates its internal computation into
+the computation latency of that layer.
+Remark 2. SLIDE supports feedforward models (e.g., con-
+volutional neural networks (CNNs) like ResNets and Vision
+Transformers (ViTs)), autoregressive models (e.g., LLMs), and
+recurrent neural networks (RNNs). SLIDE enables parameter
+downloading for subsequent layers to overlap with the in-
+ference of the current layer. For autoregressive models, this
+overlap occurs during the prefilling stage, where input tokens
+are processed in a layer-wise feedforward manner before
+output generation. This is especially beneficial for latency
+reduction in long-context tasks, e.g., document summarization.
+For RNNs, this overlap applies at the first time step of
+Inference timeline
+Download timeline
+!
+"
+!
+!
+!
+"
+# $
+$
+τ
+=∑
+(
+)
+!
+!
+"
+!
+!
+!
+"
+# !
+# $
+$
+%
+&
+=∑
+…
+…
+!"
+!τ
+! !
+" #
+τ
+! !
+" #
+τ
+(
+)
+!
+!"
+! "
+!
+#
+$
+(
+)
+!
+!"
+! "
+!
+#
+$
+(
+)
+!
+! !
+" !
+" #
+$
+%
+(
+)
+!
+! !
+" !
+" #
+$
+%
+…
+…
+at
+(
+)
+!
+!
+!
+"
+#
+!
+!
+!
+!
+!
+!
+"
+"
+# $
+# !
+# $
+$
+$
+%
+&
+τ
+=
+=
++
+∑
+∑
+Obtain the inference result
+Start inference after the
+entire model is downloaded
+Conventional Download-and-Inference (DAI)
+Proposed SLIDE
+: Latency for data movement and model instantiation
+(
+)
+!
+!"
+! "
+!
+#
+$
+(
+)
+!
+!
+!
+"#$%"
+!
+!
+" #
+" !
+" #
+$
+%
+τ
+: Downloading latency and inference latency of user    for layer !"
+!
+: Computing resource allocation of user    for layer    
+!
+!"
+! !
+" #
+$
+!" : Bandwidth allocation for user !
+…
+…
+…
+…
+Inference
+timeline
+Download
+timeline
+!"
+!
+τ
+!"
+!
+τ
+! !
+" #
+τ
+!"
+!
+τ
+! !
+" #
+τ
+(
+)
+!
+! !
+" !
+" #
+$
+%
+(
+)
+!
+!"
+! "
+!
+#
+$
+(
+)
+!
+!"
+! "
+!
+#
+$
+(
+)
+!
+!"
+! "
+!
+#
+$
+(
+)
+!
+!
+"
+!
+" !
+" #
+$
+%
+−
+(
+)
+!
+! !
+" !
+" #
+$
+%
+Obtain the inference
+result at                     
+(
+)
+!
+!
+!
+!
+!
+"
+" #
+"
+$
+%
+!
+Wait for layer-2
+downloading
+Wait for layer-2
+inference
+(
+)
+(
+)
+!
+!
+!
+"
+!
+!
+"
+!
+!
+#$%
+!
+!
+!
+!
+!
+"
+# "
+# "
+# !
+# !
+#
+#
+"
+"
+$
+%
+&
+'
+τ
+′
+−
+′=
+
+
+=
++
+
+
+
+
+∑
+!
+Obtain the output of layer    at            
+!"
+(
+)
+!
+!
+!
+!
+!
+"
+" #
+"
+$
+%
+!
+(
+)
+!
+!"
+! "
+!
+#
+$
+Start the inference of layer    after: 
+• layer    is downloaded at           , and 
+• layer         inference completes at       (
+)
+!
+"
+!
+!
+!
+" #
+"
+"
+!
+$
+%
+−
+!
+!
+"
+!
+!
+!
+"
+# "
+"
+τ
+′
+′=∑
+!
+!" −
+!"
+!"
+Fig. 3.
+The procedures of conventional DAI and the proposed SLIDE
+framework, assuming that user k is provisioned with model i. In conventional
+DAI, user k begins inference only after downloading the entire model. In
+contrast, SLIDE enables user k to start inference for each layer as soon as
+the layer is downloaded and the inference of the previous layer is completed.
+inference. Moreover, while SLIDE focuses on full model
+downloads, it can extend to cases where users update models
+by downloading task-specific parameters (e.g., LoRA matrices
+for each LLM layer [9]).
+C. Latency Calculation
+Next, we provide the latency expression for SLIDE.
+1) Layer downloading latency: We consider an orthogonal
+frequency-division multiple access (OFDMA) downlink trans-
+mission between the user and the BS. The time required for
+user k to download layer li alone is given by
+τk,li =
+Sli
+ykBRk
+,
+(2)
+where Sli is the data size of layer li, and B is the total
+bandwidth of the BS. Rk = log2
+
+1 + P γk
+N0
+
+, where P is the
+transmit power spectral density of the BS, γk is the channel
+gain between user k and the BS, and N0 is the spectral density
+of the additive white Gaussian noise. Moreover, yk ∈[0, 1] is
+the scaling factor of the bandwidth allocation1, satisfying
+X
+k∈K
+yk ≤1.
+(3)
+2) Layer inference latency: The inference latency of user
+k with layer li ∈[1, Li] is given by
+Tk,i (zk,li) = V1 (k, li) + bkWliκk
+zk,lifk
+,
+(4)
+1In OFDMA systems, channels are partitioned into time-frequency resource
+blocks (RBs). However, it is mathematically equivalent to consider bandwidth
+allocation for analysis, which can be mapped to RB allocation. For simplicity,
+we call it “bandwidth allocation” in this paper.
+5
+where V1 (k, li) denotes the time required for user k to transfer
+layer li from system memory to GPU memory2. The second
+term in (4) represents the time required for user k to perform
+the forward propagation of layer li on the GPU [34]–[36].
+Moreover, bk denotes the inference batch size of the input data
+samples of user k, Wli represents the computation workload
+(in FLOPs) required by layer li to process a single data sample,
+κk denotes the computing intensity (in cycles/FLOP) of user
+k, and fk is the GPU clock frequency (in cycles/s) of user k.
+zk,li ∈[0, 1] is the GPU frequency allocation scaling factor of
+user k for the forward propagation of layer li, satisfying
+zk,li ≤xk,i ∀k ∈K, i ∈Ik, li ∈[1, Li] ,
+(5)
+which ensures that computing resources are only allocated to
+the downloaded model. Moreover, when li = 0, Tk,i (zk,0)
+represents the latency of user k for data movement and model
+instantiation, where zk,0 = 0.
+3) The E2E latency: By combining downloading and in-
+ference latency, we can obtain the E2E latency. First, as
+shown in Fig. 3, the time at which user k obtains the
+output of layer li can be expressed as tk,li (yk, Zk,i) =
+max
+(
+liP
+l′
+i=1
+Sl′
+i
+ykBRk , tk,li−1 (yk, Zk,i)
+)
++ Tk,i (zk,li),
+where
+Zk,i is the vector of zk,li,
+liP
+l′
+i=1
+Sl′
+i
+ykBRk
+=
+liP
+l′
+i=1
+τk,l′
+i is the
+time for user k to download the first li layers of model i,
+tk,li−1 (yk, Zk,i) denotes the time at which user k obtains the
+output of layer li −1, and tk,0 (yk, Zk,i) = Tk,i (zk,0).
+Next, the E2E latency of user k, when provisioned with
+model i, is the time of user k to obtain the output of the last
+layer of model i, which is hence given by
+tk,Li (yk, Zk,i)
+= max
+( Li
+X
+li=1
+Sli
+ykBRk
+, tk,Li−1 (yk, Zk,i)
+)
++ Tk,i (zk,Li) ,
+(6)
+which exhibits a recursive dependence across layers and is
+influenced by layer-wise downloading and inference latencies.
+D. Energy Consumption on Users
+Given that the process only involves downlink transmissions
+and the receiving power is typically small, we only consider
+the inference energy consumption on users. The inference
+energy consumption of user k with model i is given by
+ek,i (Zk,i) = e1 (k, i) +
+Li
+X
+li=1
+Ψkκ3
+kbkWli
+zk,lifk
+κk
+2
+,
+(7)
+where e1 (k, i) denotes the energy consumption of user k
+for the process of instantiating model i, moving input data,
+and transferring model i to the GPU memory3. The second
+2Layer- or block-wise parameter transfer and loading is supported by
+modern deep learning frameworks, e.g., PyTorch [32]. Without loss of gen-
+erality, the GPU memory transfer time is represented by V1(k, li), typically
+approximated as the ratio of the data size of layer li to the data rate between
+the system memory and GPU memory [33].
+3For generality, we use a constant e1 (k, i) to represent the energy con-
+sumption of these operations.
+term in (7) denotes the energy consumption of user k for
+forward propagation using model i [35]–[37], where Ψk is the
+power coefficient (in Watt/(cycle/s)3). Furthermore, the total
+inference energy consumption of user k is expressed as
+ek (Xk, Zk) =
+X
+i∈Ik
+xk,iek,i (Zk,i) ,
+(8)
+where Xk is the vector of xk,i. Moreover, ek (Xk, Zk) is
+subject to
+ek (Xk, Zk) ≤Qk, ∀k ∈K,
+(9)
+where Qk is the maximum inference energy budget of user k.
+E. Task Throughput Maximization Problem
+By considering latency and energy constraints, SLIDE aims
+to maximize the number of served users by jointly optimizing
+model provisioning xk,i ∈X, spectrum bandwidth allocation
+yk ∈Y, and computing resource allocation zk,li ∈Z. The
+problem formulation is given as follows.
+P1 : max
+X,Y,Z U (X, Y, Z) =
+X
+k∈K
+X
+i∈I
+xk,iI{tk,Li(yk,Zk,i)≤¯Tk}
+(10a)
+s.t. (1), (3), (5), (9),
+(10b)
+xk,i ≤I{tk,Li(yk,Zk,i)≤¯Tk}, ∀k ∈K, i ∈Ik,
+(10c)
+xk ∈{0, 1} , ∀k ∈K,
+(10d)
+yk ∈[0, 1] , ∀k ∈K,
+(10e)
+zk,li ∈[0, 1] , ∀k ∈K, li ∈[1, Li] .
+(10f)
+Here, constraint (1) guarantees that user k downloads at
+most one model from the BS, and constraint (3) limits the
+total bandwidth usage at the BS. Constraint (5) enforces that
+user k allocates computing resources only to the downloaded
+model. Constraint (9) ensures user k’s energy consumption is
+within the budget. Constraint (10c) ensures model i can be
+provisioned to user k if user k can obtain the inference result
+using model i within ¯Tk, where the binary indicator function
+I{tk,Li(yk,Zk,i)≤¯Tk} = 1 if and only if tk,Li (yk, Zk,i) ≤¯Tk.
+Remark 3. zk,li determines the per-layer GPU frequency of
+user k for layer li by considering the varying layer sizes
+and workloads. To avoid idle time between the completion of
+inference of the current layer and that of downloading the next
+layer, per-layer computing resource allocation and spectrum
+bandwidth allocation must be jointly optimized to maximize
+system capacity under latency and energy budgets.
+Note that P1 is formulated using a static “snapshot” of
+user locations and ignores user mobility, similar to prior
+work [20], [38]. However, our framework can be easily
+extended to mobile scenarios by considering the worst-case
+channel gain within the latency deadline, which can be
+estimated by predicting user trajectories and corresponding
+channel conditions [39], [40], when calculating (2). We will
+provide simulation results in Section V-C to demonstrate that
+our algorithm is robust under user mobility.
+In addition, although P1 is formulated for a single decision
+time slot, long-term user fairness across multiple time slots
+6
+can be incorporated without changing the core procedure of
+SLIDE. This can be achieved by introducing time-varying
+user weights that increase for previously unserved users [41],
+and by sequentially solving the per-slot optimization problem.
+Since the user weights are known at the beginning of each
+decision time slot, the per-slot optimization problem preserves
+the same problem property as P1, without affecting the
+subsequent algorithm design.
+P1 is a mixed-integer nonlinear programming (MINLP)
+problem involving both integer and continuous decision vari-
+ables, making it challenging to solve efficiently. Conventional
+methods for MINLP problems, such as the Branch-and-Bound
+algorithm, have exponential time complexity for obtaining op-
+timal solutions. To address this issue, we propose an efficient
+algorithm to solve P1, detailed in the next section.
+IV. ALGORITHM DESIGN
+This section develops a polynomial-time optimal solution
+approach to P1. We first determine the model provisioning
+and computing resource allocation for each user given the
+bandwidth allocation. Based on this, we equivalently transform
+P1 into a bandwidth allocation problem P3, followed by the
+determination of model provisioning and computing resource
+allocation. To solve P3, we design an iterative algorithm to
+determine each user’s minimum feasible bandwidth allocation,
+and then propose an algorithm that efficiently yields the
+optimal solution to P1.
+A. Model Provisioning and Computing Resource Allocation
+1) Computing resource allocation for user k with model
+i given yk: To conquer Problem P1, we begin by deriving
+the computing resource allocation for user k with model
+i ∈Ik, assuming that the spectrum bandwidth allocation is
+given for user k. The details are summarized in the following
+proposition.
+Proposition 1. Given spectrum bandwidth allocation yk ∈
+Y, the optimal computing resource allocation for user k with
+model i, denoted by ˆz∗
+k,li ∈ˆZ∗
+k,i, can be obtained by solving
+the following problem P2, where ˆzk,li ∈ˆZk,i.
+P2 : tk,Li
+
+yk, ˆZ∗
+k,i
+
+= min
+ˆZk,i
+tk,Li
+
+yk, ˆZk,i
+
+(11a)
+s.t. e1 (k, i) +
+Li
+X
+li=1
+Ψkκ3
+kbkWli
+ ˆzk,lifk
+κk
+2
+≤Qk,
+(11b)
+ˆzk,li ∈[0, 1] , ∀k ∈K, i ∈Ik,
+(11c)
+ˆzk,li ≤I{yk>0}, ∀k ∈K, i ∈Ik,
+(11d)
+where (11d) ensures that no computing resources of user k
+are allocated to model i when bandwidth allocation yk = 0,
+where the binary indicator function I{yk>0} = 1 if and only
+if yk > 0.
+Proof. The proof is provided in Appendix A.
+Next, we elaborate on how to solve P2. We begin by
+deriving the following proposition for P2, where ek,i (1)
+denotes the energy consumption of user k to perform forward
+propagation using model i with ˆzk,li = 1 for all layers.
+Proposition
+2.
+For
+the
+optimal
+solution
+ˆZ∗
+k,i
+to
+P2,
+tk,li−1
+
+yk, ˆZ∗
+k,i
+
+≥
+liP
+l′
+i=1
+τk,l′
+i holds when yk
+̸= 0 and
+ek,i (1) ≤Qk, ∀li ∈[2, Li].
+Proof. The proof is shown in Appendix B.
+Takeaway for Proposition 2: Proposition 2 shows that,
+given yk ̸= 0 and ek,i (1) ≤Qk, the inference completion time
+of layer li −1 is no earlier than the downloading completion
+time of layer li, ∀li ∈[2, Li]. In other words, the above
+conditions indicate that inference of layer li starts right after
+inference completion of layer li −1, ensuring continuous
+forward propagation without idle time between successive
+layers.
+With Proposition 2, we have the following result for ˆz∗
+k,li.
+Proposition 3. The optimal solution ˆz∗
+k,li to P2 is given by
+ˆz∗
+k,li =
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+0, if yk = 0,
+1, if yk ̸= 0 and ek,i (1) ≤Qk,
+˙zk,li,if yk ̸= 0, ek,i (1) > Qk, ek,i
+
+˙Zk,i
+
+≤Qk,
+and 0 ⪯˙Zk,i ⪯1,
+min
+
+1, max
+
+0,
+3q ρ∗
+li
+2η∗
+
+, otherwise.
+(13)
+Here, ˙zk,li ∈˙Zk,i is defined in (14), where Γk,li =
+bkWliκk
+fk
+and Q′
+k = Qk−e1(k,i)
+Ψkf 3
+k
+. Moreover, ρ∗
+li = 1 −
+Li
+P
+l′
+i=li
+µ∗
+l′
+i, and µ∗
+li
+and η∗denote the optimal Lagrange multipliers, which can be
+determined via iteration using the update rules in (12) [42],
+with µ∗
+Li = 0. In (12), µ(m)
+li
+, η(m), ˜z(m)
+k,li , and ρ(m)
+li
+represent
+the values of µli, η, ˜zk,li, and ρli in the m-th iteration, respec-
+tively, and δ(m)
+µli is the step size for updating µ(m)
+li
+. Additionally,
+χ
+
+µ(m)
+li
+, Q′
+k
+
+is the inverse function that determines η(m)
+from
+Li
+P
+li=1
+Γk,li min
+(
+1, max
+(
+0,
+
+ρ(m)
+li
+2η(m)
+ 2
+3 ))
+= Q′
+k in each
+iteration.
+˙zk,li =
+
+
+
+
+
+
+
+Γk,1
+τk,1+τk,2−sk,1−V1(k,1), if li = 1,
+Γk,li
+τk,li+1−V1(k,li), if 2 ≤li ≤Li −1,
+1, if li = Li.
+(14)
+Proof. The proof is shown in Appendix C.
+Based on Proposition 3, we have the following corollary for
+the computing resource allocation and the energy consumption
+in the optimal solution to P1.
+Corollary 1. For the optimal solution to P1, if user k is
+provisioned with model i and assigned a positive yk, then the
+following results hold.
+7
+• If ek,i (1) ≤Qk, then user k should perform forward
+propagation using model i with the maximum GPU clock
+frequency.
+• If both ek,i (1) and ek,i
+
+˙Zk,i
+
+exceed Qk, user k will
+consume the entire energy budget to complete forward
+propagation with model i.
+Proof. The proof is shown in Appendix D.
+2) Model provisioning and computing resource allocation
+for user k given yk: Based on ˆz∗
+k,li derived in Proposition 3,
+we establish the following proposition.
+Proposition 4. Given spectrum bandwidth allocation yk ∈Y,
+the optimal model provisioning for user k is
+˜x∗
+k,i =
+(
+1, if yk ̸= 0 and i = i∗,
+0, otherwise,
+(15)
+and the optimal computing resource allocation is
+˜z∗
+k,li =
+(
+ˆz∗
+k,li, if yk ̸= 0 and i = i∗,
+0, otherwise,
+(16)
+where i∗= arg min
+i∈Ik
+n
+tk,Li
+
+yk, ˆZ∗
+k,i
+  tk,Li
+
+yk, ˆZ∗
+k,i
+
+≤¯Tk
+o
+,
+and tk,Li
+
+yk, ˆZ∗
+k,i
+
+is the minimum E2E latency of user k
+with model i under yk, which can be obtained by solving P2.
+Proof. On the one hand, if yk = 0 or no model in Ik satisfies
+the latency constraint, then no feasible model provisioning or
+computing resource allocation exists that enables user k to
+satisfy I{tk,Li(yk,Zk,i)≤¯Tk} = 1. In this case, both ˜x∗
+k,i and
+˜z∗
+k,li are set to 0. On the other hand, if yk ̸= 0 and there
+exists at least one model in Ik satisfying the latency constraint,
+then provisioning user k with model i∗and setting ˜z∗
+k,li∗=
+ˆz∗
+k,li∗achieves the minimum E2E latency, thus preserving the
+optimality. This completes the proof.
+B. Equivalent Problem Transformation
+To simplify solving P1, we leverage Proposition 3 to
+decouple both model provisioning and computing resource
+allocation from the original problem, leading to the following
+proposition.
+Proposition 5. Solving P1 is equivalent to first solving the
+following problem P3 on bandwidth allocation and then
+determining the model provisioning and computing resource
+allocation using (15) and (16), respectively.
+P3 : max
+Y
+U
+
+˜X∗, Y, ˜Z∗
+(17a)
+s.t. (3), (10c), (10e),
+(17b)
+where ˜X∗and ˜Z∗are the vectors of ˜x∗
+k,i and ˜z∗
+k,li, respectively.
+They are functions of Y, which can be obtained from (15) and
+(16), respectively.
+Proof. From Proposition 4, the optimal model provisioning
+and computing resource allocation for user k, under any
+given yk, can be derived from (15) and (16), respectively.
+Substituting tk,Li
+
+yk, ˜Zk,i
+
+into P1 and removing the con-
+straints on X and Z lead to an equivalent problem P3,
+which depends solely on Y. Therefore, solving P3 for the
+spectrum bandwidth allocation, followed by determining the
+model provisioning and computing resource allocation based
+on (15) and (16), respectively, obtains the optimal solution to
+P1, which completes the proof.
+C. Optimal Solution Approach
+Based on Proposition 5, this subsection derives the optimal
+solution to P1. We begin by determining the minimum feasible
+bandwidth allocation ˇyk for user k, as defined in Definition 1.
+Based on ˇyk, we then derive the optimal bandwidth allocation
+for P3 and obtain the optimal solution to P1.
+Definition 1. Minimum feasible bandwidth allocation: Given
+a constant ˇyk
+∈[0, 1], the minimum feasible bandwidth
+allocation for user k is the smallest scaling factor of its band-
+width allocation such that no feasible model provisioning and
+computing resource allocation can enable user k to complete
+its inference task within ¯Tk if the allocated bandwidth is less
+than ˇyk.
+1) Minimum feasible bandwidth allocation for a user: We
+propose an iterative algorithm to derive ˇyk along with the cor-
+responding model provisioning ˇx∗
+k,i and computing resource
+allocation ˇz∗
+k,li for user k, as detailed in Algorithm 1. The algo-
+rithm iteratively searches ˇyk within the range
+h
+ˇy(min)
+k
+, ˇy(max)
+k
+i
+until the desired error bound ϵ is satisfied. The initial values
+of ˇy(min)
+k
+and ˇy(max)
+k
+are set to
+min
+i∈Ik
+Li
+P
+li=1
+Sli
+¯TkBRk
+and 1, respectively,
+in Line 1, where min
+i∈Ik
+Li
+P
+li=1
+Sli is the minimum model size
+among models in Ik. Then, Algorithm 1 adopts the bisection
+search method to determine ˇyk and the corresponding ˇx∗
+k,i
+and ˇz∗
+k,li. Specifically, in each iteration of the while loop
+from Line 5 to 16, ˇyk is first updated to the midpoint of the
+interval
+h
+ˇy(min)
+k
+, ˇy(max)
+k
+i
+. Next, from Line 7 to 9, Algorithm 1
+calculates ˆz∗
+k,li for each model in Ik under current ˇyk based
+on (13), and obtains the corresponding minimum E2E latency
+ρ(m)
+li
+= 1 −
+Li
+X
+l′
+i=li
+µ(m)
+l′
+i
+,
+η(m) = χ
+
+µ(m)
+li
+, Q′
+k
+
+,
+ˆz(m)
+k,li = min
+
+
+1, max
+
+
+0,
+3
+s
+ρ(m)
+li
+2η(m)
+
+
+
+
+
+,
+µ(m+1)
+li
+=
+
+
+
+
+
+max
+(
+0, µ(m)
+li
++ δ(m)
+µli
+"
+li+1
+P
+l′
+i=1
+τk,l′
+i −sk,1 −
+liP
+l′
+i=1
+V1 (k, l′
+i) −
+liP
+l′
+i=1
+Γk,l′
+i
+˜z(m)
+k,l′
+i
+#)
+, if 1 ≤li ≤Li −1,
+0, if li = Li.
+(12)
+8
+Algorithm 1: Minimum Feasible Bandwidth Alloca-
+tion Algorithm
+Input: k and ϵ.
+Output: ˇyk, ˇx∗
+k,i, and ˇz∗
+k,li.
+1 Initialize: ˇyk = 0, ˇx∗
+k,i = 0, and ˇz∗
+k,li = 0.
+ˇy(min)
+k
+=
+min
+i∈Ik
+Li
+P
+li=1
+Sli
+¯TkBRk
+and ˇy(max)
+k
+= 1.
+2 if ˇy(min)
+k
+> 1 then
+3
+Return.
+4 end
+5 while
+ˇy(min)
+k
+−ˇy(max)
+k
+ ≥ϵ do
+6
+ˇyk = ˇy(min)
+k
++ˇy(max)
+k
+2
+.
+7
+for i ∈Ik do
+8
+Calculate ˆz∗
+k,li from (13) by solving P2 under
+ˇyk and obtain the corresponding
+tk,Li
+
+ˇyk, ˆZ∗
+k,i
+
+.
+9
+end
+10
+i∗=
+arg min
+i∈Ik
+n
+tk,Li
+
+ˇyk, ˆZ∗
+k,i
+  tk,Li
+
+ˇyk, ˆZ∗
+k,i
+
+≤¯Tk
+o
+.
+11
+if i∗exists then
+12
+ˇy(max)
+k
+= ˇyk.
+13
+else
+14
+ˇy(min)
+k
+= ˇyk.
+15
+end
+16 end
+17 if i∗exists then
+18
+ˇyk = ˇy(max)
+k
+.
+19
+Calculate ˜x∗
+k,i and ˜z∗
+k,li under ˇyk from (15) and
+(16), respectively.
+20
+ˇx∗
+k,i = ˜x∗
+k,i, and ˇz∗
+k,li = ˜z∗
+k,li.
+21 else
+22
+ˇyk = 0, ˇx∗
+k,i = 0, and ˇz∗
+k,li = 0.
+23 end
+tk,Li
+
+ˇyk, ˆZ∗
+k,i
+
+. Then, in Line 10, the algorithm identifies
+model i∗for user k with the minimum tk,Li
+
+ˇyk, ˆZ∗
+k,i
+
+among
+the models satisfying the latency requirement ¯Tk. If such a
+model i∗exists, then ˇy(max)
+k
+is decreased to ˇyk; otherwise,
+ˇy(min)
+k
+is increased to ˇyk. Upon convergence, if i∗has been
+identified in Line 10, then the algorithm determines ˇyk in
+Line 18, calculates ˜x∗
+k,i and ˜z∗
+k,li in Line 19, and obtains ˇx∗
+k,i
+and ˇz∗
+k,li corresponding to ˇyk in Line 20. Otherwise, ˇyk, ˇx∗
+k,i,
+and ˇz∗
+k,li are set to 0.
+2) Optimal solution to P1: Based on ˇyk calculated from
+Algorithm 1, we propose an efficient algorithm to obtain the
+maximum task throughput U ∗and determine the optimal x∗
+k ∈
+X∗, y∗
+k ∈Y∗, and z∗
+k,li ∈Z∗to P1. The proposed algorithm
+is outlined in Algorithm 2 and detailed below. Algorithm 2
+begins by invoking Algorithm 1 in Line 2 to calculate ˇyk,
+ˇx∗
+k,i, and ˇz∗
+k,li for all users. Then, in each iteration of the
+while loop from Line 3 to 10, the algorithm first identifies
+user k∗with the minimum value of ˇyk among the users in K′,
+Algorithm 2: Task Throughput Maximization Algo-
+rithm
+Input: K and Ik.
+Output: X∗, Y∗, Z∗, and U ∗.
+1 Initialize: K′ = K and U ∗= 0. Set K∗= ∅, and set
+X∗, Y∗, and Z∗as 0.
+2 Calculate ˇyk, ˇx∗
+k,li, and ˇz∗
+k,li for k ∈K from
+Algorithm 1.
+3 while
+P
+k∈K∗y∗
+k ≤1 and ∃k, ˇyk > 0 do
+4
+k∗= arg min
+k∈K′
+{ˇyk}.
+5
+if
+P
+k∈K∗y∗
+k + y∗
+k∗> 1 then
+6
+Break.
+7
+end
+8
+y∗
+k∗= ˇyk∗, x∗
+k∗,i = ˇxk∗,i, and z∗
+k∗,li = ˇz∗
+k∗,li.
+9
+U ∗= U ∗+ 1. K∗= K∗∪{k∗}. K′ = K′ \ {k∗}.
+10 end
+Edge server
+Edge device
+(Jetson Orin Nano)
+Edge device
+(Jetson Orin NX)
+Fig. 4. Experimental hardware system with an edge server (functioning as a
+BS) and multiple edge devices, including Jetson Orin Nano with 4 GB RAM
+and Jetson Orin NX with 16 GB RAM.
+which is the set of users yet to be served, in Line 4. Then,
+in Line 8, it assigns ˇyk∗, ˇx∗
+k∗,i, and ˇz∗
+k∗,li as y∗
+k∗, x∗
+k∗,i, and
+z∗
+k∗,li, respectively. Finally, user k∗is moved from K′ to K∗,
+which is the set of served users. The procedure is repeated
+until the total bandwidth is used up.
+We next state the following theorems for Algorithm 2.
+Theorem 1. The proposed Algorithm 2 obtains the optimal
+solution to P1.
+Proof. The proof is shown in Appendix E.
+Theorem 2. The proposed Algorithm 2 has a polynomial time
+complexity O
+ K2 + KILmax
+
+, where Lmax = max
+i∈I {Li}.
+Proof. The proof is shown in Appendix F.
+V. NUMERICAL RESULTS
+This section evaluates the performance of SLIDE through
+device measurements and extensive simulations. We describe
+the experimental setup, evaluate SLIDE under varying settings,
+investigate the impact of user mobility and computing capa-
+bility, conduct ablation studies, and compare the running time
+of the proposed algorithm with general MINLP algorithms.
+A. Experimental Setup
+We adopt a hybrid testing approach for our experiment:
+Communication latency is assessed through simulations to
+consider large-scale cellular users, while computing latency is
+9
+measured using real devices, as shown in Fig. 4. In our simula-
+tion settings, the coverage radius and transmit power spectral
+density of the BS are set to 200 m and -29 dBm/Hz [16],
+respectively, with K = {60, 70, 80, 90, 100} users uniformly
+distributed within the coverage area. Rayleigh fading channels
+are considered. The total bandwidth B of the BS is {200,
+300, 400, 500, 600} MHz, and the E2E latency requirement
+¯Tk ranges from 600 to 1000 ms [3]. Moreover, the BS
+hosts I = 48 AI models, which comprise CNNs and ViTs,
+with full-precision, 16-bit, and 8-bit variants of ResNet-18,
+ResNet-34, ResNet-50 [18], and DeiT-S [43]. The inference
+accuracy of models in I, which varies with model structure
+and precision, ranges from approximately 75% to 95%, with
+lower-precision variants generally achieving lower accuracy.
+Each user generates one inference task, selected from 10 task
+types, with an inference accuracy requirement ranging from
+80% to 90%. Each task can be served by models with one
+to four of the aforementioned models. For each user, Ik is
+constructed by selecting the set of models that can serve
+user k, with the desired accuracy requirements. To reflect
+the heterogeneity in computing capabilities, we consider two
+types of user devices: more powerful Jetson Orin NX devices
+and less powerful Jetson Orin Nano devices, with maximum
+GPU frequencies of 918 MHz and 624.75 MHz, respectively.
+The proportion of Jetson Orin Nano users is set to θ =
+{0%, 20%, 40%, 60%, 80%, 100%}. Inference is performed
+with the image sample from the CIFAR-10 dataset [17] with
+a batch size of 1. The inference energy budget Qk of user
+k is given by Qk = βk ¯Pk ¯Tk, where ¯Pk denotes the power,
+set to 10 Watt for Jetson Orin Nx [44] and 5 Watt for Jetson
+Orin Nano [45], and βk = {22%, 24%, 26%, 28%, 30%} is
+the power scaling factor of user k.
+We compare our SLIDE with the following baselines:
+• Conventional DAI: the conventional downloading and
+inference approach, where users start inference only
+after the entire model is downloaded [19]. To ensure
+a fair comparison, this baseline adopts the same user
+selection, bandwidth allocation, and computing resource
+allocation procedures as SLIDE by solving problem P1
+using Algorithm 2, with the only difference lying in the
+E2E latency model. Specifically, according to (6), the
+E2E latency of user k in conventional DAI is given by
+tk,Li (yk, Zk,i) =
+Li
+P
+li=1
+Sli
+ykBRk +
+Li
+P
+li=1
+Tk,i (zk,li), which is
+the sum of model downloading and inference latencies,
+corresponding to the sequential model downloading and
+inference.
+• B&B (Branch-and-Bound): a general algorithm for
+solving MINLP problems. Since both SLIDE and B&B
+obtain the optimal solution to P1, we only compare them
+in terms of algorithm running time.
+To compare the algorithm performance, we use the served
+user ratio as the evaluation metric, defined as the ratio of
+the number of users successfully served within the latency
+requirements to the total number of users.
+B. Performance Evaluation
+This subsection evaluates the performance of SLIDE by
+varying B, K, ¯Tk, θ, and βk.
+Fig. 5(a) illustrates the performance of SLIDE under varying
+B. The served user ratio of both SLIDE and conventional DAI
+increases almost linearly as B increases. Moreover, SLIDE
+consistently outperforms conventional DAI, with an average
+14.1% higher served user ratio across varying B. Fig. 5(b)
+examines the performance of SLIDE as K varies. The served
+user ratios of both SLIDE and conventional DAI decline
+with increasing K. However, SLIDE consistently outperforms
+conventional DAI, achieving a 14.7% higher served user ratio
+on average. Notably, SLIDE can still serve over 60.4% users
+even when K = 100, demonstrating its effectiveness under
+high user density. The performance gain of SLIDE is also
+evident in Fig. 5(c). With varying ¯Tk, SLIDE achieves an
+average served user ratio that is 14.4% higher than that of
+conventional DAI.
+Fig. 5(d) shows the performance of SLIDE as θ varies. On
+average, SLIDE improves the served user ratio by 13.5%.
+As θ increases, the performance of conventional DAI de-
+grades significantly, whereas SLIDE maintains stably. Notably,
+when all users are Jetson Orin Nano devices with limited
+computing capabilities, SLIDE can serve 68.4% of users,
+which is 16.7% higher than conventional DAI. These results
+demonstrate that SLIDE sustains high task throughput even
+with more users equipped with limited computing capabilities.
+Fig. 5(e) illustrates the impact of βk, which controls the energy
+budget, on the served user ratio. As anticipated, increasing βk
+(equivalent to raising Qk) enhances the served user ratio. On
+average, SLIDE achieves a 14.2% higher served user ratio than
+conventional DAI as βk varies.
+Fig. 6 evaluates the performance of SLIDE under different
+model libraries with various precision levels, including full
+precision, 16-bit quantization, 8-bit quantization, and a mix
+of them (which is the default setting in our simulations). With
+varying B and K, both Fig. 6(a) and Fig. 6(b) demonstrate that
+SLIDE with mixed-precision models significantly enhances the
+served user ratio compared with only full-precision or 16-
+bit models. Moreover, the performance advantage over the
+8-bit model library becomes especially notable when total
+bandwidth is sufficient. These results demonstrate that SLIDE
+can effectively utilize a model library with diverse precision
+versions, enabling efficient model provisioning for users.
+C. Impact of User Mobility
+Fig. 7 analyzes the impact of user mobility on the served
+user ratio in both static and dynamic scenarios with slow
+(1–2 m/s) and fast (5–12 m/s) user mobility. As shown
+in Fig. 7(a), the served user ratio of SLIDE decreases by
+1.1% and 2.3% under slow and fast mobility, respectively;
+in Fig. 7(b), the reductions are 1.2% and 2.2%, respectively.
+These results demonstrate that our algorithm remains robust
+under user mobility, although the resource allocation is deter-
+mined using the initial user locations before they move.
+10
+2 0 0
+3 0 0
+4 0 0
+5 0 0
+6 0 0
+0 . 3
+0 . 4
+0 . 5
+0 . 6
+0 . 7
+0 . 8
+0 . 9
+1 . 0
+S e r v e d  u s e r  r a t i o
+T o t a l  b a n d w i d t h  
+ ( M
+H z )
+ S L I D E
+ C o n v e n t i o n a l  D A I
+(a) Served user ratio vs. B.
+6 0
+7 0
+8 0
+9 0
+1 0 0
+0 . 3
+0 . 4
+0 . 5
+0 . 6
+0 . 7
+0 . 8
+0 . 9
+1 . 0
+S e r v e d  u s e r  r a t i o
+N u m b e r  o f  u s e r s  
+ S L I D E
+ C o n v e n t i o n a l  D A I
+(b) Served user ratio vs. K.
+6 0 0
+7 0 0
+8 0 0
+9 0 0
+1 0 0 0
+0 . 3
+0 . 4
+0 . 5
+0 . 6
+0 . 7
+0 . 8
+0 . 9
+1 . 0
+S e r v e d  u s e r  r a t i o
+L a t e n c y  r e q u i r e m e n t  
+ ( m s )
+ S L I D E
+ C o n v e n t i o n a l  D A I
+(c) Served user ratio vs. ¯Tk.
+0
+2 0
+4 0
+6 0
+8 0
+1 0 0
+0 . 4
+0 . 5
+0 . 6
+0 . 7
+0 . 8
+S e r v e d  u s e r  r a t i o
+P r o p o r t i o n  o f  J e t s o n  O r i n  N a n o   ( %
+)
+ S L I D E
+ C o n v e n t i o n a l  D A I
+(d) Served user ratio vs. θ.
+2 2
+2 4
+2 6
+2 8
+3 0
+0 . 4
+0 . 5
+0 . 6
+0 . 7
+0 . 8
+ S L I D E
+ C o n v e n t i o n a l  D A I
+S e r v e d  u s e r  r a t i o
+P o w e r  s c a l i n g  f a c t o r  
+ ( %
+)
+(e) Served user ratio vs. βk.
+Fig. 5.
+Served user ratio of SLIDE, evaluated on the Jetson Orin Nano and Jetson Orin NX running at GPU frequencies of 624.75 MHz and 918 MHz,
+respectively. The default values of B, K, ¯Tk, θ, and βk, are set to 400 MHz, 80, 800 ms, 60%, and 26%, respectively.
+Conventional DAI (All precision levels)
+Conventional DAI (8-bit quantization)
+Conventional DAI (16-bit quantization)
+Conventional DAI (Full precision level)
+SLIDE (All precision levels)
+SLIDE (8-bit quantization)
+SLIDE (16-bit quantization)
+SLIDE (Full precision level)
+200
+300
+400
+500
+600
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Served user ratio
+Total bandwidth
+(MHz)
+(a) Served user ratio of SLIDE vs.
+B under different model libraries.
+40
+50
+60
+70
+80
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Served user ratio
+Number of users
+(b) Served user ratio of SLIDE vs.
+K under different model libraries.
+Fig. 6.
+Performance of SLIDE under different model libraries, where the
+default for K is set to 60, and the inference accuracy requirement of users
+ranges from 87% to 95%. The default values of GPU frequencies, B, ¯Tk, θ,
+and βk are consistent with Fig. 5.
+2 0 0
+3 0 0
+4 0 0
+5 0 0
+6 0 0
+0 . 3
+0 . 4
+0 . 5
+0 . 6
+0 . 7
+0 . 8
+0 . 9
+1 . 0
+3 9 0
+4 0 0
+4 1 0
+0 . 5 1
+0 . 5 4
+0 . 5 7
+ S L I D E  ( s t a t i c )
+ S L I D E  ( [ 1 , 2 ]  m / s )
+ S L I D E  ( [ 5 , 1 2 ]  m / s )
+ C o n v e n t i o n a l  D A I  ( s t a t i c )
+ C o n v e n t i o n a l  D A I  ( [ 1 , 2 ]  m / s )
+ C o n v e n t i o n a l  D A I  ( [ 5 , 1 2 ]  m / s )
+S e r v e d  u s e r  r a t i o
+T o t a l  b a n d w i d t h  
+ ( M
+H z )
+(a) Served user ratio vs. B in mo-
+bile scenarios.
+6 0
+7 0
+8 0
+9 0
+1 0 0
+0 . 3
+0 . 4
+0 . 5
+0 . 6
+0 . 7
+0 . 8
+0 . 9
+1 . 0
+7 5
+8 0
+8 5
+0 . 4 9
+0 . 5 4
+0 . 5 9
+ S L I D E  ( s t a t i c )  
+ S L I D E  ( [ 1 , 2 ]  m / s )  
+ S L I D E  ( [ 5 , 1 2 ]  m / s )
+ C o n v e n t i o n a l  D A I  ( s t a t i c )
+ C o n v e n t i o n a l  D A I  ( [ 1 , 2 ]  m / s )
+ C o n v e n t i o n a l  D A I  ( [ 5 , 1 2 ]  m / s )
+S e r v e d  u s e r  r a t i o
+N u m b e r  o f  u s e r s  
+(b) Served user ratio vs. K in mo-
+bile scenarios.
+Fig. 7. Performance of SLIDE in mobile scenarios, where the default values
+of GPU frequencies, B, K, ¯Tk, θ, and βk are consistent with Fig. 5.
+D. Impact of Device Computing Capability
+Fig. 8 investigates the impact of user device computing
+capability on the performance of SLIDE. We evaluate both
+conventional DAI and SLIDE with Jetson Orin NX under two
+GPU frequency settings: 306 MHz and 918 MHz. When the
+GPU frequency is reduced from 918 MHz to 306 MHz, the
+served user ratio of conventional DAI declines by 4.8%, 4.5%,
+and 4.5% in Figs. 8(a), 8(c), and 8(b), respectively, while the
+corresponding degradations of SLIDE are only 1.3%, 1.3%,
+and 1.4%. This implies that SLIDE, by overlapping com-
+munications and computing, can effectively utilize computing
+resources of devices and maintain robust performance across
+devices with heterogeneous computing capabilities.
+E. Ablation Study
+This subsection analyzes the impact of model provision-
+ing, bandwidth allocation, and computing resource allocation
+in SLIDE through ablation experiments. Fig. 9 compares
+SLIDE with the counterparts under equal bandwidth allo-
+cation, greedy-based model provisioning, and equal-energy
+computing resource allocation. In equal bandwidth alloca-
+tion, the total bandwidth B is evenly distributed to K sub-
+channels, with each sub-channel assigned to a single user with
+bandwidth
+B
+K . In greedy-based model provisioning, the BS
+provisions user k the model with the minimum model size
+in Ik. In equal-energy computing resource allocation, each
+served user fully utilizes their energy budget, and an equal
+amount of energy is allocated to each layer.
+Fig. 9(a) demonstrates that SLIDE consistently surpasses
+both the equal-bandwidth-allocation (EBA), and greedy-based-
+model-provisioning (GBMP), and equal-energy-computing-
+resource-allocation (EECRA) algorithms across varying B.
+Specifically, SLIDE improves the served user ratio by 43.6%,
+11.9%, and 6.4% on average compared with the EBA, GBMP,
+and EECRA methods, respectively. Moreover, at B = 200
+MHz, SLIDE provides a 46.3% higher served user ratio than
+the EBA algorithm, which nearly fails to serve any users. This
+indicates that SLIDE can significantly enhance the served user
+ratio compared with the EBA method when the communication
+resource is limited. At B = 600 MHz, SLIDE provides
+a 19.7% improvement over GBMP. This is because SLIDE
+enhances the served user ratio by balancing the communication
+cost and the computing workload of models to perform more
+efficient model provisioning, whereas GBMP only minimizes
+communication cost without considering computing workload.
+A similar performance benefit can also be observed in
+Fig. 9(b). On average, SLIDE improves the served user ratio by
+39.7%, 13.4%, and 5.4% over the EBA, GBMP, and EECRA
+methods, respectively. Fig. 9(c) also highlights the superior
+performance advantage of SLIDE as βk increases. Compared
+with the EBA, GBMP, and EECRA methods, SLIDE achieves
+an average served user ratio improvement of 44.0%, 14.0%,
+and 6.5%, respectively. At βk = 60%, SLIDE outperforms
+the EECRA method by 6.8%. These results underscore the
+importance of dedicated computing resource allocation during
+inference.
+F. Algorithm Running Time Comparisons
+Fig. 10 compares the running time between the proposed
+algorithm and the B&B algorithm. To run the B&B algorithm
+11
+2 0 0
+3 0 0
+4 0 0
+5 0 0
+6 0 0
+0 . 2
+0 . 3
+0 . 4
+0 . 5
+0 . 6
+0 . 7
+0 . 8
+0 . 9
+1 . 0
+3 9 0
+4 0 0
+4 1 0
+0 . 6 6
+0 . 6 9
+0 . 7 2
+S e r v e d  u s e r  r a t i o
+T o t a l  b a n d w i d t h  
+ ( M
+H z )
+ S L I D E  ( G P U  f r e q . :  9 1 8  M
+H z )
+ S L I D E  ( G P U  f r e q . :  3 0 6  M
+H z )
+ C o n v e n t i o n a l  D A I  ( G P U  f r e q . :  9 1 8  M
+H z )
+ C o n v e n t i o n a l  D A I  ( G P U  f r e q . :  3 0 6  M
+H z )
+(a) Served user ratio vs. B at differ-
+ent GPU frequencies.
+6 0
+7 0
+8 0
+9 0
+1 0 0
+0 . 2
+0 . 3
+0 . 4
+0 . 5
+0 . 6
+0 . 7
+0 . 8
+0 . 9
+1 . 0
+7 8
+8 0
+8 2
+0 . 6 5
+0 . 7 0
+0 . 7 5
+ S L I D E  ( G P U  f r e q . :  9 1 8  M
+H z )
+ S L I D E  ( G P U  f r e q . :  3 0 6  M
+H z )
+ C o n v e n t i o n a l  D A I  ( G P U  f r e q . :  9 1 8  M
+H z )
+ C o n v e n t i o n a l  D A I  ( G P U  f r e q . :  3 0 6  M
+H z )
+S e r v e d  u s e r  r a t i o
+N u m b e r  o f  u s e r s  
+(b) Served user ratio vs. K at differ-
+ent GPU frequencies.
+2 2
+2 4
+2 6
+2 8
+3 0
+0 . 2
+0 . 3
+0 . 4
+0 . 5
+0 . 6
+0 . 7
+0 . 8
+0 . 9
+1 . 0
+2 4
+2 6
+2 8
+0 . 6 6
+0 . 6 9
+0 . 7 2
+ S L I D E  ( G P U  f r e q . :  9 1 8  M
+H z )
+ S L I D E  ( G P U  f r e q . :  3 0 6  M
+H z )
+ C o n v e n t i o n a l  D A I  ( G P U  f r e q . :  9 1 8  M
+H z )
+ C o n v e n t i o n a l  D A I  ( G P U  f r e q . :  3 0 6  M
+H z )
+S e r v e d  u s e r  r a t i o
+P o w e r  s c a l i n g  f a c t o r  
+ ( %
+)
+(c) Served user ratio vs. βk at differ-
+ent GPU frequencies.
+Fig. 8. Performance comparison of SLIDE and conventional DAI on Jetson Orin NX (θ = 0) under different computing capabilities, with the GPU frequency
+set to 306 MHz and 918 MHz, respectively. The default values of B, K, ¯Tk, and βk follow those in Fig. 5.
+2 0 0
+3 0 0
+4 0 0
+5 0 0
+6 0 0
+0 . 0
+0 . 2
+0 . 4
+0 . 6
+0 . 8
+ S L I D E
+ E q u a l - e n e r g y  c o m p u t i n g  r e s o u r c e  a l l o c a t i o n
+ G r e e d y - b a s e d  m o d e l  p r o v i s i o n i n g
+ E q u a l  b a n d w i d t h  a l l o c a t i o n
+S e r v e d  u s e r  r a t i o
+T o t a l  b a n d w i d t h  
+ ( M
+H z )
+(a) Served user ratio vs. B in the
+ablation study.
+10
+20
+30
+40
+0.0
+0.3
+0.6
+0.9
+SLIDE
+Equal-energy computing resource allocation
+Equal bandwidth allocation
+Greedy-based model provisioning
+Served user ratio
+Number of users
+(b) Served user ratio vs. K in the
+ablation study.
+5 0
+5 2
+5 4
+5 6
+5 8
+6 0
+0 . 2
+0 . 4
+0 . 6
+0 . 8
+ S L I D E
+ E q u a l - e n e r g y  c o m p u t i n g  r e s o u r c e  a l l o c a t i o n
+ E q u a l  b a n d w i d t h  a l l o c a t i o n
+ G r e e d y - b a s e d  m o d e l  p r o v i s i o n i n g
+S e r v e d  u s e r  r a t i o
+P o w e r  s c a l i n g  f a c t o r  
+ ( %
+)
+(c) Served user ratio vs. βk in the
+ablation study.
+Fig. 9. Ablation study on spectrum bandwidth allocation, model provisioning, and computing resource allocation. The default values of GPU frequencies, B,
+and θ follow those in Fig. 5, and the defaults for K, ¯Tk, and βk are set to 25, 300 ms, and 56%, respectively.
+1
+2
+3
+4
+5
+6
+0
+4 0 0
+8 0 0
+1 2 0 0
+1 6 0 0
+2 0 0 0
+1
+2
+3
+4
+5
+6
+0 . 0
+0 . 1
+0 . 2
+1
+2
+2 0
+4 5
+7 0
+9 5
+1 2 0
+A v e r a g e  r u n n i n g  t i m e  ( s )
+N u m b e r  o f  u s e r s  
+ B & B
+ S L I D E
+(a) Algorithm running time vs. K.
+1
+2
+3
+4
+5
+6
+0
+4 0 0
+8 0 0
+1 2 0 0
+1 6 0 0
+2 0 0 0
+1
+2
+3
+4
+5
+6
+0 . 0
+0 . 1
+0 . 2
+1
+2
+2 0
+4 0
+6 0
+8 0
+1 0 0
+A v e r a g e  r u n n i n g  t i m e  ( s )
+N u m b e r  o f  m o d e l s  
+ B & B
+ S L I D E
+(b) Algorithm running time vs. I.
+Fig. 10. Running time comparison between the proposed algorithm and the
+B&B algorithm using Jetson Orin Nano under varying K, with B = 200
+MHz, ¯Tk = 800 ms, and θ = 1. Both the default values of K and I are set
+to 3, and the defaults for the GPU frequency of the Jetson Orin Nano and βk
+are the same as those in Fig. 5.
+efficiently, both K and I are set to {1, 2, 3, 4, 5, 6}. As shown
+in Fig. 10, the proposed algorithm significantly outperforms
+the B&B algorithm in terms of running time. The running
+time of the proposed algorithm increases nearly linearly as
+K and I grow, while the B&B algorithm exhibits exponential
+growth. On average, the proposed algorithm is 5,893 times and
+5,442 times faster than the B&B algorithm in Fig. 10(a) and
+Fig. 10(b), respectively. Specifically, when K = 6 and I = 6,
+the proposed algorithm is 14,689 times and 12,697 times faster
+than the B&B algorithm. These results indicate the efficiency
+of the proposed algorithm in handling large-scale optimization
+problems.
+VI. CONCLUSIONS
+In this paper, we proposed a simultaneous model down-
+loading and inference (SLIDE) framework to maximize in-
+ference task throughput for users in wireless networks. This
+framework allows end users to perform inference with the
+downloaded model layers while concurrently receiving the
+remaining layers. To optimize model provisioning, spectrum
+bandwidth allocation, and computing resource allocation for
+multi-user SLIDE systems, we formulated a task throughput
+maximization problem under end-to-end latency, communi-
+cation resource, and energy constraints. To efficiently solve
+this problem, we transformed the original problem into solv-
+ing the spectrum bandwidth allocation problem, followed by
+determining the optimal model provisioning and computing
+resource allocation based on its derived solution. We then de-
+signed an efficient algorithm that obtains the optimal solution
+in polynomial time. The proposed algorithm demonstrates a
+significant performance gain compared with the conventional
+DAI framework without overlapping model downloading and
+inference in wireless networks.
+REFERENCES
+[1] R. Liu, L. Garcia, Z. Liu, B. Ou, and M. Srivastava, “SecDeep: Secure
+and performant on-device deep learning inference framework for mobile
+and IoT devices,” in Proc. Int. Conf. Internet Things Des. Implement.,
+Charlottesvle, VA, USA, May 2021, p. 67–79.
+[2] S. Liu, D. Wen, D. Li, Q. Chen, G. Zhu, and Y. Shi, “Energy-efficient
+optimal mode selection for edge AI inference via integrated sensing-
+communication-computation,” IEEE Trans. Mobile Comput., vol. 23,
+no. 12, pp. 14 248–14 262, Dec. 2024.
+[3] 3GPP, “3rd generation partnership project; Technical specification group
+services and system aspects; Study on traffic characteristics and perfor-
+mance requirements for AI/ML model transfer in 5GS; (Release 18),”
+3rd Generation Partnership Project (3GPP), Technical Specification (TS)
+22.874, Dec. 2021, version 18.2.0.
+[4] Y. Mao, X. Yu, K. Huang, Y.-J. A. Zhang, and J. Zhang, “Green edge
+AI: A contemporary survey,” Proc. IEEE, pp. 1–32, early access 2024.
+[5] K. Huang, H. Wu, Z. Liu, and X. Qi, “In-situ model downloading
+to realize versatile edge AI in 6G mobile networks,” IEEE Wireless
+Commun., vol. 30, no. 3, pp. 96–102, Jun. 2023.
+[6] G. Team, R. Anil, S. Borgeaud, Y. Wu, J.-B. Alayrac, J. Yu, R. Soricut,
+J. Schalkwyk, A. M. Dai, A. Hauth et al., “Gemini: A family of highly
+capable multimodal models,” arXiv preprint arXiv:2312.11805, 2023.
+12
+[7] J. Tan, A. Noulas, D. S´aez, and R. Schifanella, “Notable site recognition
+using deep learning on mobile and crowd-sourced imagery,” in Proc.
+2020 21st IEEE Int. Conf. Mobile Data Manage. (MDM), Versailles,
+France, Aug. 2020, pp. 137–147.
+[8] Y. Ma, S. Hu, Z. Fang, Y. Ji, Y. Deng, and Y. Fang, “Sense4FL:
+Vehicular crowdsensing enhanced federated learning for autonomous
+driving,” arXiv preprint arXiv:2503.17697, 2025.
+[9] E. J. Hu, Y. Shen, P. Wallis, Z. Allen-Zhu, Y. Li, S. Wang, L. Wang,
+and W. Chen, “LoRA: Low-rank adaptation of large language models,”
+in Proc. Int. Conf. Learn. Represent. (ICLR), Apr. 2022, pp. 1–13.
+[10] H. Wu, Q. Zeng, and K. Huang, “Efficient multiuser AI downloading
+via reusable knowledge broadcasting,” IEEE Trans. Wireless Commun.,
+vol. 23, no. 8, pp. 10 459–10 472, Aug. 2024.
+[11] S. Hu, Z. Fang, Z. Fang, Y. Deng, X. Chen, Y. Fang, and S. T. W.
+Kwong, “AgentsCoMerge: Large language model empowered collabo-
+rative decision making for ramp merging,” IEEE Trans. Mobile Comput.,
+vol. 24, no. 10, pp. 9791–9805, Oct. 2025.
+[12] OPENSIGNAL, “Hong Kong mobile network experience report,”
+2023. [Online]. Available: https://www.opensignal.com/reports/2023/11/
+hongkong/mobile-network-experience
+[13] J. Hao, P. Subedi, I. K. Kim, and L. Ramaswamy, “Characterizing
+resource heterogeneity in edge devices for deep learning inferences,”
+in Proc. 2021 Syst. Netw. Telemetry Anal. (SNTA), Jun. 2021, pp. 21–
+24.
+[14] F. Zhu, M. Futrega, H. Bao, S. B. Eryilmaz, F. Kong, K. Duan, X. Zheng,
+N. Angel, M. Jouanneaux, M. Stadler et al., “FastDimeNet++: Training
+DimeNet++ in 22 minutes,” in Proc. 52nd Int. Conf. Parallel Process.,
+Salt Lake City, UT, USA, Aug. 2023, pp. 274–284.
+[15] Y. Sui, H. Yu, Y. Hu, J. Li, and H. Wang, “Pre-warming is not enough:
+Accelerating serverless inference with opportunistic pre-loading,” in
+Proc. 2024 ACM Symp. Cloud Comput., Redmond, WA, USA, Nov.
+2024, p. 178–195.
+[16] 3GPP, “3rd generation partnership project; Technical specification group
+radio access network; NR; Base station (BS) radio transmission and
+reception; (Release 18),” 3rd Generation Partnership Project (3GPP),
+Technical Specification (TS) 38.104, Dec. 2024, version 18.8.0.
+[17] A. Krizhevsky, G. Hinton et al., “Learning multiple layers of features
+from tiny images,” Apr. 2009.
+[18] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for
+image recognition,” in Proc. IEEE Conf. Comput. Vis. Pattern Recognit.
+(CVPR), Las Vegas, NV, USA, Jun. 2016, pp. 770–778.
+[19] G. Qu, Z. Lin, F. Liu, X. Chen, and K. Huang, “TrimCaching: Parameter-
+sharing AI model caching in wireless edge networks,” in Proc. IEEE Int.
+Conf. Distrib. Comput. Syst. (ICDCS), Jersey City, NJ, USA, Jul. 2024,
+pp. 36–46.
+[20] W. Shi, S. Zhou, Z. Niu, M. Jiang, and L. Geng, “Multiuser co-
+inference with batch processing capable edge server,” IEEE Trans.
+Wireless Commun., vol. 22, no. 1, pp. 286–300, Jan. 2023.
+[21] J. Yan, S. Bi, and Y.-J. A. Zhang, “Optimal model placement and online
+model splitting for device-edge co-inference,” IEEE Trans. Wireless
+Commun., vol. 21, no. 10, pp. 8354–8367, Oct. 2022.
+[22] W. Shi, Y. Hou, S. Zhou, Z. Niu, Y. Zhang, and L. Geng, “Improving
+device-edge cooperative inference of deep learning via 2-step pruning,”
+in Proc. IEEE Conf. Comput. Commun. Workshops (INFOCOM WK-
+SHPS), Paris, France, Jul. 2019, pp. 1–6.
+[23] M. Seufert, S. Egger, M. Slanina, T. Zinner, T. Hoßfeld, and P. Tran-Gia,
+“A survey on quality of experience of HTTP adaptive streaming,” IEEE
+Commun. Surveys Tuts., vol. 17, no. 1, pp. 469–492, 1st Quart. 2014.
+[24] R. K. P. Mok, E. W. W. Chan, and R. K. C. Chang, “Measuring the
+quality of experience of HTTP video streaming,” in Proc. IFIP/IEEE
+Int. Symp. Integrated Netw. Manag. (IM 2011) and Workshops, Dublin,
+Ireland, May 2011, pp. 485–492.
+[25] Z. Li, A. C. Begen, J. Gahm, Y. Shan, B. Osler, and D. Oran, “Streaming
+video over HTTP with consistent quality,” in Proc. 5th ACM Multimedia
+Syst. Conf., Singapore, Singapore, Mar. 2014, p. 248–258.
+[26] X. Yin, A. Jindal, V. Sekar, and B. Sinopoli, “A control-theoretic
+approach for dynamic adaptive video streaming over HTTP,” in Proc.
+2015 ACM Conf. Spec. Interest Group Data Commun. (SIGCOMM),
+London United Kingdom, Aug. 2015, pp. 325–338.
+[27] J. Peng, Z. Cao, H. Qu, Z. Zhang, C. Guo, Y. Zhang, Z. Cao, and
+T. Chen, “Harnessing your DRAM and SSD for sustainable and ac-
+cessible LLM inference with mixed-precision and multi-level caching,”
+arXiv preprint arXiv:2410.14740, 2024.
+[28] S. Bhattacharya and N. D. Lane, “Sparsification and separation of deep
+learning layers for constrained resource inference on wearables,” in Proc.
+14th ACM Conf. Embedded Netw. Sens. Syst. CD-ROM, Stanford, CA,
+USA, Nov. 2016, pp. 176–189.
+[29] X. Li, Y. Li, Y. Li, T. Cao, and Y. Liu, “FlexNN: Efficient and adaptive
+DNN inference on memory-constrained edge devices,” in Proc. 30th
+Annu. Int. Conf. Mobile Comput. Netw., Washington D.C., DC, USA,
+May 2024, p. 709–723.
+[30] Z. Lyu, M. Xiao, J. Xu, M. Skoglund, and M. D. Renzo, “The larger the
+merrier? Efficient large AI model inference in wireless edge networks,”
+IEEE J. Sel. Areas Commun., pp. 1–15, early access 2025.
+[31] Techpowerup, “NVIDIA GeForce RTX 4090,” 2022. [Online]. Available:
+https://www.techpowerup.com/gpu-specs/geforce-rtx-4090.c3889
+[32] PyTorch, “Module,” 2025. [Online]. Available: https://docs.pytorch.org/
+docs/stable/generated/torch.nn.Module.html
+[33] F. Xu, J. Xu, J. Chen, L. Chen, R. Shang, Z. Zhou, and F. Liu,
+“iGniter: Interference-aware GPU resource provisioning for predictable
+DNN inference in the cloud,” IEEE Trans. Parallel Distrib. Syst., vol. 34,
+no. 3, pp. 812–827, Mar. 2023.
+[34] Z. Lin, G. Zhu, Y. Deng, X. Chen, Y. Gao, K. Huang, and Y. Fang,
+“Efficient parallel split learning over resource-constrained wireless edge
+networks,” IEEE Trans. Mobile Comput., vol. 23, no. 10, pp. 9224–9239,
+Oct. 2024.
+[35] Q. Zeng, Y. Du, K. Huang, and K. K. Leung, “Energy-efficient resource
+management for federated edge learning with CPU-GPU heterogeneous
+computing,” IEEE Trans. Wireless Commun., vol. 20, no. 12, pp. 7947–
+7962, Dec. 2021.
+[36] C. Yao, W. Liu, W. Tang, J. Guo, S. Hu, Y. Lu, and W. Jiang,
+“Evaluating and analyzing the energy efficiency of CNN inference on
+high-performance GPU,” Concurr. Comput.: Pract. Exper., vol. 33, no. 6,
+p. e6064, Oct. 2021.
+[37] C. Liu, J. Li, W. Huang, J. Rubio, E. Speight, and X. Lin, “Power-
+efficient time-sensitive mapping in heterogeneous systems,” in Proc. Int.
+Conf. Parallel Archit. and Compilation Tech. (PACT), Minneapolis, MN,
+USA, Sep. 2012, pp. 23–32.
+[38] W. U. Khan, T. N. Nguyen, F. Jameel, M. A. Jamshed, H. Pervaiz, M. A.
+Javed, and R. J¨antti, “Learning-based resource allocation for backscatter-
+aided vehicular networks,” IEEE Trans. Intell. Transp. Syst., vol. 23,
+no. 10, pp. 19 676–19 690, Oct. 2022.
+[39] T. E. Bogale, X. Wang, and L. B. Le, “Adaptive channel prediction,
+beamforming and scheduling design for 5G V2I network: Analytical
+and machine learning approaches,” IEEE Trans. Veh. Technol., vol. 69,
+no. 5, pp. 5055–5067, May 2020.
+[40] X. Duan, Y. Liu, and X. Wang, “SDN enabled 5G-VANET: Adaptive
+vehicle clustering and beamformed transmission for aggregated traffic,”
+IEEE Commun. Mag., vol. 55, no. 7, pp. 120–127, Jul. 2017.
+[41] S.-C. Lin, P. Wang, I. F. Akyildiz, and M. Luo, “Delay-based maximum
+power-weight scheduling with heavy-tailed traffic,” IEEE/ACM Trans.
+Netw., vol. 25, no. 4, pp. 2540–2555, Aug. 2017.
+[42] D. Palomar and M. Chiang, “A tutorial on decomposition methods for
+network utility maximization,” IEEE J. Sel. Areas Commun., vol. 24,
+no. 8, pp. 1439–1451, Aug. 2006.
+[43] H. Touvron, M. Cord, M. Douze, F. Massa, A. Sablayrolles, and
+H. Jegou, “Training data-efficient image transformers & distillation
+through attention,” in Proc. 38th Int. Conf. Mach. Learn. (ICML), vol.
+139, Jul. 2021, pp. 10 347–10 357.
+[44] NVIDIA, “Data sheet nvidia jetson orin NX series,” 2022. [Online].
+Available: https://connecttech.com/ftp/pdf/jetson orin nx datasheet.pdf
+[45] NVIDIA, “Data sheet nvidia jetson orin nano series,” 2022. [Online].
+Available: https://connecttech.com/ftp/pdf/nvidia jetson orin datasheet.
+pdf
+[46] Y. Nesterov, Introductory lectures on convex optimization: A basic
+course, 1st ed., ser. Applied Optimization.
+New York, NY, USA:
+Springer Science & Business Media, 2013, vol. 87.
+1
+APPENDIX A
+PROOF OF PROPOSITION 1
+When yk = 0, constraint (11d) in P2 enforces ˆzk,li = 0,
+which aligns with the computing resource allocation in P1 un-
+der the same condition. When yk > 0, the model downloading
+latency becomes constant, and the E2E latency depends solely
+on ˆzk,li. Therefore, solving P2 under the energy constraint to
+minimize the E2E latency yields the same computing resource
+allocation as in P1 when yk and the provisioned model i are
+given. This completes the proof.
+APPENDIX B
+PROOF OF PROPOSITION 2
+Suppose in the optimal solution ˆZ∗
+k,i to P2 under yk ̸=
+0 and ek,i (1) > Qk, there exists a layer li
+∈[2, Li]
+such that tk,li−1
+
+yk, ˆZ∗
+k,i
+
+<
+liP
+l′
+i=1
+τk,l′
+i. Since Tk,i (zk,li)
+monotonically increases as zk,li decreases, we can update
+ˆZ∗
+k,i to ˆZ′∗
+k,i by decreasing ˆz∗
+k,li−1 to ˆz′∗
+k,li−1, such that
+tk,li−1
+
+yk, ˆZ′∗
+k,i
+
+=
+liP
+l′
+i=1
+τk,l′
+i. This update reduces energy
+consumption without increasing either the inference start
+time of layer li or tk,Li
+
+yk, ˆZ′∗
+k,i
+
+. However, the saved en-
+ergy could be reallocated to increase ˆz∗
+k,l′
+i for layer l′
+i with
+tk,l′
+i
+
+yk, ˆZ∗
+k,i
+
+>
+l′
+i+1
+P
+l′′
+i =1
+τk,l′′
+i , thus reducing tk,l′
+i
+
+yk, ˆZ′∗
+k,i
+
+,
+thus decreasing tk,Li
+
+yk, ˆZ′∗
+k,i
+
+. This contradicts the optimal-
+ity of ˆZ∗
+k,i, which completes the proof.
+APPENDIX C
+PROOF OF PROPOSITION 3
+When yk
+= 0, (11d) implies that ˆz∗
+k,li
+= 0, which
+corresponds to the first case in (13). When yk ̸= 0 and
+ek,i (1) ≤Qk, this indicates that setting ˆzk,li = 1 for all layers
+satisfies (11b). Since the objective function of P2 is non-
+increasing as ˆzk,li grows, this setting preserves the optimality,
+corresponding to the second case in (13).
+Next, we derive ˆz∗
+k,li when yk ̸= 0 and ek,i (1) > Qk.
+Leveraging (4) and Proposition 2, we denote the inference
+start time of layer li ∈[1, Li] of user k by
+sk,li =
+
+
+
+
+
+sk,1 = max {τk,1, Tk,i (ˆzk,0)} , if li = 1,
+sk,1 +
+li−1
+P
+l′
+i=1
+Tk,i
+ ˆzk,l′
+i
+
+, if li ∈[2, Li] .
+(18)
+Based on (4) and (18), tk,li
+
+yk, ˆZk,i
+
+can be equivalently
+expressed as tk,li
+
+yk, ˆZk,i
+
+= sk,li + Tk,i (ˆzk,li) = sk,1 +
+liP
+l′
+i=1
+
+V1 (k, l′
+i) +
+Γk,l′
+i
+ˆzk,l′
+i
+
+, where Γk,li =
+bkWliκk
+fk
+. Substituting
+this into P2, when yk > 0 and ek,i (1) > Qk, P2 can be
+equivalently reformulated as
+P2′ : min
+ˆZk,i
+sk,1 +
+Li
+X
+li=1
+
+V1 (k, li) + Γk,li
+ˆzk,li
+
+(19a)
+s.t.
+Li
+X
+li=1
+Γk,li ˆz2
+k,li ≤Q′
+k,
+(19b)
+sk,1 +
+li
+X
+l′
+i=1
+"
+V1 (k, l′
+i) + Γk,l′
+i
+ˆzk,l′
+i
+#
+≥
+li+1
+X
+l′
+i=1
+τk,l′
+i, ∀li ∈[1, Li −1] ,
+(19c)
+0 ≤ˆzk,li ≤1, ∀li ∈[1, Li] ,
+(19d)
+where Q′
+k = Qk−e1(k,i)
+Ψkf 3
+k
+. Note that P2′ is a convex problem,
+as the objective function and constraints of P2′ are convex
+functions of ˆzk,li.
+The partial Lagrangian function of P2′ is given by
+Lk,i = sk,1 +
+Li
+X
+li=1
+V1 (k, li) +
+Li
+X
+li=1
+Γk,li
+ˆzk,li
++
+Li−1
+X
+li=1
+µli
+
+
+li+1
+X
+l′
+i=1
+τk,l′
+i −sk,1 −
+li
+X
+l′
+i=1
+V1 (k, l′
+i) −
+li
+X
+l′
+i=1
+Γk,l′
+i
+ˆzk,l′
+i
+
+
++ η
+" Li
+X
+li=1
+Γk,li ˆz2
+k,li −Q′
+k
+#
+.
+(20)
+Letting µLi = 0, ∂Lk,i
+∂ˆzk,li can be expressed as
+∂Lk,i
+∂ˆzk,li
+= −Γk,li
+ˆz2
+k,li
++ 2ηΓk,li ˆzk,li + Γk,li
+ˆz2
+k,li
+Li
+X
+l′
+i=li
+µl′
+i, 1 ≤li ≤Li.
+(21)
+We first derive the relationships between the optimal so-
+lution ˆz∗
+k,li to P2′ and the corresponding optimal Lagrange
+multipliers µ∗
+li and η∗. The stationary condition ∂Lk,i
+∂ˆz∗
+k,li = 0 in
+the Karush-Kuhn-Tucker (KKT) conditions yields
+−
+Γk,li
+
+ˆz∗
+k,li
+2 +2η∗Γk,li ˆz∗
+k,li+
+Γk,li
+
+ˆz∗
+k,li
+2
+Li
+X
+l′
+i=li
+µ∗
+l′
+i = 0, 1 ≤li ≤Li.
+(22)
+On the one hand, if η∗= 0, then from (22), we can derive
+that
+Li
+P
+l′
+i=li
+µ∗
+l′
+i = 1, 1 ≤li ≤Li. Moreover, since the objective
+function of P2′ is monotonically decreasing as ˆzk,li grows,
+based on (19c), ˆz∗
+k,li is given by
+ˆz∗
+k,li = ˙zk,li ≜
+
+
+
+
+
+
+
+Γk,1
+τk,1+τk,2−sk,1−V1(k,1), if li = 1,
+Γk,li
+τk,li+1−V1(k,li), if 2 ≤li ≤Li −1,
+1, if li = Li,
+(23)
+when
+Li
+P
+li=1
+Γk,li ˙z2
+k,li ≤Q′
+k and 0 ≤˙zk,li ≤1 hold. This
+corresponds to the third case in (13). On the other hand, if
+η∗̸= 0, then based on (22) and (19d), ˆz∗
+k,li is given by
+ˆz∗
+k,li = min
+
+
+1, max
+
+
+0,
+3
+s
+ρ∗
+li
+2η∗
+
+
+
+
+
+,
+(24)
+where ρ∗
+li = 1−
+Li
+P
+l′
+i=li
+µ∗
+l′
+i, which corresponds to the fourth case
+in (13).
+2
+Second, we derive the relationship between µ∗
+li and η∗in
+(24) for the fourth case in (13). Based on the complementary
+slackness condition
+η∗
+" Li
+X
+li=1
+Γk,li
+ ˆz∗
+k,li
+2 −Q′
+k
+#
+= 0,
+(25)
+in the KKT conditions, it follows that
+Li
+X
+li=1
+Γk,li
+ ˆz∗
+k,li
+2 = Q′
+k.
+(26)
+Then, by substituting (24) into (26), we obtain
+Li
+X
+li=1
+Γk,li min
+(
+1, max
+(
+0,
+ ρ∗
+li
+2η∗
+ 2
+3 ))
+= Q′
+k,
+(27)
+from which η∗can be determined as
+η∗= χ
+ µ∗
+li, Q′
+k
+
+,
+(28)
+where χ
+ µ∗
+li, Q′
+k
+
+is the inverse function that computes η∗
+from (27) given
+LiS
+li=1
+µ∗
+li and Q′
+k.
+Finally, by leveraging (24) and (28), and applying the
+projected subgradient method [42], we derive the update rules
+for µ(m)
+li
+, η(m), and ˆz(m)
+k,li in the m-th iteration for the fourth
+case in (13), as shown in (12). Since P2′ is a convex problem
+and satisfies the Slater condition, the global optimal solution
+can be obtained upon convergence of the update rules in (12)
+for this case. This completes the proof.
+APPENDIX D
+PROOF OF COROLLARY 1
+On the one hand, if ek,i (1) ≤Qk, then according to (13),
+setting the GPU frequency allocation scaling factor to 1 for
+all layers of model i preserves the optimality of P1. On the
+other hand, if both ek,i (1) and ek,i
+
+˙Zk,i
+
+exceed Qk, then,
+from (25), we can derive that η∗̸= 0, where η∗denotes the
+optimal Lagrange multiplier of P2′ as defined in the proof
+of Proposition 3. According to Proposition 1, the solution to
+P2′ coincides with the computing resource allocation in P1
+when yk and the provisioned model i are given. Therefore,
+based on (26), we conclude that user k consumes the entire
+energy budget to perform forward propagation with model i.
+This completes the proof.
+APPENDIX E
+PROOF OF THEOREM 1
+The proof of the optimality of Algorithm 2 proceeds by
+analyzing its three key components: (i) calculating the min-
+imum feasible bandwidth allocation ˇyk using Algorithm 1;
+(ii) selecting users in ascending order of ˇyk within the while
+loop; and (iii) assigning ˇyk∗, ˇx∗
+k∗,i, and ˇz∗
+k∗,li to y∗
+k∗, x∗
+k∗,i,
+and z∗
+k∗,li, respectively in Line 8.
+We begin by proving that Algorithm 1 guarantees that the
+produced ˇyk is the minimum feasible bandwidth for user
+k, and the corresponding ˇx∗
+k,i and ˇz∗
+k,li are optimal under
+ˇyk. First, from Proposition 1, for any given yk, the optimal
+computing resource allocation for user k with model i and
+the corresponding minimum E2E latency tk,Li
+
+yk, ˆZ∗
+k,i
+
+can
+be obtained by solving P2. Second, Proposition 4 ensures
+that for any given yk, tk,Li∗
+
+yk, ˆZ∗
+k,i∗
+
+is the minimum
+E2E latency of user k with the provisioned model i∗. Third,
+from (6), tk,Li
+
+yk, ˆZ∗
+k,i∗
+
+is a non-increasing function of yk.
+Specifically, as yk grows, the total model downloading latency
+decreases. Moreover, due to the parallelization between the
+model downloading and inference, the E2E latency does not
+increase as yk grows since the computing resource allocation
+under a larger yk results in no greater inference latency than
+that under a smaller yk. Therefore, by leveraging the bisection
+search method, Algorithm 1 can obtain ˇyk by iteratively
+narrowing the feasible interval until tk,Li∗
+
+ˇyk, ˆZ∗
+k,i∗
+
+≤¯Tk
+is satisfied within a desired error bound.
+Next, we prove that selecting users in ascending order of ˇyk
+in Algorithm 2 preserves the optimality of the solution to P1.
+Suppose that the served user set K∗produced by Algorithm 2
+is not optimal. Then, there must exist another solution yielding
+a higher task throughput, with the served user set denoted as
+˙K, where
+ ˙K
+ > |K∗|, and ˙K does not exactly consist of the
+ ˙K
+ users with the smallest values of ˇyk. Consider updating
+the set ˙K by replacing its users with the first
+ ˙K
+ users with
+the smallest values of ˇyk, and denote the updated user set as
+˙K′. Clearly, P
+k∈˙K′
+ˇyk ≤1 still holds. However, the replacement
+results in P
+k∈˙K′
+ˇyk ≤P
+k∈˙K
+ˇyk, indicating that more users could
+be allocated bandwidth and be served after the replacement.
+This contradicts the optimality of ˙K and completes the proof
+that selecting users in ascending order of ˇyk preserves the
+optimality.
+At last, since ˇyk∗is the minimum feasible bandwidth
+allocation for user k∗to complete the inference task within
+¯Tk∗, the value of ˇyk∗is the optimal bandwidth allocation
+for user k∗. Moreover, from Proposition 4, ˇx∗
+k∗,i and ˇz∗
+k∗,li
+are the optimal model provisioning and computing resource
+allocation, respectively, under ˇyk∗. Therefore, the assignments
+in Line 8 guarantee the optimal bandwidth allocation, model
+provisioning, and computing resource allocation for the se-
+lected user k∗. This completes the proof.
+APPENDIX F
+PROOF OF THEOREM 2
+We begin by analyzing the time complexity of Algorithm 1.
+First, the complexity of Line 8 in Algorithm 1 is O
+  Li
+ˆϵ2
+
+,
+where ˆϵ is the desired error bound for deciding the optimal
+Lagrange multipliers [46]. Therefore, the time complexity
+of Lines 7 to 9 is O
+ 
+P
+i∈Ik
+Li
+ˆϵ2
+!
+. Second, in each iteration
+of Algorithm 1, Line 10 involves checking all |Ik| models,
+resulting in time complexity O (|Ik|). Besides, the complexity
+of Lines 11 to 15 is O (1). Third, since Algorithm 1 employs
+the bisection search method, the while loop from Line 5 to
+Line 16 requires O
+ log 1
+ϵ
+
+iterations to converge within the
+desired error bound ϵ. Finally, the complexity of Line 19 is
+3
+O (1) since ˆz∗
+k,li and i∗have already been obtained in Line 8
+and 10, respectively. Therefore, the complexity of Lines 17
+to 23 is O (1). Based on the above analysis, the total time
+complexity of Algorithm 1 is O
+ 
+log 1
+ϵ
+ 
+P
+i∈Ik
+Li
+ˆϵ2 + |Ik|
+!!
+=
+O
+ 
+1
+ˆϵ2 log 1
+ϵ
+P
+i∈Ik
+Li
+!
+= O
+ 
+P
+i∈Ik
+Li
+!
+.
+The time complexity of Algorithm 2 is derived as follows.
+First, based on the time complexity of Algorithm 1, that of
+Line 2 in Algorithm 2 is O
+ 
+P
+k∈K
+P
+i∈Ik
+Li
+!
+. Second, in each
+while loop iteration, Line 4 involves checking all K users,
+yielding a time complexity of O (K). Third, the complexity
+of both Line 8 and 9 is O (1). At last, Algorithm 2 requires
+at most O (K) iterations in the while loop from Line 3 to
+Line 10. Therefore, the total time complexity of Algorithm 2
+is O
+ 
+P
+k∈K
+P
+i∈Ik
+Li + P
+k∈K
+K
+!
+≤O
+ K2 + KILmax
+
+, where
+Lmax = max
+i∈I {Li}. This completes the proof.

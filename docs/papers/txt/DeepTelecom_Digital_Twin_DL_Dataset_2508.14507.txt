@@ -1,0 +1,670 @@
+DeepTelecom: A Digital-Twin Deep Learning
+Dataset for Channel and MIMO Applications
+Bohao Wang∗†, Zehua Jiang∗, Zhenyu Yang∥, Chongwen Huang∗†, Yongliang Shen§, Siming Jiang‡‡, Chen Zhu††,
+Zhaohui Yang∗, Richeng Jin∗, Zhaoyang Zhang∗, Sami Muhaidat∗∗, and M´erouane Debbah¶ Fellow, IEEE
+∗College of Information Science and Electronic Engineering, Zhejiang University, 310027, Hangzhou, China
+† State Key Laboratory of Integrated Service Networks, Xidian University, 710071, Xi’an, China
+∥School of Earth Sciences, Zhejiang University, 310027, Hangzhou, China
+§ College of Computer Science and Technology, Zhejiang University, 310027, Hangzhou, China
+‡‡ Guangdong Tobacco Maoming Co., Ltd., 525000, Maoming, China
+†† Polytechnic Institute, Zhejiang University, 310015, Hangzhou, China
+∗∗Computer and Communication Engineering, Khalifa University, P.O. Box: 127788, Abu Dhabi, UAE
+¶ KU 6G Research Center, Khalifa University of Science and Technology, P O Box 127788, Abu Dhabi, UAE
+Abstract—Domain-specific datasets are the foundation for
+unleashing artificial intelligence (AI)-driven wireless innovation.
+Yet existing wireless AI corpora are slow to produce, offer
+limited modeling fidelity, and cover only narrow scenario types.
+To address the challenges, we create DeepTelecom, a three-
+dimension (3D) digital-twin channel dataset. Specifically, a large
+language model (LLM)-assisted pipeline first builds the third level
+of details (LoD3) outdoor and indoor scenes with segmentable
+material-parameterizable surfaces. Then, DeepTelecom simulates
+full radio-wave propagation effects based on Sionna’s ray-tracing
+engine. Leveraging GPU acceleration, DeepTelecom streams
+ray-path trajectories and real-time signal-strength heat maps,
+compiles them into high-frame-rate videos, and simultaneously
+outputs synchronized multi-view images, channel tensors, and
+multi-scale fading traces. By efficiently streaming large-scale,
+high-fidelity, and multimodal channel data, DeepTelecom not
+only furnishes a unified benchmark for wireless AI research
+but also supplies the domain-rich training substrate that enables
+foundation models to tightly fuse large model intelligence with
+future communication systems.
+Index Terms—3D digital twin, large language model, ray-
+tracing, wireless AI, channel model.
+I. INTRODUCTION
+Driven by the rapid rise of sixth-generation (6G) mobile
+communications, wireless systems are advancing toward ultra-
+high data rates, ultra-low latency, extreme reliability, and ubiq-
+uitous coverage. Unlike fifth-generation (5G), 6G will serve as
+the core infrastructure of an intelligent society by embedding
+artificial intelligence (AI)-native, sub-THz, real-and-virtual co-
+designed signal processing at the physical layer. AI, especially
+the fusion of large models (LMs) with multimodal learning,
+offers a new path to these goals by learning and reasoning over
+vast, heterogeneous spatiotemporal data, shifting 6G networks
+from connectivity toward artificial general intelligence [1].
+Integrating AI and LMs into wireless communications de-
+pends fundamentally on building high-fidelity and large-scale
+training datasets [2]. Ray tracing remains the mainstream solu-
+tion: in a three-dimension (3D) digital-twin scene, it virtually
+places base stations (BSs), mobile terminals (MTs), and re-
+configurable intelligent surfaces (RISs), then deterministically
+traces electromagnetic paths to derive point-wise channel char-
+acteristics [3]. Although industry and academic pioneers such
+as Huawei [4], BUPT [5], [6], SEU’s PML-6GPCS simulator
+[7], [8], and Peking University [9], have piloted wireless-AI
+dataset programs, they still depend on CPU-bound ray tracers
+whose billion-ray runs are slow, modality-limited, and demand
+laborious calibration, resulting in digital-twin models confined
+to first level of details (LoD1) without per-material annotation.
+By contrast, open or commercial toolchains such as Deep-
+MIMO [10], ViWi [11], WiThRay [12], Ranplan, and NVIDIA
+Sionna [13] showcase GPU-accelerated, multi-band ray tracing
+and 3D rendering, yet none currently couples material-aware
+reconstruction with differentiable, physics-exact ray tracing in
+an integrated workflow.
+To address these challenges, we generate DeepTelecom, a
+third level of details (LoD3) 3D digital wireless channel corpus
+that ingests openstreetmap and retains per-surface material
+semantics throughout the workflow. Guided by a large lan-
+guage model (LLM) that converts text tags into frequency-
+dependent dielectric permittivity and magnetic permeability
+tensors, the engine parametrically configures transmitters, re-
+ceivers, and RIS to systematically capture channel diversity
+across varying material properties and operational conditions.
+It solves propagation via a hybrid geometrical-optics and
+geometrical-diffraction solver for specular, refractive, diffrac-
+tive, and scattering effects based on Sionna differentiable GPU
+tracer, sustaining throughput beyond 10 million rays while
+preserving automatic-gradient capability. For every path the
+pipeline emits path-loss, delay, angle, phase, polarization, and
+doppler, concurrently rasterizes heat-maps and RGB overlays,
+and finally packages synchronized images, MP4 videos, HDF5
+channel tensors, and CSV manifests under a unified scene in-
+dex, thereby delivering the complete open multimodal dataset
+that fuses visual, tensor, and tabular views for end-to-end
+arXiv:2508.14507v1  [cs.IT]  20 Aug 2025
+Indoor 
+Scene
+Outdoor
+Scene
+Manually modify in 3D
+softwares such as
+Blender/Sketchup
+Recon-
+struction
+based on
+remote
+sensing
+Recon-
+struction
+based on
+LiDAR
+scanning
+Scene Generation
+ 
+Channel
+data
+Multimodal
+data
+ 
+AoD, AoA,
+Channel
+information
+CIR, CFR...
+ 
+tensor, text,
+Multimodal
+table, video...
+Data Generation Process
+3D scene reconstruction
+Beamforming
+Distributed wireless
+perception
+Application for LLM
+System
+Parameters
+Generation
+Parameters
+ Electronic
+ 
+environment
+bandwidth,
+→
+RIS,
+antenna...
+Data scale
+and pattern 
+max
+depth, BS
+positions...
+Parameters Configuration
+→
+→
+→
+Fig. 1. The overall DeepTelecom framework.
+6G AI research. The dataset and implementation are partially
+available online.1
+The rest of this paper is organized as follows. In Section
+II, we introduce the overall framework of the DeepTelecom
+framework. In Section III, we provide a detailed description
+of the implementation of its four core modules. Section IV
+demonstrates the generalizability of the generated scenes and
+the diversity of the resulting datasets. Finally, Section V
+concludes the paper.
+II. FRAMEWORK OVERVIEW
+To
+create
+a
+high-fidelity,
+multi-modal,
+LoD3
+GPU-
+accelerated ray-tracing dataset DeepTelecom, we divide the
+dataset generation workflow into four major components. The
+complete framework is shown in Fig. 1, and each component
+is outlined as follows:
+• LLM-Assisted High-Fidelity Multi-Source Scene Mod-
+eling: We develop an LLM-assisted, high-precision scene
+modeling pipeline to construct LoD3 digital twins of
+both indoor and outdoor environments. This module
+integrates diverse data sources (e.g., satellite imagery, 3D
+datasets, and LiDAR scans) to produce realistic textures
+combined with accurate geometric structures, exporting
+to industry-standard 3D formats. The resulting indoor
+models capture intricate details of complex interiors,
+while outdoor models can cover urban areas with high fi-
+delity. An LLM-based post-processing step then converts
+the reconstructed scene comprising all distinguishable
+objects into a structured XML description. In this XML,
+each surface is explicitly defined and annotated with its
+electromagnetic material properties. This comprehensive
+scene representation closely mirrors real-world geometry
+and electromagnetic behavior, providing a solid founda-
+tion for subsequent ray-tracing simulations.
+1https://project.veryengine.cn/publish/CGAQvTSeB/index.html
+• Parameter Definition and Configuration: Following
+the environment modeling, we configure the simulation
+parameters, which are divided into two categories: system
+parameters that define the hardware and devices, and
+generation parameters that control the data generation
+process. The system configuration involves deploying
+BSs and MTs at specific 3D positions with defined
+orientations and transmit powers. To capture realistic
+channel dynamics, MTs’ movement can be simulated
+and time-varing noise is introduced. Both BSs and MTs
+are equipped with configurable multiple-input multiple-
+output (MIMO) antenna arrays, whose size and element
+spacing are critical for accurately modeling spatial chan-
+nel characteristics. Optionally, RIS can be integrated
+into the scene, configured for either single-beam focus-
+ing or multi-beamforming to intelligently control signal
+propagation. Finally, the system’s bandwidth is defined,
+which determines the time and frequency resolution of the
+generated channel impulse response (CIR) and channel
+frequency response (CFR).
+• GPU-Accelerated Ray-Tracing Simulation: We gen-
+erate our channel data using a GPU-accelerated ray-
+tracing engine powered by NVIDIA’s Sionna and OptiX
+libraries. This simulation is highly efficient, leverag-
+ing massive parallelization and optimization strategies
+like early ray termination (based on interaction depth
+and power thresholds). It accurately models key physi-
+cal phenomena—including reflection, transmission, and
+diffraction—and records all significant path interactions
+to produce physically-grounded channel datasets.
+• Channel Data Extraction and Post-Processing: From
+ray-traced paths, we derive the key channel metrics and
+compile the final dataset. Dedicated functions process the
+multipath data to compute standard channel representa-
+tions including the CIR, CFR, and angular information
+like angle of arrival (AoA) and angle of departure (AoD)
+for each path. In this stage, we also perform final post-
+processing such as filtering out unreachable paths or
+invalid links to ensure data quality. The outcome is a
+comprehensive dataset of channel characteristics in each
+scenario, with high realism and diversity.
+In summary, DeepTelecom represents a significant advance-
+ment over existing channel datasets by uniquely combining
+large scale, scenario diversity, and high-fidelity digital-twin
+accuracy. It serves as a foundational asset for next-generation
+intelligent wireless communication research.
+III. DETAILED DESCRIPTION
+In this section, we provide a detailed description of the
+DeepTelecom dataset generation process, expanding upon the
+four components outlined above. Each subsection explains
+how a particular part of the framework is implemented,
+including technical specifics and procedures.
+A. LLM-Assisted High-Fidelity Multi-Source Scene Modeling
+1) Indoor Scene Reconstruction:
+We utilize a cyber-
+physical digital twin system to reconstruct complex in-
+door scenes at LoD3 granularity. Firstly, a quadruped robot
+equipped with a 3D LiDAR scanner surveys the environment.
+The LiDAR captures both geometric distances and reflection
+intensities, enabling inference of surface properties such as
+material type and color. The raw point cloud is then denoised,
+filtered, and converted into a unified 3D coordinate system.
+Here we apply an HDL-localization algorithm based on an
+unscented kalman filter (UKF) to achieve this unification by
+transforming each LiDAR point from the robot’s local frame
+to the global reference frame using the robot’s estimated pose
+[14]. Specifically, if at time t the UKF provides a rotation
+R(t) and translation t(t) for the robot, a point measured in
+the robot’s local coordinates plocal is mapped to the global
+frame as:
+pglobal(t) = R(t) plocal + t(t) ,
+(1)
+ensuring that all scans align in one common coordinate system.
+With the aggregated point cloud in this unified frame, the
+geometry and spatial layout of indoor structures like walls and
+furniture gradually emerge [15]. The implementation diagram
+is shown in Fig. 2.
+Once the comprehensive point cloud has been acquired, the
+system’s 3D modeling module converts it into a polygonal
+mesh and refines the model. We perform mesh extraction and
+simplification to reduce redundant geometry while preserving
+essential details. A combination of solid modeling, surface
+modeling, and wireframe modeling techniques is supported,
+catering to different reconstruction needs for various object
+types. We then apply texture baking and light baking, which
+pre-compute surface textures and lighting/shadow information
+and map them onto the mesh, yielding a photorealistic ap-
+pearance. The final reconstructed indoor model, complete with
+high-resolution textures, can be exported in multiple formats
+(e.g., .obj or .fbx) for visualization and further use. This
+model serves as the digital twin of the real indoor space,
+capturing both its geometry and visual details.
+Actual photo of the college training building 
+Example 1 of Twin Virtual Scene in College 
+Training Building
+Example 2 of Twin Virtual Scene in College 
+Training Building
+Radar scanning 3D modeling  diagram of 
+training building
+Fig. 2. Indoor digital scene implementation diagram.
+2) Outdoor Scene Reconstruction: For outdoor environ-
+ments, we employ professional 3D modeling tools and open
+geospatial data to construct LoD3 urban scenes. The imple-
+mentation example is depicted in Fig. 3.
+In our pipeline, the Blender-Blosm plugin is used to import
+real-world models from Google 3D Tiles. A dense urban
+area in Japan is selected as the test site. Although these
+imported models include building shapes, textures, and terrain
+elevation, they are coarse, with uneven surfaces and merged
+components. For more efficient editting, we then export the
+models in .gltf format to SketchUp. Through the applica-
+tion of modeling tools such as Push/Pull, we accurately rebuilt
+every key elements ensuring alignment with Google Tiles
+reference data, while systematically organizing objects by
+category and assigning realistic materials (e.g., glass, concrete)
+via SketchUp’s material editor.
+Select Target 
+Area
+Load Original 
+Model
+Modeling in 
+SketchUp
+Adjustment in 
+Blender
+Fig. 3. Outdoor digital scene implementation diagram.
+3) LLM-Assisted Scene Optimization: After constructing
+the indoor and outdoor scene models, we export the full scene
+descriptions, including all objects and their materials, to a
+structured XML format for final refinement. At this stage,
+LLMs are used to optimize and validate the consistency of
+material annotations. Since LLMs are well-suited for struc-
+tured text manipulation, they can effectively process the XML-
+based scene representation. To support this, we enforce a strict
+naming convention during modeling (e.g., “wall”, “window”,
+“door”, “roadSurface”). Using the XML file and a reference
+table of electromagnetic material properties, we prompt the
+LLM to automatically verify and assign appropriate materials
+in bulk. For example, all “window” objects across a large scene
+can be uniformly updated with the correct electromagnetic
+profile. This LLM-assisted optimization ensures that the entire
+scene has consistent and physically accurate material defini-
+tions, which is critical for realistic ray-tracing simulation.
+The final result is a fully annotated LoD3 indoor or outdoor
+digital twin with high geometric fidelity and detailed material
+specifications, ready for channel modeling and simulation.
+B. Parameter Definition and Configuration
+Once the environment is modeled, the next step is to config-
+ure the simulation parameters. We divide these parameters into
+two categories: system parameters, which define the devices
+and hardware, and generation parameters, which define how
+the simulation is run and how data is collected.
+Below are the main simulation parameter configurations:
+• BS: BSs are deployed in plausible locations within the
+scene (e.g., on rooftops or ceilings). Each BS is char-
+acterized by attributes including a unique identifier, a
+3D position in the scene, an orientation (e.g., given by
+heading and tilt angles), and a transmit power in dBm.
+• MT: MTs are randomly distributed throughout the envi-
+ronment. Each MT is defined by parameters analogous to
+the BS. Importantly, we can assign each MT a velocity
+vector to simulate motion, which introduces temporal
+variation in the channel, allowing the generation of time-
+varying CIR as users move.
+• Antenna: Both BSs and MTs are equipped with antenna
+arrays, defined by their size (number of elements in
+vertical and horizontal dimensions) and element spacing.
+These parameters are crucial for accurately modeling the
+spatial characteristics and beamforming capabilities of the
+MIMO system.
+• RIS: RIS panels can optionally be included in the en-
+vironment to intelligently control signal reflections. We
+consider two beamforming modes:
+(i) Single-beam focusing: For a point-to-point high-
+throughput backhaul link, we apply a phase-gradient
+focusing strategy based on path-length differences to
+steer and focus the beam. To beamform toward a desired
+direction (θ0, ϕ0), the RIS phase profile is configured as
+Φ(x, y) = −2π
+λ
+ x sin θ0 cos ϕ0 + y sin θ0 sin ϕ0
+
+, (2)
+assuming the RIS lies in the xy-plane. This linear phase
+gradient across the RIS surface steers a beam in the
+direction (θ0, ϕ0).
+(ii) Multi-beam optimization: For more complex multi-
+beam scenarios (e.g., serving multiple users simultane-
+ously), we employ iterative optimization methods (e.g.,
+stochastic gradient descent [16]) to design phase code-
+books that approximate the desired multi-beam radiation
+pattern.
+• System Bandwidth: The system bandwidth determines
+the temporal resolution of the CIR and the frequency
+sample spacing of the CFR. A wider bandwidth yields
+higher time resolution (shorter distinguishable multipath
+delays).
+C. GPU-Accelerated Ray-Tracing Simulation
+Built upon NVIDIA’s Sionna wireless simulation library, we
+conduct a GPU-accelerated ray-tracing simulation to generate
+the channel data. This ray tracer operates on the detailed 3D
+scenes and uses the configured parameters to propagate signals
+and capture multipath effects. The process can be broken down
+into several stages:
+• Initialization: We launch a multitude of rays from each
+transmitter. To do this efficiently, we use Fibonacci sphere
+sampling to distribute rays nearly uniformly across 3D
+space. If M rays are launched from a transmitter, their
+directions (θk, ϕk) can be determined by:
+θk = arccos
+
+1 −2(k + 0.5)
+M
+
+,
+ϕk = 2πk
+ΦG
+,
+(3)
+for k = 0, 1, . . . , M −1, where ΦG = 1+
+√
+5
+2
+is the golden
+ratio. This parameterization yields an approximately uni-
+form sampling of rays over the sphere. We can also bias
+the distribution to concentrate rays in critical regions
+(e.g., denser sampling near ground level where users are),
+which further improves simulation efficiency.
+• Acceleration: The ray tracing engine is accelerated using
+NVIDIA’s OptiX framework, enabling highly parallel
+computation on GPU hardware. Tens of thousands of rays
+are traced in parallel, each checking for intersections with
+the environment geometry at every step. This acceleration
+is crucial for generating a large dataset in a reasonable
+time, as it allows us to capture rich multipath information
+without impractical delays.
+• Optimization (Early Termination): To further improve
+efficiency, we implement two criteria to terminate rays
+early. Firstly, we set a maximum interaction depth Nmax
+for each ray, counting reflections or refractions. A ray is
+stopped if it exceeds this limit. Secondly, we impose a
+power threshold: at each interaction, the ray’s power is
+attenuated according to material properties and distance
+traveled. If the remaining power falls below a predefined
+threshold Pmin, the ray is terminated, as further inter-
+actions would contribute negligible energy. Formally, a
+ray is terminated if either the number of interactions Nint
+reaches Nmax or its power P drops below Pmin:
+Nint ≥Nmax
+or
+P ≤Pmin .
+(4)
+This pruning of low-power rays significantly improves
+simulation speed without affecting accuracy.
+• Physics Modeling: Our ray tracer accounts for all ma-
+jor electromagnetic wave phenomena in a deterministic
+way. Specifically, we model reflections and transmissions
+using geometric optics (GO) principles and the Fresnel
+equations based on material properties. For example,
+we compute the Fresnel reflection coefficient for each
+interaction. For perpendicular polarization at an interface
+between two media, it is given by:
+Γ⊥(θi) = n1 cos θi −n2 cos θt
+n1 cos θi + n2 cos θt
+,
+(5)
+where θi is the incident angle, θt is the transmitted angle
+determined by Snell’s law n1 sin θi = n2 sin θt, and
+n1, n2 are the refractive indices of the two media. At each
+interaction, a ray’s complex amplitude α is multiplied
+by the appropriate reflection (Γ) or transmission (T)
+coefficient, and by the free-space propagation factor for
+that path segment. In particular, after a reflection with
+incident angle θi and propagation distance d, the ray’s
+complex amplitude is updated as:
+αnew = αold Γ(θi) e−jkd
+d
+,
+(6)
+where k = 2π/λ. We also apply the uniform the-
+ory of diffraction (UTD) to model how signals bend
+around sharp edges (e.g., building corners), using stan-
+dard diffraction coefficients to capture those NLOS paths.
+To implement these effects efficiently, at each step we
+perform geometric intersection tests and select the nearest
+intersection (greedy strategy) for the next interaction. The
+corresponding physical model of reflection, transmission,
+or diffraction is then applied at that point, and the precise
+coordinates and phase of the interaction are logged. All
+physical parameters for each ray (e.g., phase, amplitude,
+polarization) are updated as the ray travels and recorded
+for further processing.
+D. Channel Data Extraction and Post-Processing
+After running the ray-tracing simulations, we process and
+organize the output data into the final dataset format. The
+DeepTelecom dataset is structured to include both the detailed
+propagation path data and the synthesized channel responses,
+as well as auxiliary outputs for visualization. Each scenario
+(environment) in the dataset yields the following components:
+Scene Snapshots: Each scenario is equipped with a freely
+movable virtual camera, allowing the scene to be captured
+from various angles and at different time steps. The simulation
+framework can output rendered images or videos of the
+environment, which are saved for visualization and analysis.
+Propagation Paths: The core output of each scenario
+is the set of multi-hop propagation paths between every
+transmitter and receiver. By configuring parameters such as
+the number of launched rays and the maximum number of
+reflections/diffractions, the framework records detailed geo-
+metric path information. This data is stored as sequences
+of coordinate points (plus interaction labels), showing the
+trajectory of signals through the environment. Such path data
+provides a basis for analyzing propagation mechanisms or
+optimizing the network (e.g., by placing new relays or RIS).
+Coverage Heatmaps: This component generates 2D/3D
+signal coverage maps for a specified plane in the environment.
+By configuring the map’s center location, size, orientation
+(e.g., horizontal plane at a given height), and resolution, the
+tool calculates and visualizes the received power or path loss
+at each grid point on that plane. This helps in understanding
+the impact of obstacles and distance on signal strength, aiding
+tasks like network planning and deployment optimization.
+Channel Responses: Using the physical path data, the
+dataset provides standard channel information — most im-
+portantly the CIR and CFR:
+• CIR: For a MIMO system with Nt transmit antennas
+and Nr receive antennas, the time-domain CIR H(t) is
+the superposition of contributions from all L propagation
+paths. Each path l is characterized by its complex gain
+αl, propagation delay τl, AoD Ωt,l, and AoA Ωr,l. The
+CIR can be written as:
+H(t) =
+L
+X
+l=1
+αl ar(Ωr,l) aH
+t (Ωt,l) δ(t −τl) ,
+(7)
+where ar(Ωr,l) and at(Ωt,l) are the receive and transmit
+array response vectors for the path’s AoA and AoD,
+respectively, and δ(·) is the Dirac delta.
+• CFR: The CFR is the Fourier transform of the CIR,
+which is is given by:
+H(f) =
+L
+X
+l=1
+αl ar(Ωr,l) aH
+t (Ωt,l) e−j2πfτl .
+(8)
+Through this rigorous approach, the DeepTelecom dataset
+explicitly links the environmental geometry and materials
+with communication signals, establishing a physically accurate
+basis for analyzing real-world impacts on MIMO channel be-
+havior in time and frequency domains. Visualization examples
+of an indoor and outdoor scene are shown in Figs. 4 and 5.
+RIS
+MT
+BS
+Fig. 4. Indoor scene visualization example.
+IV. EXPERIMENTAL ANALYSIS
+We applied the framework to build the DeepTelecom dataset
+and assessed its scale and diversity. The results demonstrate
+the pipeline’s flexibility and the richness of its outputs:
+1) Generality of Scene Generation: Given GPS coordi-
+nates, the system reconstructs outdoor twins with terrain
+and buildings; given indoor point clouds (e.g., LiDAR or
+BS
+MT
+RIS
+Fig. 5. Outdoor scene visualization example.
+RGB-D), it produces LoD3 interior models. We verified
+this by generating urban microcell and multi-room office
+scenarios from their respective geospatial or point-cloud
+inputs, then deriving channel data for each—showcasing
+straightforward extensibility to new locales and layouts.
+2) Comprehensive Scenario Package: Each scenario is
+self-contained and includes the 3D model (with mate-
+rials) and, when needed, an XML scene description,
+the full simulation configuration (BS/MT placement,
+antenna/RIS settings), and all outputs: scene snapshots,
+multipath trajectories, power–delay profiles, coverage
+heatmaps, and computed CIR/CFR. For example, an
+outdoor city case comprises the city model, configu-
+ration files for BS/MTs, and directories of ray-tracing
+paths, heatmaps, channel matrices, and accompanying
+visualizations.
+Across dozens of distinct configurations such as down-
+town, suburban, and rural, each scene yields thousands of
+transmitter-receiver pairs and millions of raw ray paths. The
+same pipeline allows users to generate new scenes on de-
+mand. The resulting multimodal data support a broad range
+of wireless AI tasks, including localization [17], [18] and
+beamforming [19], [20], among others.
+V. DISCUSSION AND CONCLUSION
+In this paper, we introduce DeepTelecom, a 3D digital-
+twin channel dataset that leverages a LLM-assisted pipeline
+to construct detailed outdoor and indoor environments with
+segmentable and material-parameterizable surfaces at LoD3
+precision. Utilizing Sionna’s ray-tracing engine, DeepTelecom
+accurately simulates comprehensive radio-wave propagation
+effects. With GPU-accelerated processing, the dataset dy-
+namically generates ray-path trajectories and real-time signal-
+strength heatmaps, compiling them into high-frame-rate videos
+while concurrently producing synchronized multi-view im-
+ages, channel tensors, and multi-scale fading traces. By en-
+abling efficient large-scale, high-fidelity, and multimodal chan-
+nel data streaming, DeepTelecom not only establishes a stan-
+dardized benchmark for wireless AI research, but also provides
+a rich, domain-specific training foundation that facilitates the
+seamless integration of large model intelligence with next-
+generation communication systems.
+REFERENCES
+[1] A. Shahid, A. Kliks, A. Al-Tahmeesschi, A. Elbakary, and etc., “Large-
+scale AI in telecom: Charting the roadmap for innovation, scalability,
+and enhanced digital experiences,” [Online] available: https://arXiv.org/
+abs/2503.04184, Mar. 2025.
+[2] F. Zhu, X. Wang, X. Li, M. Zhang, Y. Chen, and etc., “Wireless large
+AI model: Shaping the AI-native future of 6G and beyond,” [Online]
+available: https://arXiv.org/abs/2504.14653, Apr. 2025.
+[3] T. Imai, “A survey of efficient ray-tracing techniques for mobile radio
+propagation analysis,” IEICE Trans. Commun., vol. 100, no. 5, pp. 666–
+679, May. 2017.
+[4] Y. Huangfu, J. Wang, S. Dai, R. Li, J. Wang, C. Huang, and Z. Zhang,
+“WAIR-D: Wireless AI research dataset,” [Online] available: https://
+arxiv.org/abs/2212.02159, Dec. 2022.
+[5] L. Yu, J. Zhang, M. Fu, and Q. Wang, “BUPTCMCC-6G-dataAI+: A
+generative channel dataset for 6G AI air interface research,” [Online]
+available: https://arxiv.org/abs/2410.10839, Sept. 2024.
+[6] Z. Shen, L. Yu, Y. Zhang, J. Zhang, Z. Zhang, X. Hu, S. Han, J. Jin, and
+G. Liu, “DataAI-6G: a system parameters configurable channel dataset
+for AI-6G research,” in Proc. IEEE Global Commun. Conf. (Globecom).
+IEEE, Dec. 2023.
+[7] C. Wang, Z. Lv, X. Gao, X. You, Y. Hao, and H. Haas, “Pervasive
+wireless channel modeling theory and applications to 6G GBSMs for all
+frequency bands and all scenarios,” IEEE Trans. Veh. Technol., vol. 71,
+no. 9, pp. 9159–9173, Sept. 2022.
+[8] C. Wang, Z. Lv, Y. Chen, and H. Haas, “A complete study of space-
+time-frequency statistical properties of the 6G pervasive channel model,”
+IEEE Trans. Commun., vol. 71, no. 12, pp. 7273–7287, Dec. 2023.
+[9] X. Cheng, Z. Huang, L. Bai, H. Zhang, M. Sun, B. Liu, S. Li, J. Zhang,
+and M. Lee, “M3SC: A generic dataset for mixed multi-modal (MMM)
+sensing and communication integration,” China Commun., vol. 20,
+no. 11, pp. 13–29, Nov. 2023.
+[10] A. Alkhateeb, “DeepMIMO: A generic deep learning dataset for mil-
+limeter wave and massive MIMO applications,” [Online] available:
+https://arxiv.org/abs/1902.06435, Feb. 2019.
+[11] M. Alrabeiah, A. Hredzak, Z. Liu, and A. Alkhateeb, “ViWi: A deep
+learning dataset framework for vision-aided wireless communications,”
+in Proc. IEEE Veh. Technol. Conf. (VTC), May. 2020.
+[12] H. Choi, J. Oh, J. Chung, G. C. Alexandropoulos, and J. Choi, “WiTh-
+Ray: A versatile ray-tracing simulator for smart wireless environments,”
+IEEE Access, vol. 11, pp. 56 822–56 845, Jun. 2023.
+[13] J. Hoydis, S. Cammerer, F. A. Aoudia, A. Vem, N. Binder, G. Marcus,
+and A. Keller, “Sionna: An open-source library for next-generation
+physical layer research,” [Online] available: https://arXiv.org/abs/2203.
+11854, Mar. 2022.
+[14] C. Zhu, Z. Zhao, J. Bao, Z. Yang, C. Huang, and Z. Zhang, “Integrated
+optical sensing, communication, and computation system for quadruped
+robots,” in Proc. Int. Conf. Wireless Commun. Signal Process. (WCSP),
+Feb. 2024.
+[15] M. Keller, D. Lefloch, M. Lambers, S. Izadi, T. Weyrich, and A. Kolb,
+“Real-time 3D reconstruction in dynamic scenes using point-based
+fusion,” in Proc. Int. Conf. 3D Vis. (3DV), Sept. 2013.
+[16] G. Zhou, C. Pan, H. Ren, K. Wang, M. Elkashlan, and M. Di Renzo,
+“Stochastic learning-based robust beamforming design for RIS-aided
+millimeter-wave systems in the presence of random blockages,” IEEE
+Trans. Veh. Technol., vol. 70, no. 1, pp. 1057–1061, Jan. 2021.
+[17] B. Wang, F. Zhu, M. Liu, C. Huang, Q. Yang, A. Alhammadi, Z. Zhang,
+and M. Debbah, “Multi-sources information fusion learning for multi-
+points NLOS localization,” in Proc. IEEE Veh. Tech. Conf. (VTC), Jun.
+2024.
+[18] B. Wang, Z. Shuai, C. Huang, Q. Yang, Z. Yang, R. Jin, A. Al Hammadi,
+Z. Zhang, C. Yuen, and M. Debbah, “Multi-sources fusion learning for
+multi-points NLOS localization in OFDM system,” IEEE J. Sel. Topics
+Signal Process., vol. 18, no. 7, pp. 1339 – 1350, Sept. 2024.
+[19] F. Zhu, B. Wang, Z. Yang, C. Huang, Z. Zhang, G. C. Alexandropoulos,
+C. Yuen, and M. Debbah, “Robust millimeter beamforming via self-
+supervised hybrid deep learning,” in Proc. Eur. Signal Process. Conf.
+(EUSIPCO), Sept. 2023, pp. 915–919.
+[20] F. Zhu, X. Wang, C. Zhu, T. Gong, Z. Yang, C. Huang, X. Chen,
+Z. Zhang, and M. Debbah, “Robust Deep Learning-Based Physical Layer
+Communications: Strategies and Approaches,” IEEE Netw., pp. 1–1,
+2025.

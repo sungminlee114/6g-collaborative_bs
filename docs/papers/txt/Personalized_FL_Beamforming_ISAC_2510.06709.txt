@@ -1,0 +1,879 @@
+Personalized Federated Learning-Driven Beamforming
+Optimization for Integrated Sensing and Communication
+Systems
+Zhou Ni∗, Sravan Reddy Chintareddy∗, Peiyuan Guan†, Morteza Hashemi∗
+∗Department of Electrical Engineering and Computer Science, University of Kansas, Lawrence, USA,
+† Department of Informatics, University of Oslo, Oslo, Norway
+Abstract—In
+this
+paper,
+we
+propose
+an
+Expectation-
+Maximization-based
+(EM)
+Personalized
+Federated
+Learning
+(PFL) framework for multi-objective optimization (MOO) in
+Integrated Sensing and Communication (ISAC) systems. In
+contrast to standard federated learning (FL) methods that handle
+all clients uniformly, the proposed approach enables each base
+station (BS) to adaptively determine its aggregation weight with
+the EM algorithm. Specifically, an EM posterior is computed at
+each BS to quantify the relative suitability between the global
+and each local model, based on the losses of models on their
+respective datasets. The proposed method is especially valuable in
+scenarios with competing communication and sensing objectives,
+as it enables BSs to dynamically adapt to application-specific
+trade-offs. To assess the effectiveness of the proposed approach,
+we conduct simulation studies under both objective-wise homo-
+geneous and heterogeneous conditions. The results demonstrate
+that our approach outperforms existing PFL baselines, such as
+FedPer and pFedMe, achieving faster convergence and better
+multi-objective performance.
+Index Terms—Personalized Federated Learning, Integrated
+Sensing and Communication, Unmanned Aerial Vehicles.
+I. INTRODUCTION
+Federated learning (FL) has emerged as a decentralized
+paradigm for privacy-preserving collaborative learning across
+devices. FL enables participants (devices or servers) to train
+shared models while maintaining data locally, thereby mit-
+igating privacy risks and eliminating centralization require-
+ments [1]. Despite its benefits, FL encounters several inherent
+challenges from data heterogeneity across devices, which
+can cause performance variations among local models [2].
+Additionally, FL efficiency is also limited by communica-
+tion overhead from continuous server-client updates [3, 4].
+To address these limitations, personalized federated learning
+(PFL) strategies have been developed to learn models aligned
+with individual clients’ data characteristics. For instance, in
+[5], the authors propose an adaptive algorithm that combines
+local and global models to address statistical heterogeneity.
+In [6], a server-free framework is proposed for device-to-
+device (D2D) wireless networks that incorporates channel-
+aware neighbor selection and weight assignment to handle
+non-IID and unbalanced data distributions while optimizing
+resource allocation and interference management.
+Concurrently, ISAC has emerged to enhance both commu-
+nication and sensing performance [7]. ISAC addresses spec-
+trum utilization and sensing capability requirements in diverse
+wireless systems, ranging from cellular networks and vehicular
+communications to autonomous platforms such as drones and
+self-driving vehicles. By sharing spectrum resources and im-
+proving hardware-software interoperability, ISAC enables effi-
+cient network utilization and supports advanced applications in
+smart environments [8]. However, optimal ISAC operation is
+impeded by (i) cross-domain interference between sensing and
+communication, (ii) jointly coupled beamforming and resource
+allocation under power constraints, and (iii) strong inter-BS
+heterogeneity (non-IID data or objectives) that invalidates a
+single global model. These issues are amplified in distributed
+environments lacking centralized coordination. Given these
+distributed challenges, FL presents a natural solution by en-
+abling distributed decision-making and resource optimization
+in ISAC networks. This approach preserves data privacy while
+improving adaptability, thereby enhancing system resilience in
+dynamic environments.
+Nevertheless, while FL offers a promising theoretical solu-
+tion for ISAC, recent studies reveal suboptimal performance
+in realistic scenarios with unbalanced or heterogeneous data.
+For instance, in [9], the authors demonstrate that non-IID data
+across devices can lead to divergent local model parameters
+and inconsistent updates, preventing the global model from
+reaching convergence. Similarly, in [10], the authors investi-
+gate FL in an integrated sensing, communication, and compu-
+tation (ISCC) framework and find that the standard FedAvg
+approach (with multiple local updates) suffers from increased
+data heterogeneity. These findings highlight a significant bar-
+rier to the practical deployment of FL in ISAC networks.
+This performance gap motivates strategies that can effectively
+manage statistical heterogeneity while ensuring robustness in
+dynamic environments. More recently, [11] proposes two FL
+frameworks for coordinated beamforming across BSs in multi-
+cell ISAC systems. While their solutions help mitigate inter-
+cell interference without sharing raw channel data, they pri-
+marily emphasize communication-centric coordination and do
+not address the personalized multi-objective trade-off between
+communication and sensing under heterogeneity. To the best
+of our knowledge, this is the first work that applies PFL to
+ISAC networks for improving the system-level performance.
+Our main contributions in this paper are as follows:
+• We introduce a PFL framework specifically designed
+for ISAC networks, enabling effective joint optimization
+of radar sensing and communication objectives under
+arXiv:2510.06709v1  [eess.SP]  8 Oct 2025
+heterogeneous local conditions.
+• We develop an EM-based algorithm that dynamically
+estimates personalized aggregation weights for each base
+station, improving model personalization in non-IID en-
+vironments.
+• Through comprehensive simulations, we demonstrate that
+our proposed EM-based PFL algorithm achieves im-
+provements in joint communication and radar sensing
+performance, surpassing traditional FL by up to 17.81%
+and 16.79% of system weighted sum rate in homogeneous
+and heterogeneous scenarios, respectively.
+The rest of this paper is organized as follows. In Section II,
+we present the system model and problem formulation. Section
+III introduces the proposed EM-based PFL algorithm. Section
+IV presents our numerical results, and Section V concludes
+the paper.
+II. SYSTEM MODEL AND PROBLEM FORMULATION
+A. System Model
+1) ISAC Communication Model: We consider an ISAC
+system comprising multiple cells as shown in Fig. 1. Each
+cell consists of a BS, denoted by index m ∈{1, 2, ..., M},
+that is equipped with NT antennas and simultaneously serves
+multiple communication users (UEs) while performing radar
+sensing of a local target (e.g., a UAV, vehicle, or infrastructure
+reflector). In each cell, we denote k
+∈{1, 2, ..., K} as
+the number of single-antenna communication users served
+by the m-th BS. For simplicity, we use the same index
+m for both the BS and its corresponding radar target. Let
+Xm = [x1, x2, ..., xL] ∈CNT ×L be the signal matrix where
+L is the communication frame length. Thus, we have the
+transmitted signal as:
+Xm = WmSm =
+K
+X
+k=1
+wm,ksH
+m,k,
+(1)
+where Wm
+= [wm,1, wm,2, ..., wm,K] ∈CNT ×K is the
+designed beamforming matrix, and Sm is the per-user symbol
+matrix whose k-th row is sm,k ∈CL×1 represents the data
+stream intended for the k-th UE in the m-th cell of frame
+length L and normalized as L−1∥sm,k∥2 = 1.
+The received signal at the UE k at cell m can be written as
+follows:
+yH
+m,k = hH
+m,m,kXm +
+M
+X
+i̸=m
+hH
+i,m,kXi + nH
+m,k
+= hH
+m,m,kwm,ksH
+m,k +
+K
+X
+j̸=k
+hH
+m,m,kwm,jsH
+m,j
++
+M
+X
+i̸=m
+K
+X
+j=1
+hH
+i,m,kwi,jsH
+i,j + nH
+m,k,
+(2)
+where hH
+m,m,k
+∈
+C1×NT
+represents the communication
+channel vector between BS m and its associated user k.
+hH
+i,m,k ∈C1×NT denotes the interfering channel vector from
+BS i (where i ̸= m) to user k in cell m. nH
+m,k ∈C1×L
+is the additive white Gaussian noise (AWGN), such that
+BS 𝑚
+𝑈𝐸𝑚,1
+𝑈𝐸𝑚,𝑘
+𝑈𝐸𝑛, 𝑁
+𝑈𝐸𝑛,1
+BS 𝑛
+UAV 𝑚
+UAV 𝑛
+𝑈𝐸𝑛,2
+𝝎𝒏𝒕
+𝝎𝒎
+𝒕
+𝝎𝒈𝒕
+𝝎𝒈𝒕
+Personalized FL aggregating 
+𝜔𝑚
+𝑡+1 = 1 −𝜋𝑚 𝜔𝑚
+𝑡+ 𝜋𝑚 𝜔𝑔
+𝑡
+Local model 
+update using SGD
+Local model 
+update using SGD
+ISAC signal + Echo
+Sensing Interference
+Communication Interference
+Communication  Signal
+Local models aggregation 
+at central server
+Fig. 1: Proposed EM-based PFL multi-cell ISAC System.
+nm,k ∼CN(0, σ2
+cI) ∈CL×1. Therefore, the SINR of the
+communication model at k-th UE in cell m can then be written
+as:
+ζ(c)
+m,k =
+|hH
+m,m,kwm,k|2
+P
+j̸=k |hH
+m,m,kwm,j|2 + P
+i̸=m
+PK
+j=1 |hH
+i,m,kwi,j|2 + σ2c
+.
+(3)
+Thus, the achievable sum communication rate for BS m is
+given by:
+R(c)
+m =
+K
+X
+k=1
+log2 (1 + ζ(c)
+m ).
+(4)
+2) ISAC Radar Sensing Model: We model each radar target
+as a point target located in the coverage area of the BS,
+and each BS senses exactly one radar target at a given time.
+Specifically, by transmitting the ISAC signal matrix Xm, the
+m-th BS observes the reflected echo signal matrix at its
+receiver as:
+Y(s)
+m = GmXm +
+M
+X
+n̸=m
+Gn,mXn +Gm,mXm +N(s)
+m ∈CNR×L,
+(5)
+where Y(s)
+m ∈CNR×L is the received radar echo signal matrix
+at BS m, and Gm the target reflection channel matrix for
+the radar target associated with BS m. Additionally, Gn,m ∈
+CNR×L is the inter-cell radar interference channel matrix from
+the n-th BS (n ̸= m) to the radar receiver of BS m and
+Gm,m ∈CNR×L represents the self-interference channel.
+In particular, the radar target response matrix Gm can be
+modeled as follows:
+Gm = βma(θm)bH(θm),
+(6)
+where βm is the radar cross section (RCS) coefficient of the
+radar target in the m-th cell, which is modeled as a complex
+Gaussian random variable, i.e., βm ∼CN(0, αs), where αs
+is the mean reflection strength of the radar target. In addition,
+a(θm) and b(θm) are the receive and transmit array steering
+vectors at BS m, respectively.
+To explicitly account for the network-level radar sensing in-
+terference, the received signal model at the m-th BS, including
+the echoes from neighboring cells, the echo signal reflected by
+the target can be written as:
+y(s)
+m (t) =
+X
+n̸=m
+Gn,mWnsH
+n (t −τn,m) + Gm,mWmsH
+m(t)
++ αsa(θm)bH(θm)WmsH
+m(t −2τm) + n(s)
+m (t),
+(7)
+where τn,m denotes the propagation delay between BS n and
+BS m, and τm is the propagation delay associated with the
+sensing target in the m-th cell.
+For radar signal processing at each BS, we employ the
+maximum ratio combining (MRC) beamforming [11], where
+the m-th BS applies the beamformer vH
+m = aH(θm) ∈C1×NR
+to process the received radar echo, resulting in:
+ˆy(s)
+m = vH
+my(s)
+m .
+(8)
+Then, the radar sensing SINR at the m-th BS is:
+ζ(s)
+m = NR
+PK
+k=1 |vH
+mGmWm|2
+PM
+n̸=m
+PK
+j=1 |vH
+mGn,mWn,j|2 + σ2s
+,
+(9)
+where σ2
+s denotes the radar receiver noise power. Hence, the
+achievable sum radar information rate of BS m is defined as:
+R(s)
+m = log2 (1 + ζ(s)
+m ).
+(10)
+B. Problem Formulation
+In ISAC networks, optimizing conflicting objectives, such
+as maximizing communication rate (Eq.(4)) and radar sensing
+accuracy (Eq.(10)), forms a classic multi-objective optimiza-
+tion (MOO) problem [12], which yields a set of Pareto
+optimal solutions rather than a single optimum solution. To
+address this, we apply a scalarization approach by introducing
+a personalization hyperparameter ρm ∈[0, 1] at each BS,
+converting the MOO into a single-objective problem. By fixing
+ρm before optimization, each BS selects a desired trade-
+off point on its Pareto frontier based on local priorities,
+enabling consistent beamforming adapted to its specific needs.
+Specifically, we formulate the optimization problem as maxi-
+mizing the weighted sum of communication and radar sensing
+performance across all M BSs:
+max
+{Wm}M
+m=1
+M
+X
+m=1
+[ρmR(c)
+m + (1 −ρm)R(s)
+m ]
+s.t.
+||Wm||2
+F ≤PT , ∀m,
+(11)
+where Wm ∈CNT ×Km is the beamforming matrix of the m-
+th BS, NT is the number of transmit antennas, Km denotes
+the number of communication users served by the m-th BS,
+and PT represents the transmit power budget constraint at each
+BS. The constraint ensures that the transmit power at each BS
+is limited by a predefined power budget PT .
+However, solving the optimization problem in Eq. (11) is
+generally challenging due to non-convex, interference-coupled
+rate objectives under per-BS power constraints and strong
+non-IID heterogeneity, which makes a single global model
+suboptimal. Thus, we propose the PFL framework described
+previously to obtain efficient and adaptive solutions, allowing
+each BS to optimally balance its dual functionality objectives
+based on local data characteristics and network environments.
+III. PROPOSED SOLUTION
+In this section, we propose an EM-based PFL solution to
+effectively solve the optimization problem formulated in the
+previous section.
+A. Expectation-Maximization based PFL
+We leverage the EM algorithm at each BS to determine an
+adaptive aggregation weight πm. While each BS m indepen-
+dently selects its personalization hyperparameter ρm, reflecting
+the trade-off between communication and radar sensing, the
+EM algorithm further personalizes the learning process by
+adaptively estimating how much each BS should learn from
+the global model.
+Specifically, the adaptive aggregation weight πm is deter-
+mined locally at each BS m, based on how well the global
+model fits each BS’s local data distribution. The EM algorithm
+accomplishes this adaptive determination through two iterative
+steps at each communication round:
+• E-STEP: Each BS computes a posterior probability to
+find whether a local sample b ∈Dm is better explained by
+the global model ωg or the local model ωl. Specifically,
+for the BS m, the posterior probability is computed as:
+λ(t+1)
+m
+=
+exp [−κl(ω(t)
+g |Dm)]
+exp [−κl(ω(t)
+g |Dm)] + exp [−κl(ω(t)
+l |Dm)]
+,
+(12)
+where l(·|Dm) denotes the loss function evaluated on the
+local dataset Dm using the global model parameters ω(t)
+g
+and κ > 0 is the temperature parameter.
+• M-STEP: The adaptive aggregation weight π(t+1)
+m
+is
+updated based on the posterior probability from the E-
+step as follows:
+π(t+1)
+m
+= 1
+B
+B
+X
+b
+λ(t+1)
+m,b ,
+(13)
+where B is the batch size.
+In our setting, each model lies along a Pareto front repre-
+senting different trade-offs between communication and sens-
+ing performance. The posterior λm serves as a responsibility
+estimator, assigning higher weight to the model that better
+aligns with the BS’s implicit trade-off preference, without
+requiring explicit tuning.
+B. Proposed PFL model
+We adopt a PFL approach to address heterogeneous channel
+conditions across BSs in the ISAC network. Specifically, we
+assume that each BS m holds a local dataset consisting of
+communication and radar channel samples, denoted as Dm =
+{Hm, Gm}.
+The proposed PFL framework allows each BS to generate
+personalized model parameters by adaptively integrating infor-
+mation from its own local model and global model updates.
+That is, at the t-th global communication round, the local
+model update for BS m is computed as follows:
+ω(t+1)
+m
+= (1 −πm)ω(t)
+m + πmω(t)
+g ,
+(14)
+where ω(t)
+m denotes the personalized model parameters of BS
+m at the t-th communication round, and ω(t)
+g
+represents the
+aggregated global model obtained by the central server at the
+same round.
+Additionally, the personalized model parameters ω(t)
+m
+at
+each BS m are updated locally using gradient descent. Specif-
+ically, within the t-th global round, the j-th local gradient
+descent iteration at BS m is given by:
+ω(t,j+1)
+m
+= ω(t,j)
+m
+−η∇fm(ω(t,j)
+m
+), j ∈[0, ..., E −1],
+(15)
+where η denotes the local learning rate, E is the total number
+of local epochs, and fm(·) represents the local loss function of
+BS m. After E local iterations at BS m, the resulting locally
+trained model is taken as the updated personalized model to
+be aggregated at the next global round, i.e., ω(t)
+m ≜ω(t,E)
+m
+.
+C. PFL-based DNN Training Framework
+To obtain the optimal beamforming matrices for each BS,
+we implement a DNN training framework within our EM-
+based PFL algorithm. The personalized unsupervised loss at
+each BS m in a given communication round can be defined
+as:
+lm(Wm) = −ρmR(c)
+m −(1 −ρm)R(s)
+m .
+(16)
+Then, the overall personalized training objective at BS m
+becomes:
+min
+Wm lm(Wm),
+s.t.
+||Wm||2
+F ≤PT .
+(17)
+Therefore, the global personalized objective can be ex-
+pressed as a summation of the personalized objectives across
+all BSs, effectively aggregating local preferences into a cohe-
+sive global optimization problem:
+min
+{Wm}M
+m=1
+M
+X
+m=1
+lm(Wm),
+s.t.
+||Wm||2
+F ≤PT , ∀m.
+(18)
+IV. EVALUATION METRICS
+A. Datasets and Settings
+In this section, we present the datasets, simulation settings,
+and evaluation metrics used to assess the performance of the
+proposed EM-based PFL framework.
+1) Training Data Generation: As shown in Fig. 2, we con-
+sider a multi-cell ISAC scenario with three neighboring cells,
+each served by a BS located at the cell center. Additionally,
+each BS is equipped with NT = 8 transmit and NR = 8
+receive antennas, serving 2, 3, and 4 communication users
+in the respective cells, while simultaneously sensing a radar
+target (modeled as an UAV). Users are randomly distributed
+within their respective cells, and radar targets are placed within
+an angular range of [−π/2, π/2] relative to each BS. Both
+communication and sensing inter-cell interference channels
+follow Rician fading with a factor of 3 to capture realistic
+multipath propagation.
+To emulate realistic signal propagation, we adopt a ray-
+tracing channel model rather than relying on simplified
+stochastic models like Rayleigh or Rician fading alone [13].
+We simulate a 3 km × 3 km semi-urban area populated
+with buildings and vegetation, using OpenStreetMap [14] for
+map data and CellMapper [15] for BS locations. MATLAB’s
+ray tracer is used to generate the wireless channels between
+Fig. 2: Ray-tracing simulation setup used for dataset generation. The
+plot illustrates the received signal paths at all the receivers transmitted
+from one base station.
+each BS and the communication users and radar targets,
+providing a realistic propagation environment for multi-cell
+ISAC evaluation.
+2) DNN Architecture and Training Setup: To optimize the
+beamforming matrices, we leverage an ISAC-DNN architec-
+ture to optimize the beamforming matrices using federated
+datasets derived from MATLAB ray-traced channel tensors.
+For each BS m, we extract a local dataset consisting of Dm =
+20,000 channel samples, denoted as {H(i)
+m , G(i)
+m }Dm
+i=1. Here,
+H(i)
+m
+∈RNT ×Km×2 represents the stacked real–imaginary
+channel matrices for the Km communication users, and
+G(i)
+m ∈RNT ×1×2 denotes the corresponding sensing channel
+tensors for the single UAV radar target within cell m. To
+handle heterogeneity in user counts across cells (K1 = 2,
+K2 = 3, K3 = 4), we perform zero-padding along the user
+dimension of H(i)
+m , aligning all channel tensors to a uniform
+user dimension of maxm Km = 4.
+The designed ISAC-DNN comprises two parallel input
+branches, each employing a fully-connected layer with 256
+neurons to independently process the flattened input com-
+munication and sensing channel samples. The final fully-
+connected layer outputs a real-valued vector of dimension
+R(NT ,maxm Km,2), which is then reshaped and combined into
+complex-valued beamforming matrices Wm ∈CNT ×Km.
+During inference, these matrices are normalized to ensure
+compliance with the transmit power constraint PT .
+To facilitate personalized and robust model training, we
+utilize the proposed PFL approach over 100 global commu-
+nication rounds. Within each round, individual BSs perform
+local training for 5 epochs, updating model parameters via the
+Adam optimizer with a learning rate of 10−4 and a batch size
+of 64.
+B. Evaluation Results
+We evaluate the effectiveness of our proposed PFL algo-
+rithm in comparison with four baseline methods: traditional
+FL [1], pFedMe [16], FedPer [17], and fixed-weight PFL,
+which assigns fixed weights instead of dynamically computed
+EM weights. We evaluate each algorithm under both homo-
+geneous and heterogeneous conditions, considering variations
+in learning objectives across BSs. Specifically, in the homo-
+geneous scenario, each BS has an identical personalization
+factor, ρm = 0.5, while in the heterogeneous scenario, the
+personalization factors are set differently across BSs, with ρm
+values of 0.2, 0.6, and 0.8 for BS1, BS2, and BS3, respectively.
+0
+20
+40
+60
+80
+100
+Epoch
+0.45
+0.46
+0.47
+0.48
+0.49
+EM-based Weight Assignments
+Max Difference: 0.0431
+BS 1
+BS 2
+BS 3
+(a) EM-based weight assignment under homogeneous case.
+0
+20
+40
+60
+80
+100
+Epoch
+0.10
+0.15
+0.20
+0.25
+0.30
+0.35
+0.40
+0.45
+EM-based Weight Assignments
+Max Difference: 0.1675
+BS 1
+BS 2
+BS 3
+(b) EM-based weight assignment under heterogenous case.
+Fig. 3: Proposed EM-based weight assignment methodology under
+two different cases.
+1) EM-based Weight Assignment Efficiency: First, the ef-
+fectiveness of our proposed EM-based weight assignment
+method is demonstrated in Figures 3. In the homogeneous
+scenario (Fig. 3a), πm converges closely across all BSs, with
+a smaller maximum difference of approximately 0.0431. Even
+in this uniform scenario, our EM-based approach detects slight
+differences in local conditions. For example, BSs serving
+different numbers of communication UEs experience small
+variations in loss values, which the EM updates translate
+into marginal weight adjustments. These minor but system-
+atic adaptations lead to improved convergence stability and
+overall system performance. Conversely, in the heterogeneous
+scenario (Fig. 3b), πm dynamically adapts to each BS’s
+unique conditions, resulting in significant and distinct vari-
+ations across BSs, with a maximum observed difference of
+approximately 0.1675 between BS1 and the others. This indi-
+cates that our method effectively captures and accommodates
+local heterogeneity based on the different objectives of each
+BS.
+2) Proposed EM-based PFL Performance Evaluation:
+Homogeneous Scenario Analysis. As presented in Fig. 4,
+we observe that all algorithms rapidly converge within the
+first 20 epochs except FedPer. Our proposed EM-weighted
+PFL algorithm achieves the highest system multi-objective
+utility, stabilizing at approximately 1.7, and demonstrates the
+performance improvement over the baselines. Fixed-weighted
+PFL follows closely, achieving a similar yet consistently
+lower performance, emphasizing the benefit of adaptive weight
+assignment. pFedMe exhibits moderate performance improve-
+ment compared to traditional FL, reflecting its advantage from
+personalization, yet it converges more slowly and achieves
+a significantly lower sum rate than our proposed method.
+Specifically, our algorithm achieves the highest utility of
+around 1.72 in normalized multi-objective utility, yielding
+0
+20
+40
+60
+80
+100
+Training Epoch
+1.0
+1.1
+1.2
+1.3
+1.4
+1.5
+1.6
+1.7
+Multi-Objective Utility
+FedPer
+Traditional FL
+PFL with Fixed Weight
+pFedMe
+Proposed EM-based PFL
+Fig. 4: Multi-Objective Utility: Homogeneous Case.
+0
+20
+40
+60
+80
+100
+Training Epoch
+0.9
+1.0
+1.1
+1.2
+1.3
+1.4
+1.5
+Multi-Objective Utility
+FedPer
+Traditional FL
+PFL with Fixed Weight
+pFedMe
+Proposed EM-based PFL
+Fig. 5: Multi-Objective Utility: Heterogeneous Case.
+improvements of 17.81% over traditional FL, 10.26% over
+FedPer, 5.52% over pFedMe, and 4.88% over fixed-weight
+PFL.
+Heterogeneous Scenario Analysis. In the heterogeneous
+scenario shown in Fig. 5, our proposed PFL algorithm again
+outperforms by rapidly converging and maintaining the highest
+sum rate of approximately 1.53 in normalized multi-objective
+utility, representing a 16.79% improvement over traditional
+FL, 8.51% over pFedMe, and 7.75% over FedPer. Fixed-
+weighted PFL achieves near-optimal results, though slightly
+lower than our dynamically EM-weighted approach. This
+highlights the necessity and effectiveness of adaptive weight
+computation based on local data distribution. pFedMe consis-
+tently outperforms traditional FL in this scenario as well, yet
+it remains inferior to both PFL variants in terms of final sum
+rate achieved and convergence speed.
+In addition, it can be observed from Fig. 4 and 5 that
+our proposed PFL method starts with notably higher initial
+sum rates compared to traditional FL and other PFL algo-
+rithms. This behavior results from our algorithms employing
+immediate personalization and dynamic aggregation strategies
+from the very first epoch. Different from traditional FL and
+methods like pFedMe, which begin training from a purely
+global initialization with limited immediate adaptation to local
+data, our proposed method achieves a favorable local-global
+balance right from the initial aggregation.
+To isolate the effect of BS heterogeneity from UE count
+variability, we conduct a controlled evaluation where each BS
+serves exactly two UEs. This uniform configuration removes
+the influence of UE number diversity, enabling a clearer
+comparison of PFL strategies under both homogeneous and
+heterogeneous objective conditions. As shown in Fig. 6a and
+0
+20
+40
+60
+80
+100
+Training Epoch
+1.6
+1.8
+2.0
+2.2
+2.4
+2.6
+2.8
+Multi-Objective Utility
+FedPer
+Traditional FL
+PFL with Fixed Weight
+pFedMe
+Proposed EM-based PFL
+(a) Same number of UEs in each BS under homogeneous case.
+0
+20
+40
+60
+80
+100
+Training Epoch
+1.6
+1.8
+2.0
+2.2
+2.4
+2.6
+Multi-Objective Utility
+FedPer
+Traditional FL
+PFL with Fixed Weight
+pFedMe
+Proposed EM-based PFL
+(b) Same number of UEs in each BS under heterogenous case.
+Fig. 6: EM-based PFL performance under the condition where each
+BS serves the same number of UEs, shown for (a) the homogeneous
+case and (b) the heterogeneous case.
+6b, our EM-based PFL method consistently outperforms all
+baselines. Notably, our EM-based mechanism yields better
+performance than its fixed-weight PFL, indicating that even
+with equal UE counts, local variations in sensing and commu-
+nication still benefit from personalized model aggregation.
+V. CONCLUSION
+In this paper, we introduced an EM-based PFL framework
+that leverages a probabilistic aggregation mechanism to ad-
+dress the dual objectives of sensing and communication in
+ISAC systems. By the EM approach at each BS, our method
+adaptively balances global and local model updates in a data-
+driven manner. Extensive evaluations under both homogeneous
+and heterogeneous settings demonstrate that the proposed
+approach achieves faster convergence, higher multi-objective
+utility, and better robustness compared to existing baselines.
+In the future, we plan to extend this framework to dynamic
+client populations and explore its application to other multi-
+task wireless scenarios.
+REFERENCES
+[1] B. McMahan, E. Moore, D. Ramage, S. Hampson, and
+B. A. y Arcas, “Communication-efficient learning of
+deep networks from decentralized data,” in Artificial
+intelligence and statistics. PMLR, 2017, pp. 1273–1282.
+[2] T. Li, A. K. Sahu, A. Talwalkar, and V. Smith, “Federated
+learning: Challenges, methods, and future directions,”
+IEEE signal processing magazine, vol. 37, no. 3, pp. 50–
+60, 2020.
+[3] J.
+Koneˇcn`y,
+H.
+B.
+McMahan,
+D.
+Ramage,
+and
+P. Richt´arik, “Federated optimization: Distributed ma-
+chine learning for on-device intelligence,” arXiv preprint
+arXiv:1610.02527, 2016.
+[4] Z. Chen, Z. Ni, P. Guan, L. Wang, L. X. Cai,
+M. Hashemi, and Z. Li, “Optimizing noma transmissions
+to advance federated learning in vehicular networks,” in
+GLOBECOM 2024-2024 IEEE Global Communications
+Conference.
+IEEE, 2024, pp. 962–967.
+[5] Y. Deng, M. M. Kamani, and M. Mahdavi, “Adap-
+tive personalized federated learning,” arXiv preprint
+arXiv:2003.13461, 2020.
+[6] Z. Ni, M. Ghazikor, and M. Hashemi, “pFedWN: A
+Personalized Federated Learning Framework for D2D
+Wireless Networks with Heterogeneous Data,” arXiv
+preprint arXiv:2501.09822, 2025.
+[7] W. Zhou, R. Zhang, G. Chen, and W. Wu, “Integrated
+sensing and communication waveform design: A survey,”
+IEEE Open Journal of the Communications Society,
+vol. 3, pp. 1930–1949, 2022.
+[8] J. Wang, N. Varshney, C. Gentile, S. Blandino, J. Chuang,
+and N. Golmie, “Integrated sensing and communication:
+Enabling techniques, applications, tools and data sets,
+standardization, and future directions,” IEEE Internet of
+Things Journal, vol. 9, no. 23, pp. 23 416–23 440, 2022.
+[9] S. Liu, G. Yu, X. Chen, and M. Bennis, “Joint user
+association and resource allocation for wireless hierar-
+chical federated learning with IID and non-IID data,”
+IEEE Transactions on Wireless Communications, vol. 21,
+no. 10, pp. 7852–7866, 2022.
+[10] Y. Liang, Q. Chen, and H. Jiang, “Federated learning
+with integrated sensing, communication, and compu-
+tation: Frameworks and performance analysis,” arXiv
+preprint arXiv:2409.11240, 2024.
+[11] L. Jiang, K. Meng, M. Temiz, J. Hu, and C. Ma-
+souros, “Federated Learning Strategies for Coordi-
+nated Beamforming in Multicell ISAC,” arXiv preprint
+arXiv:2501.16951, 2025.
+[12] M. Xu, P. Ju, J. Liu, and H. Yang, “PSMGD: Periodic
+stochastic multi-gradient descent for fast multi-objective
+optimization,” in Proceedings of the AAAI Conference on
+Artificial Intelligence, vol. 39, no. 20, 2025, pp. 21 770–
+21 778.
+[13] S.
+R.
+Chintareddy,
+K.
+Roach,
+K.
+Cheung,
+and
+M. Hashemi, “Federated learning-based collaborative
+wideband spectrum sensing and scheduling for UAVs in
+UTM systems,” IEEE Transactions on Machine Learning
+in Communications and Networking, 2025.
+[14] “OpenStreetMap,” https://www.openstreetmap.org.
+[15] “CellMapper,” https://www.cellmapper.net/map.
+[16] C. T Dinh, N. Tran, and J. Nguyen, “Personalized
+federated learning with moreau envelopes,” Advances
+in neural information processing systems, vol. 33, pp.
+21 394–21 405, 2020.
+[17] M. G. Arivazhagan, V. Aggarwal, A. K. Singh, and
+S. Choudhary, “Federated learning with personalization
+layers,” arXiv preprint arXiv:1912.00818, 2019.

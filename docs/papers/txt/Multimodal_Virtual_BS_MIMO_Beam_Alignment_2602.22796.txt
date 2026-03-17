@@ -1,0 +1,835 @@
+Multi-modal Data Driven Virtual Base Station
+Construction for Massive MIMO Beam Alignment
+Yijie Bian∗, Wei Guo∗, Jie Yang†‡, Shenghui Song∗,
+Jun Zhang∗, Fellow, IEEE, Shi Jin†§, Fellow, IEEE, and Khaled B. Letaief∗, Fellow, IEEE
+∗Department of Electronic and Computer Engineering,
+The Hong Kong University of Science and Technology, Hong Kong, China
+†Key Laboratory of Measurement and Control of Complex Systems of Engineering, Ministry of Education,
+Southeast University, Nanjing 210096, China
+‡Frontiers Science Center for Mobile Information Communication and Security,
+Southeast University, Nanjing 210096, China
+§School of Information Science and Engineering, Southeast University, Nanjing 210096, China
+Abstract—Massive multiple-input multiple-output (MIMO)
+is a key enabler for the high data rates required by the
+sixth-generation networks, yet its performance hinges on ef-
+fective beam management with low training overhead. This
+paper proposes an interpretable framework to tackle beam
+alignment in mixed line-of-sight (LoS) and non-line-of-sight
+(NLoS) propagation environments. Our approach utilizes multi-
+modal data to construct virtual base stations (VBSs), which
+are geometrically defined as mirror images of the base station
+across reflecting surfaces reconstructed from 3D LiDAR points.
+These VBSs provide a sparse and spatial representation of the
+dominant features of the wireless environment. Based on the
+constructed VBSs, we develop a VBS-assisted beam alignment
+scheme comprising coarse channel reconstruction followed by
+partial beam training. Numerical results demonstrate that the
+proposed method achieves near-optimal performance in terms
+of spectral efficiency.
+Index Terms—Virtual base station, beam alignment, massive
+MIMO, multi-modal data
+I. INTRODUCTION
+To meet the demand for higher data rates in the sixth-
+generation (6G) networks, exploration of spectrum at in-
+creasingly elevated frequencies becomes necessary. Higher
+frequencies, like millimeter-wave (mmWave), sub-terahertz
+(sub-THz), and THz bands, are poised to be cornerstones
+of 6G, which will deliver ultra-high bandwidth for massive
+data throughput, minimal latency, enhanced connectivity,
+and support for advanced applications for both outdoor and
+indoor scenarios [1], [2].
+To compensate for the high path loss under high frequency,
+massive multiple-input-multiple-output (MIMO) antenna ar-
+rays are adopted. Given the increasing channel dimension,
+channel estimation requires prohibitively high overhead.
+Beam training based on a predefined codebook stands out
+as a promising approach, as it does not require estimating
+the channel explicitly while still achieving comparable per-
+formance for beam management. However, beam training
+still incurs considerable training overhead when performing
+This work was supported in part by the Hong Kong Research Grant
+Council under the Area of Excellence (AoE) Scheme Grant No. AoE/E-
+601/22-R; and the National Natural Science Foundation of China (NSFC)
+under Grant 62301156.
+exhaustive training [3]. The channel characterized by the
+propagation of electromagnetic waves through reflection,
+scattering and diffraction, etc., between the base station (BS)
+and user equipment (UE) highly depends on the transceiver
+locations and the surrounding environment [4]. Thus, a
+promising strategy is to incorporate environmental sensing
+data, such as light detection and ranging (LiDAR) [5],
+radio detection and ranging [6], images from red-green-blue
+(RGB) cameras [7], and location data [8], for efficient beam
+management.
+Existing studies on multi-modal data assisted beam align-
+ment mainly focus on line-of-sight (LoS) scenarios. In [9],
+the study adopts both 3D LiDAR points and global position-
+ing system (GPS) data to assist beam tracking in vehicle-
+to-vehicle LoS scenario. Furthermore, the mmWave received
+signal strength indicator, RGB image, and GPS data are fused
+to assist robust beam tracking in the vehicle-to-infrastructure
+LoS scenario [10].
+However, LoS based sensors, such as cameras, can perform
+poorly in obtaining non-line-of-sight (NLoS) information. A
+new insight into the relationship between the environment
+and the wireless communication channel is proposed based
+on the channel knowledge map (CKM) in [11]. With the
+help of localization technologies, the UE’s location can be
+used to directly determine the optimal beam pair by looking
+up pre-collected measurements [11]. However, CKM-based
+methods require a large volume of wireless measurements
+and have limited grid resolution. Moreover, they can contain
+redundant information since they do not take full advantage
+of propagation features of the radio signal. With the increase
+of frequency, the propagation paths are more sensitive to
+the dynamic environment, which means that certain channels
+measured in CKM can have unwanted features that are
+difficult to eliminate.
+To overcome the limitations of existing methods, we
+propose an explicit and interpretable approach that leverages
+multi-modal data with global sensing features to construct a
+virtual base station (VBS) set for beam alignment, different
+from virtual anchor points in [12] which are usually related
+to smooth walls for indoor simultaneous localization and
+arXiv:2602.22796v1  [cs.IT]  26 Feb 2026
+mapping scenarios. The VBSs are defined via the image
+principle: for each reflective surface within the LoS coverage
+of the physical BS, a corresponding VBS is created as its
+mirror image behind that surface. If such VBS is treated
+like the physical BS, higher order VBSs with more mirrored
+times can be constructed similarly. Each VBS indicates that
+there could exist a reflection path, which can be used as a
+supplementary communication path when LoS does not exist.
+The contributions of the study are summarized as follows,
+• We propose a multi-modal assisted VBS construction
+method to sparsely represent wireless environment fea-
+tures. Preprocessed 3D LiDAR points are meshed to
+model complex building facades. Original VBS loca-
+tions are computed from the BS position and mesh
+parameters. Adjacent VBSs are then clustered to derive
+the final VBS set, and their virtual line-of-sight (VLoS)
+coverage areas are computed using geometric projection
+of reflective meshes.
+• Using constructed VBSs and the UE’s location, we
+coarsely reconstruct the channel to assign importance
+weights to beam pairs for efficient beam training. Coarse
+channel parameters, including the absolute value of
+channel gain, angle-of-arrival (AoA), angle-of-departure
+(AoD) and distance, can be estimated via empirical path
+loss models and geometric relations, without using the
+3D LiDAR points, reducing computational overhead.
+• A partial beam training method with flexible beam
+training numbers refines beam pairs for massive MIMO
+alignment with low online partial beam training over-
+head, evaluated on real-world Openstreetmap (OSM)
+and ray-tracing datasets.
+II. SYSTEM MODEL
+Fig. 1: Illustration of 1-order VBSs with corresponding
+coverage areas. With the ground reflection, there are 3 VBSs
+in the region. Apart from the shown 2 VBSs in red and
+orange, the VBSs with respect to the ground are below the
+physical BS and are not shown.
+We consider a downlink massive MIMO communication
+system, where the BS is equipped with a uniform linear
+array (ULA) of NBS transmit antennas, and the UE has
+NUE receive antennas. The beamforming vectors are rep-
+resented as f ∈CNBS×1 at the BS and w ∈CNUE×1 for
+the UE, respectively. For ease of exposition, the BS and
+UE are assumed to have one RF chain, the magnitude of
+each element in f and w is constant, satisfying |{f}i| =
+1/√NBS and |{w}j| = 1/√NUE for i = 1, . . . , NBS
+and j = 1, . . . , NUE. In terms of predefined codebook,
+due to the massive MIMO under high carrier frequency, a
+considerable portion of coverage area is in the near-field.
+Thus, we adopt the near-field polar-domain codebook matrix
+UBS ∈CNBS×MBS, UUE ∈CNUE×MUE for BS-side and UE-
+side, respectively.
+The received signal at UE can be expressed as
+y =
+p
+PTwHHfs + wHn,
+(1)
+where H ∈CNUE×NBS is the channel matrix, PT is the
+BS transmit power, s is the signal with normalized power,
+and n ∈CNUE×1 denotes the complex Gaussian noise in
+bandwidth W with noise power spectrum density N0, i.e.
+n ∼CN(0, N0WINUE). The spectral efficiency (SE) can be
+calculated as
+SE = log2
+
+1 + PT|wHHf|2
+N0W
+
+.
+(2)
+Leveraging the geometric insights from out-of-band multi-
+modal data, we can identify a small set of promising prop-
+agation paths and their corresponding beam directions. This
+effectively prunes the searching space, reducing the problem
+to finding the best beam pair within a candidate subset
+S with |S| = S << MBSMUE. Within the subset, the
+beam alignment objective is to find the optimal beam pair
+that can maximize the SE, which is equivalent to find the
+largest virtual channel gain |wHHf| with given transmit
+power budget. Finally, the beam alignment problem can be
+formulated as
+max
+f, w
+|wHHf|
+s.t.
+f = {UBS}:,bBS
+w = {UUE}:,bUE
+(bBS, bUE) ∈S,
+(3)
+where operation {·}:,b means selecting the b-th column of
+the matrix, i.e., the b-th codeword in the codebook.
+III. VBS-ASSISTED BEAM ALIGNMENT
+A. Motivations and Definition
+With the higher carrier frequency, the cell coverage size
+shrinks, which means that sensing data with a global view of
+the cell, such as regional 3D LiDAR data, can be obtained
+either by measurement or reconstruction. At the same time,
+there exist a few dominant paths, such as the LoS path
+and a few reflection paths, while diffraction and scattering
+paths become weaker. In [13], the authors proposed to use
+a ground reflection path to handle blockage of the LoS
+scenario. However, such ground reflection path may not be
+stable, which means such path may still have relatively high
+path loss since it could penetrate through part of the UE.
+This limitation highlights the need for alternative and more
+persistent NLoS paths, such as building facades, which can
+be used to provide stable reflection paths. To geometrically
+model these dominant reflection paths, we introduce the
+concept of VBS, which will be detailed in the sequel.
+In high frequency bands, such as mmWave and sub-THz,
+paths with multiple reflections usually exhibit low channel
+gains, which suggests that the contribution of such paths to
+the largest virtual channel gains, i.e., the objective function
+in problem (3), is typically negligible. Therefore, the single-
+reflection path can be considered as the fundamental block
+for constructing the VBS. Analogous to a mirror effect, the
+reverse extension line of several single reflection paths that
+undergo one reflection with respect to a reflective surface can
+converge at a certain point. This point is defined as 1-order
+VBS, as the associated paths involve only one reflection. For
+higher order VBSs, the u-order VBSs are defined as the mir-
+ror image of the (u −1)-order VBSs corresponding to paths
+with (u −1) reflections. However, unlike indoor scenarios,
+where single reflections mostly come from smooth walls,
+the outdoor building facades have more complex features,
+making the direct identification of VBS considerably more
+challenging. To handle this difficulty, multi-modal data, i.e.
+regional 3D LiDAR points and BS’s location are used to
+construct VBS in an explicit way, which is detailed in the
+sequel.
+extcolorblack Before proceeding, to formalize the VBS
+indexing, we define the following based on reflection condi-
+tions. The BS itself is defined as the unique 0-order VBS with
+LoS coverage area C0,1. The first 1-order VBSs are defined
+as the image of the BS reflected by the ground, indexed
+as (1, 1) with VLoS coverage area C1,1. For consistency,
+we set C0,1 = C1,1. As illustrated in the example scenario
+in Fig. 1, UE 1 lies within the LoS coverage of the 0-
+order VBS (the direct LoS path) and VLoS coverage of
+three 1-order VBSs (the 1st, 2nd and 3rd), while the blocked
+UE 2 is served by only one 1-order VBS (the 2nd). More
+generally, the v-th VBS of order u, denoted as VBS (u, v), is
+characterized by two key properties: its geographical location
+ou,v
+VBS and its coverage area Cu,v. It is evident that as the
+order u increases, the number of potential VBSs may grow,
+but their individual coverage areas typically shrink. This
+occurs because the geometric conditions required for multiple
+consecutive reflections become significantly more restrictive,
+leading to smaller viable service regions.
+B. VBS Construction and Storage
+In this subsection, we introduce how to construct 1-
+order VBSs based on 3D LiDAR points and BS’s location1.
+The VBSs construction process mainly includes three steps,
+which are geometric information extraction, computation of
+VBSs’ locations, and coverage computation and storage, as
+shown in Fig. 2.
+1Since u > 1 order VBSs construction process is similar with the 1-st
+order VBSs, we omit the description of them due to space limitation.
+1) Geometric Information Extraction: Recalling that the
+VBS definition is the mirror image of BS, the key problem
+here reduces to identify the building facades that function
+like the mirror. The complete facade of a building object
+may not be smooth enough to treat as a mirror, but the
+constituent meshes can be seen as independent mirrors. The
+process of extracting these meshes begins with the acquisition
+of a regional 3D LiDAR point cloud. The LiDAR points
+can be obtained by measurement or reconstruction, and are
+then preprocessed to remove noise, outliers, moving objects
+to preserve the static information of the environment. Next,
+objects in the scene can be separated based on the LiDAR
+points by hierarchical density-based spatial clustering of
+applications with noise (HDBSCAN) algorithm [14]. For
+the m-th object, the surface reconstruction [15] and surface
+simplification algorithm [16] are applied to generate Nm
+triangular meshes set to represent the building object. For the
+i-th triangular mesh Ti, the outer normal vector ri ∈R3×1
+can be computed based on the three edge vectors ek
+i
+∈
+R3×1, k = 1, 2, 3, where each edge vector can be computed
+by the adjacent vertex location vk
+i ∈R3×1, k = 1, 2, 3. The
+centroid of the triangular mesh is denoted as vc
+i ∈R3×1,
+which can be computed as vc
+i =
+1
+3
+P3
+k=1 vk
+i . These four
+points, together with the outer normal vector, can be used to
+geometrically characterize the triangular mesh.
+2) Computation of VBSs’ Locations: The computation of
+VBSs’ locations is not a simple reflection of the BS location
+oBS ∈R3×1 across every triangular mesh in the region,
+which would generate a prohibitively large and redundant
+set of VBS. Instead, we introduce a systematic selection
+process to identify only the valid meshes that can produce
+meaningful, physically-realizable reflection paths. We posit
+that the i-th triangular mesh is a valid reflector only if
+it satisfies both two fundamental geometric conditions, i.e.
+orientation condition and unobstructed path condition.
+• Orientation Condition: This condition ensures that
+the mesh is geometrically oriented towards the BS, a
+prerequisite for any reflection. Let pc
+i denote the vector
+pointing from BS to the centroid of mesh Ti, which is
+computed as pc
+i = vc
+i −oBS. The orientation condition
+can be expressed mathematically as
+rT
+i pc
+i > 0,
+(4)
+which indicates that the angle between ri and pc
+i is
+less than π
+2 , meaning the i-th triangular mesh is facing
+towards the BS.
+• Unobstructed Path Condition: This condition verifies
+that an unobstructed path exists between the BS and
+the target mesh Ti. This is crucial because other objects
+could occlude the path, making a reflection impossible.
+To verify this, we perform a ray-triangle intersection
+test. We test rays from the BS to each mesh vertice for
+intersections using the M¨oller–Trumbore algorithm [17].
+This verification process is implemented by evaluating a
+function Inters(vk
+i , Tj), which takes the vertex and the
+mesh as inputs and returns 1 if an intersection occurs,
+Fig. 2: Illustration of the VBS construction process.
+or 0 otherwise2. Thus, the unobstructed path condition
+can be expressed as
+X
+j̸=i
+Inters(vk
+i , Tj) = 0, ∃k ∈{1, 2, 3},
+(5)
+which indicates that for each i-th triangular mesh, if
+there exists a ray which is not blocked by any other
+mesh, such mesh is defined as a valid mesh for VBS
+computation.
+After verifying these two conditions, the location of VBS
+indexed by (1, i) is computed as the image of the BS’s
+location across the triangular mesh
+˜o1,i
+VBS = oBS −2diri,
+(6)
+where di is the distance between the BS and the i-th
+triangular mesh. However, there could exist an abundant
+number of VBSs of the same order caused by deviation
+in the geometric information of LiDAR points. Thus, it is
+necessary to reduce the number of VBSs. The locations of
+the original VBSs that are spatially close can be clustered
+to obtain a sparse representation of the environment. Thus,
+HDBSCAN is adopted again for VBS clustering to handle
+different densities of the original VBSs. The location of the
+v-th clustered 1-order VBS is determined as the centroid
+of the cluster, denoted by o1,v
+VBS. The triangular meshes
+associated with this VBS are obtained by taking the union
+of all meshes corresponding to the original VBSs within
+the cluster. Higher order VBSs’ locations can be computed
+similarly.
+3) Coverage Computation and Storage: To compute and
+store the coverage area, the entire region is first divided into
+Dx × Dy grid points, where the size can be adjusted for
+different storage requirements. For the BS’s LoS coverage
+area C0,1, we traverse all grid points and determine whether
+a LoS path exists between the BS and each grid point by
+checking if the connecting line segment is obstructed by any
+objects in the environment. For the VLoS coverage area of
+VBS indexed by (1, v) where v > 1, the computation process
+is as follows. We traverse each grid point within the region
+and compute the intersection point between the line segment
+connecting the grid point and the VBS location o1,v
+VBS with
+respect to the triangular meshes associated with this VBS.
+Once the intersection point is obtained, we examine the line
+segment between this intersection point and the grid point to
+determine whether it is obstructed by any other triangular
+2Computation details can be found in [17].
+meshes using the same method in Section III-B2. If no
+obstruction is detected, the grid point is within the VLoS
+coverage area C1,v of VBS (1, v).
+Remark 1: The main differences between the proposed
+VBS principles and existing CKM methods are threefold.
+VBS stores only integer VBS indexes and per-grid location
+information, rather than the high-precision complex channel
+parameters used in CKM [11]. Moreover, VLoS coverage
+maps can be reconstructed from acquired LiDAR at arbitrary
+precision. Finally, if the BS’s location changes, CKM needs
+costly re-measurement whereas VBSs can be recomputed
+from existing LiDAR plus the new BS position.
+C. VBS-assisted Beam Alignment with Coarse Channel Re-
+construction
+In beam alignment, the goal is to identify the beam pair
+with the largest virtual channel gain. Under the specular
+assumption, the estimated pair can be suboptimal, requir-
+ing partial beam training for refinement. To reduce search
+overhead, different beam pairs are assigned varying prior-
+ities through a VBS-assisted coarse channel reconstruction
+method. The coarse estimation first computes the potential
+AoA, AoD, and distance from the VBS and UE locations, and
+then estimates the channel gain using an empirical path loss
+model. Notably, 3D LiDAR points are not stored during the
+two-stage estimation, as their features are mainly represented
+by the VBS set, ensuring low storage cost.
+1) Possible AoA, AoD and Distance Computation: Based
+on the UE’s location and stored coverage map, the BS can
+identify the set of candidate VBSs that serve the UE. The
+BS can then proceed to compute the corresponding channel
+parameters. To facilitate this computation, we define the
+following position vectors. For a VBS indexed by (1, v),
+let p1,v
+BS = o1,v
+ref −oBS and p1,v
+UE = o1,v
+ref −oUE denote the
+displacement vectors from the reflection point with respect
+to the VBS indexed by (1, v) to the BS and UE, respectively.
+The reflection point is computed as
+o1,v
+ref = o1,v
+VBS +
+∥oBS −o1,v
+VBS∥2
+2
+
+oUE −o1,v
+VBS
+
+2
+
+oBS −o1,v
+VBS
+T 
+oUE −o1,v
+VBS
+.
+(7)
+For LoS path, the vectors are similarly defined as p0,1
+BS =
+oUE −oBS and p0,1
+UE = oBS −oUE. Let ∆ϕr, ∆ϕt denote the
+inherent antenna array azimuth angle offsets at the UE and
+BS, respectively, and ∆ψr, ∆ψt denote the inherent antenna
+array elevation angle offsets at the UE and BS, respectively.
+We can compute the channel parameters corresponding to
+the VBS indexed by (u, v), i.e., azimuth/elevation AoA,
+AoD ˆϕr
+u,v, ˆϕt
+u,v, ˆψr
+u,v, ˆψt
+u,v, and the two segment distances
+ˆrr
+u,v, ˆrt
+u,v as follows.
+• For
+VLoS
+paths:
+ˆϕr
+1,v
+=
+arctan
+
+{p1,v
+UE}2
+{p1,v
+UE}1
+
++
+∆ϕr,
+ˆϕt
+1,v
+=
+arctan
+
+{p1,v
+BS }2
+{p1,v
+BS }1
+
++ ∆ϕt,
+ˆψr
+1,v
+=
+arccos
+
+{p1,v
+UE}3
+∥p1,v
+UE∥2
+
++ ∆ψr, ˆψt
+1,v = arccos
+
+{p1,v
+BS }3
+∥p1,v
+BS ∥2
+
++
+∆ψt, ˆrr
+1,v = ∥p1,v
+UE∥2, ˆrt
+1,v = ∥p1,v
+BS∥2.
+• For LoS path: ˆϕr
+0,1 = arctan
+
+{p0,1
+UE}2
+{p0,1
+UE}1
+
++∆ϕr, ˆϕt
+0,1 =
+arctan
+
+{p0,1
+BS }2
+{p0,1
+BS }1
+
++ ∆ϕt, ˆψr
+0,1 = arccos
+
+{p0,1
+UE}3
+∥p0,1
+UE∥2
+
++
+∆ψr, ˆψt
+0,1 = arccos
+
+{p0,1
+BS }3
+∥p0,1
+BS ∥2
+
++ ∆ψt, ˆrr
+0,1 = ˆrt
+0,1 =
+∥p0,1
+BS∥2.
+2) Path Loss Computation: The path loss estimation can
+be divided into two parts, the free space path loss and
+reflection path loss. Diffraction loss is neglected since it has
+hardly no contribution to the stable wireless communication.
+The free space path loss can be computed as
+PLfree(fc, d) = 20 log10
+4πfc
+c
+
++ 20 log10(d),
+(8)
+where fc is the carrier frequency, c is the speed of light, λ
+is the wavelength, and d is the path distance. The u times
+reflection path loss can be estimated as
+PLref(fc, d, u, Γ) = PLfree(fc, d) + Γ[dB] + 10 log10 u,
+(9)
+where Γ is a predefined reflection coefficient since the
+material properties are unknown.
+For VBS indexed by (u, v), there exists a path with u
+times reflections, the channel gain can be estimated as ˆβu,v =
+10
+ −PLu,v
+20
+
+, where PLu,v is computed as (10), shown at the
+top of the next page. With the azimuth/elevation AoA, AoD,
+and segment distances, the coarse channel between BS and
+UE can be reconstructed based on the geometric model as
+ˆH =
+√
+NBSNUE
+X
+(u,v)∈VUE
+ˆβu,v×
+a( ˆψr
+u,v, ˆϕr
+u,v, ˆrr
+u,v; NUE)a( ˆψt
+u,v, ˆϕt
+u,v, ˆrt
+u,v; NBS)H,
+(11)
+where VUE denotes the VBS set serving the UE, which
+can be obtained by first mapping the UE’s location to the
+K nearest grid points (ix, iy), and then taking the union
+of the VBS sets corresponding to each of these K grid
+points. a( ˆψr
+u,v, ˆϕr
+u,v, ˆrr
+u,v; NUE) and a( ˆψt
+u,v, ˆϕt
+u,v, ˆrt
+u,v; NBS)
+are UE-side and BS-side steering vectors, respectively. The
+steering vector of near-field ULA with N elements and
+carrier frequency fc is
+a(ψ, ϕ, r; N) =
+1
+√
+N
+h
+ejkc(r(0)−r), . . . , ejkc(r(N−1)−r)iT
+, (12)
+where kc = 2πfc
+c
+is wave number, c is speed of light, and
+r(n) is distance between n-th antenna and scatter, defined as
+r(n) =
+p
+r2 + (δnd)2 −2r sin ψ sin ϕδnd. δn = n −N−1
+2
+is array-centered normalized antenna index, d is antenna
+spacing, r is distance between scatter and array.
+TABLE I: Scenario-dependent dataset configuration.
+Parameter
+Value
+Carrier Frequency fc
+40 GHz
+Bandwidth W
+500 MHz
+BS Position oBS
+[140, 60, 4] m
+UE’s height hUE
+1.5 m
+Transmit Power PT
+40 dBm
+Noise Power Spectrum Density N0
+-174 dBm/Hz
+Predefined Reflection Coefficient Γ
+10
+K for Grid Neighborhood
+3
+VBS Grid Number Dx, Dy
+40, 40
+Predefined codebook serves as transformation matrix to get
+polar domain beamspace representation G = |UH
+UE ˆHUBS|.
+Top-S beam pair indexes with the largest virtual channel
+gains form searching subset S. Partial beam training based
+on S yields optimal beam pair (b⋆
+BS, b⋆
+UE) with maximum
+virtual channel gain.
+IV. RESULTS AND DISCUSSION
+A. Simulation Setup
+In this section, we evaluate the SE performance of beam
+alignment with the proposed VBS technique. The simulation
+is conducted in a 3D environment with the help of Blender
+and Sionna [18]. Blender is used to import the OSM in
+a specific region in Mexia, Texas with about 120 m ×
+120 m (31.6802◦-31.6823◦N, −96.4826◦- −96.4787◦W),
+and generate simulation 3D LiDAR points, while Sionna
+is used to simulate the ray-tracing based wireless channels.
+To simulate the LiDAR measurement and process error, the
+standard deviation and drop rate are set to 5 cm and 5%.
+We consider a sub-THz fully-analog massive MIMO system
+with configuration in Table I.
+B. Results and Discussion
+We compare the performance of VBS-assisted beam align-
+ment (VBS-BA) with location based beam alignment (Loc-
+BA) [11] and refined CKM-based beam alignment (RCKM-
+BA). When S = 1, the RCKM-BA degrades into a method
+called training-free beam alignment in [11]. The grid number
+for storing the first 4 strongest channel paths parameters is
+40 × 40. The optimal line means choosing the best beam
+pair to maximize the virtual channel gain by exhaustive beam
+training.
+As shown in Fig. 3, under the NBS = 256, NUE = 16
+configurations, the Loc-BA performs much worse than VBS-
+BA and RCKM-BA, because it is only based on the LoS path.
+The coarse reconstructed channel only based on location data
+cannot capture dominant NLoS paths. VBS-BA has a little
+performance degradation compared to the optimum. Such
+acceptable gap is caused by neglect of coherence stack, errors
+in coverage area computation and measurement errors in 3D
+LiDAR data. If partial beam training number is less than 5,
+VBS-BA can surpass up to 0.5 bps/Hz compared to RCKM-
+BA due to the limited resolution of CKM measurement.
+From Table II, with different antenna configuration, VBS-
+PLu,v = 1(u = 0)PLfree(fc, ∥p0,1
+BS∥2) + (1 −1(u = 0))PLref(fc, ∥p1,v
+UE∥2 + ∥p1,v
+BS∥2, 1, Γ),
+(10)
+Fig. 3: SE performance versus Top-S partial beam training
+number under the NBS = 256, NUE = 16 configuration.
+TABLE II: SE performance versus different antenna config-
+uration with Top-5 partial beam training.
+Antennas for
+BS and UE
+SE (bps/Hz)
+Loc-BA
+VBS-BA
+RCKM-BA
+Optimal
+(256, 16)
+25.60
+29.56
+29.24
+30.00
+(256, 32)
+25.51
+30.00
+29.69
+30.48
+(512, 8)
+25.57
+29.08
+28.69
+29.85
+(512, 16)
+25.58
+29.63
+29.15
+30.36
+BA always achieves the best performance compared to Loc-
+BA and RCKM-BA with Top-5 partial beam training. To get
+the optimal solution, the exhaustive beam training overhead
+should reach 896×20, 896×51, 2412×8, 2412×20 based on
+the near-field beam codebook in [19], respectively. As shown
+in Fig. 3 and Table II, for VBS-BA, only training Top-5 beam
+pairs achieves about 98% SE with little performance loss, and
+training more beam pairs only brings incremental increase in
+SE.
+V. CONCLUSION
+In this paper, we proposed a VBS construction technique
+to represent the main features of the wireless environment
+with regional 3D LiDAR points and location data. The VBSs
+can be used to assist partial beam training by coarse chan-
+nel reconstruction with arbitrary resolution. The estimated
+absolute value of the channel gain is based on LoS and 1-
+order specular reflection under empirical models, denoting
+the importance of each path for subsequent effective partial
+beam training. Simulation results based on a real-world
+map and ray-tracing based channel demonstrated that VBS-
+assisted beam alignment achieves about 98% performance of
+the optimal result by training only Top-5 beams.
+REFERENCES
+[1] K. B. Letaief, W. Chen, Y. Shi, J. Zhang, and Y.-J. A. Zhang, “The
+roadmap to 6G: AI empowered wireless networks,” IEEE Commun.
+Mag., vol. 57, no. 8, pp. 84–90, Aug. 2019.
+[2] P. Zhang, M. F. De Guzman, X. Li, X. Cai, K. Haneda, N. Tervo,
+A. P¨arssinen, F. Tufvesson, and P. Ky¨osti, “Understanding subtera-
+hertz radio channels: The impact of beamforming on wireless system
+design,” IEEE Veh. Technol. Mag., vol. 20, no. 1, pp. 2–10, Mar. 2025.
+[3] M. Giordani, M. Polese, A. Roy, D. Castor, and M. Zorzi, “A tutorial
+on beam management for 3GPP NR at mmwave frequencies,” IEEE
+Commun. Surv. Tutorials, vol. 21, no. 1, pp. 173–196, 1st Quart. 2019.
+[4] Y. Feng, C. Zhao, F. Gao, Y. Zhang, and S. Ma, “Environment sensing-
+aided beam prediction with transfer learning for smart factory,” IEEE
+Trans. on Wireless Commun., vol. 24, no. 1, pp. 676–690, Jan. 2025.
+[5] S. Jiang, G. Charan, and A. Alkhateeb, “LiDAR aided future beam
+prediction in real-world millimeter wave V2I communications,” IEEE
+Wireless Commun. Lett., vol. 12, no. 2, pp. 212–216, Feb. 2023.
+[6] U. Demirhan and A. Alkhateeb, “Radar aided 6G beam prediction:
+Deep learning algorithms and real-world demonstration,” in Proc.
+IEEE Wirel. Commun. Netw. Conf. (WCNC), Austin, TX, USA, Apr.
+2022, pp. 2655–2660.
+[7] G. Charan, M. Alrabeiah, T. Osman, and A. Alkhateeb, “Camera
+based mmwave beam prediction: Towards multi-candidate real-world
+scenarios,” IEEE Trans. Veh. Technol., vol. 74, no. 4, pp. 5897–5913,
+Apr. 2025.
+[8] J. Morais, A. Bchboodi, H. Pezeshki, and A. Alkhateeb, “Position-
+aided beam prediction in the real world: How useful GPS locations
+actually are?” in Proc. IEEE Int. Conf. Commun. (ICC), Rome, Italy,
+May 2023, pp. 1824–1829.
+[9] Y. Bian, J. Yang, S. Xia, and S. Jin, “3-D LiDAR and GPS aided
+beam tracking in millimeter wave vehicular communications,” IEEE
+Wireless Commun. Lett., vol. 13, no. 12, pp. 3290–3294, Dec. 2024.
+[10] Y.
+Bian,
+J.
+Yang,
+L.
+Dai,
+X.
+Lin,
+X.
+Cheng,
+H.
+Que,
+L.
+Liang,
+and
+S.
+Jin,
+“Multi-modal
+fusion
+for
+sensing-
+aided
+beam
+tracking
+in
+mmwave
+communications,”
+Phys.
+Commun., vol. 67, p. 102514, Dec. 2024. [Online]. Available:
+https://www.sciencedirect.com/science/article/pii/S1874490724002325
+[11] D. Wu, Y. Zeng, S. Jin, and R. Zhang, “Environment-aware and
+training-free beam alignment for mmwave massive MIMO via channel
+knowledge map,” in Proc. IEEE Int. Conf. Commun. Workshops (ICC
+Workshops), Montreal, QC, Canada, Jun. 2021, pp. 1–7.
+[12] J. Yang, C.-K. Wen, and S. Jin, “Hybrid active and passive sensing
+for SLAM in wireless communication systems,” IEEE J. Sel. Areas
+Commun., vol. 40, pp. 2146–2163, Mar. 2022. [Online]. Available:
+https://api.semanticscholar.org/CorpusID:247242281
+[13] S. Ganji, J. Kim, R. Sonigra, and P. R. Kumar, “Terra: Beam manage-
+ment for outdoor mm-wave networks,” IEEE Trans. Wireless Commun.,
+vol. 23, no. 10, pp. 15 112–15 124, Oct. 2024.
+[14] R. J. G. B. Campello, D. Moulavi, A. Zimek, and J. Sander,
+“Hierarchical density estimates for data clustering, visualization, and
+outlier detection,” ACM Trans. Knowl. Discov. Data, vol. 10, no. 1,
+Jul. 2015. [Online]. Available: https://doi.org/10.1145/2733381
+[15] H. Edelsbrunner and E. P. M¨ucke, “Three-dimensional alpha shapes,”
+ACM Trans. Graph., vol. 13, no. 1, pp. 43–72, Jan. 1994. [Online].
+Available: https://doi.org/10.1145/174462.156635
+[16] M. Garland and P. S. Heckbert, “Surface simplification using quadric
+error metrics,” in Proc. Annu. Conf. Comput. Graph. Interact. Tech.
+(SIGGRAPH), Los Angeles, CA, USA, Aug. 1997, pp. 209–216.
+[Online]. Available: https://doi.org/10.1145/258734.258849
+[17] T. M¨oller and B. Trumbore, “Fast, minimum storage ray-triangle
+intersection,” J. Graphics, GPU, & Game Tools, vol. 2, pp. 21–28,
+Aug. 1997.
+[18] J. Hoydis, S. Cammerer, F. A. Aoudia, A. Vem, N. Binder,
+G. Marcus, and A. Keller, “Sionna: An open-source library for
+next-generation physical layer research,” 2023. [Online]. Available:
+https://arxiv.org/abs/2203.11854
+[19] M. Cui and L. Dai, “Channel estimation for extremely large-scale
+MIMO: Far-field or near-field?” IEEE Trans. Commun., vol. 70, no. 4,
+pp. 2663–2677, Apr. 2022.

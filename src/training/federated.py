@@ -12,7 +12,7 @@ from typing import Dict, List, Optional
 import torch
 from torch.utils.data import DataLoader
 
-from src.data.utils import nmse
+from src.dataset_operation.utils import nmse
 from .trainer import train_epoch, evaluate
 
 
@@ -59,6 +59,7 @@ def federated_train(
     weight_decay: float = 1e-5,
     device: str = "cuda",
     verbose: bool = True,
+    tracker=None,
 ):
     """Full federated training loop.
 
@@ -87,7 +88,7 @@ def federated_train(
         m.load_state_dict(init_state)
         models[bs] = m
         trainable = filter(lambda p: p.requires_grad, m.parameters())
-        optimizers[bs] = torch.optim.Adam(trainable, lr=lr, weight_decay=weight_decay)
+        optimizers[bs] = torch.optim.AdamW(trainable, lr=lr, weight_decay=weight_decay)
 
     history = {"round": [], "train_nmse": {bs: [] for bs in bs_ids},
                "val_nmse_db": {bs: [] for bs in bs_ids}}
@@ -121,11 +122,31 @@ def federated_train(
             else:
                 history["val_nmse_db"][bs].append(None)
 
+        # Compute averages for logging
+        avg_train = sum(history["train_nmse"][bs][-1] for bs in bs_ids) / len(bs_ids)
+        val_vals = [history["val_nmse_db"][bs][-1] for bs in bs_ids
+                    if history["val_nmse_db"][bs][-1] is not None]
+        avg_db = sum(val_vals) / len(val_vals) if val_vals else None
+
+        if tracker is not None:
+            log_data = dict(round=rnd, avg_train_nmse=avg_train)
+            if avg_db is not None:
+                log_data["avg_val_nmse_db"] = avg_db
+            tracker.log(**log_data)
+
         if verbose and (rnd + 1) % 5 == 0:
-            avg_db = sum(
-                v for v in [history["val_nmse_db"][bs][-1] for bs in bs_ids]
-                if v is not None
-            ) / max(sum(1 for bs in bs_ids if history["val_nmse_db"][bs][-1] is not None), 1)
-            print(f"  Round {rnd+1}/{fl_rounds}: avg_val_nmse_db={avg_db:.2f}")
+            if avg_db is not None:
+                print(f"  Round {rnd+1}/{fl_rounds}: avg_val_nmse_db={avg_db:.2f}")
+
+    if tracker is not None:
+        final_train = {bs: history["train_nmse"][bs][-1] for bs in bs_ids}
+        final_val = {bs: history["val_nmse_db"][bs][-1] for bs in bs_ids
+                     if history["val_nmse_db"][bs][-1] is not None}
+        tracker.set_result(
+            fl_rounds=fl_rounds,
+            avg_train_nmse=sum(final_train.values()) / len(final_train),
+            avg_val_nmse_db=sum(final_val.values()) / len(final_val) if final_val else None,
+            per_bs_val_db=final_val,
+        )
 
     return {"models": models, "history": history}

@@ -11,8 +11,9 @@ from typing import Dict, Optional, Callable
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
-from src.data.utils import nmse
+from src.dataset_operation.utils import nmse
 
 
 def _functional_forward(model, params, x):
@@ -23,19 +24,22 @@ def _functional_forward(model, params, x):
 def _inner_loop(model, params, support_batch, inner_lr, inner_steps, device):
     """First-order MAML inner loop: gradient descent on support set.
 
-    Returns adapted parameter dict (detached from meta-graph for FO-MAML).
+    All steps are detached (no create_graph) — this is true FO-MAML.
+    Memory-efficient: no computation graph retained across steps.
     """
     x = support_batch["input"].to(device)
     y = support_batch["target"].to(device)
 
-    for _ in range(inner_steps):
+    for step in range(inner_steps):
         y_hat = _functional_forward(model, params, x)
         loss = nmse(y_hat, y)
+        if torch.isnan(loss) or torch.isinf(loss):
+            return params
         grads = torch.autograd.grad(loss, params.values())
 
-        # First-order MAML: detach gradients (no second-order)
+        # Clip per-parameter gradients to prevent explosion
         params = {
-            name: p - inner_lr * g.detach()
+            name: (p - inner_lr * g.clamp(-10, 10)).detach().requires_grad_(True)
             for (name, p), g in zip(params.items(), grads)
         }
 
@@ -53,6 +57,7 @@ def maml_train(
     meta_epochs: int = 100,
     device: str = "cuda",
     verbose: bool = True,
+    tracker=None,
 ):
     """First-order MAML training loop.
 
@@ -64,7 +69,8 @@ def maml_train(
     bs_ids = list(task_loaders.keys())
     history = {"epoch": [], "meta_loss": [], "val_nmse_db": []}
 
-    for epoch in range(meta_epochs):
+    pbar = tqdm(range(meta_epochs), desc="MAML", disable=not verbose)
+    for epoch in pbar:
         meta_model.train()
         meta_optimizer.zero_grad()
 
@@ -84,8 +90,9 @@ def maml_train(
             support_batch = batches[0]
             query_batch = batches[1]
 
-            # Start from meta-model parameters
-            params = {name: p.clone() for name, p in meta_model.named_parameters()}
+            # Start from meta-model parameters (detached for FO-MAML)
+            params = {name: p.clone().detach().requires_grad_(True)
+                      for name, p in meta_model.named_parameters()}
 
             # Inner loop: adapt to this task
             adapted_params = _inner_loop(
@@ -93,34 +100,36 @@ def maml_train(
             )
 
             # Outer loss on query set with adapted params
-            # For FO-MAML: we compute loss with adapted params and backprop
-            # through the last adaptation step only
             qx = query_batch["input"].to(device)
             qy = query_batch["target"].to(device)
             q_pred = _functional_forward(meta_model, adapted_params, qx)
             query_loss = nmse(q_pred, qy)
 
-            # Accumulate gradients on meta-model parameters
-            # FO-MAML: gradient of outer loss w.r.t. adapted_params,
-            # then transfer to meta_params (since adapted = meta - lr*grad, they share grad)
-            meta_grads = torch.autograd.grad(query_loss, meta_model.parameters(),
-                                              allow_unused=True)
-            for p, g in zip(meta_model.parameters(), meta_grads):
-                if g is not None:
-                    if p.grad is None:
-                        p.grad = g / tasks_per_batch
-                    else:
-                        p.grad += g / tasks_per_batch
+            if torch.isnan(query_loss) or torch.isinf(query_loss):
+                continue
+
+            # FO-MAML: compute gradient w.r.t. adapted_params,
+            # use as approximation of meta-gradient
+            adapted_grads = torch.autograd.grad(query_loss, adapted_params.values())
+            for p, g in zip(meta_model.parameters(), adapted_grads):
+                g_clamped = g.detach().clamp(-10, 10) / tasks_per_batch
+                if p.grad is None:
+                    p.grad = g_clamped
+                else:
+                    p.grad += g_clamped
 
             total_outer_loss += query_loss.item()
             n_tasks += 1
 
         if n_tasks > 0:
+            torch.nn.utils.clip_grad_norm_(meta_model.parameters(), 10.0)
             meta_optimizer.step()
 
         avg_loss = total_outer_loss / max(n_tasks, 1)
         history["epoch"].append(epoch)
         history["meta_loss"].append(avg_loss)
+
+        pbar.set_postfix(meta_loss=f"{avg_loss:.4f}")
 
         # Validation
         if val_loaders and (epoch + 1) % 10 == 0:
@@ -129,10 +138,24 @@ def maml_train(
             )
             avg_val_db = sum(val_results.values()) / len(val_results) if val_results else 0
             history["val_nmse_db"].append(avg_val_db)
-            if verbose:
-                print(f"  Epoch {epoch+1}: meta_loss={avg_loss:.6f}, val_nmse_db={avg_val_db:.2f}")
+            pbar.set_postfix(meta_loss=f"{avg_loss:.4f}", val_db=f"{avg_val_db:.2f}")
+
+            if tracker is not None:
+                tracker.log(epoch=epoch, meta_loss=avg_loss, val_nmse_db=avg_val_db)
         else:
             history["val_nmse_db"].append(None)
+
+            if tracker is not None:
+                tracker.log(epoch=epoch, meta_loss=avg_loss)
+
+    if tracker is not None:
+        final_loss = history["meta_loss"][-1] if history["meta_loss"] else None
+        val_vals = [v for v in history["val_nmse_db"] if v is not None]
+        tracker.set_result(
+            meta_epochs=meta_epochs,
+            final_meta_loss=final_loss,
+            final_val_nmse_db=val_vals[-1] if val_vals else None,
+        )
 
     return {"meta_model": meta_model, "history": history}
 
@@ -193,7 +216,10 @@ def adapt_to_new_site(meta_model, support_loader, inner_lr=0.01,
             optimizer.zero_grad()
             y_hat = adapted(x)
             loss = nmse(y_hat, y)
+            if torch.isnan(loss) or torch.isinf(loss):
+                return adapted
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(adapted.parameters(), 10.0)
             optimizer.step()
 
     return adapted

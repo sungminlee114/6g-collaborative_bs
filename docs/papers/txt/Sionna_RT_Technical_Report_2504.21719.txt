@@ -1,0 +1,4333 @@
+2025-11-24 – Version 1.2
+Sionna RT: Technical Report
+Fayçal Aït Aoudia, Jakob Hoydis, Merlin Nimier-David, Baptiste Nicolet, Sebastian Cammerer, and Alexander
+Keller
+Abstract
+Sionna™is an open-source, GPU-accelerated library that, as of version 0.14, incorporates a ray tracer,
+Sionna RT, for simulating radio wave propagation. A unique feature of Sionna RT is differentiability,
+enabling the calculation of gradients for the channel impulse responses (CIRs), radio maps, and other
+related metrics with respect to system and environmental parameters, such as material properties,
+antenna patterns, and array geometries. The release of Sionna 1.0 provides a complete overhaul of
+the ray tracer, significantly improving its speed, memory efficiency, and extensibility. This document
+details the algorithms employed by Sionna RT to simulate radio wave propagation efficiently, while
+also addressing their current limitations. Given that the computation of CIRs and radio maps requires
+distinct algorithms, these are detailed in separate sections. For CIRs, Sionna RT integrates shooting
+and bouncing of rays (SBR) with the image method and uses a hashing-based mechanism to efficiently
+eliminate duplicate paths. Radio maps are computed using a purely SBR-based approach.
+Corresponding author(s): faitaoudia@nvidia.com
+arXiv:2504.21719v2  [cs.IT]  21 Nov 2025
+Sionna RT: Technical Report
+Contents
+1
+Introduction
+5
+2
+Essential Concepts and Terminology
+8
+2.1
+Scene Objects and Meshes . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+8
+2.2
+Rays and Paths
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+8
+2.3
+Interactions with Scene Objects . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+9
+2.4
+Ray Tubes . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+9
+3
+Path Solver
+11
+3.1
+Generating Candidates by Shooting and Bouncing of Rays (SBR) . . . . . . . . . . . . . . . . .
+12
+3.1.1
+Sampling Initial Ray Directions . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+16
+3.1.2
+Sampling Interaction Types . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+17
+3.1.3
+Specular Chain Candidates Deduplication
+. . . . . . . . . . . . . . . . . . . . . . . . .
+18
+3.2
+Image Method-based Candidate Processing . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+22
+3.3
+Channel Coefficients, Delays, and Doppler Shifts Computation . . . . . . . . . . . . . . . . . .
+25
+3.3.1
+Handling Multiple Antennas at the Transmitter and Receiver . . . . . . . . . . . . . . .
+27
+3.3.2
+Doppler Shifts . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+28
+3.4
+Current Limitations and Potential Improvements . . . . . . . . . . . . . . . . . . . . . . . . . .
+28
+4
+Radio Map Solver
+31
+4.1
+Definition of Radio Map
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+31
+4.2
+Computation of Radio Map without Diffraction
+. . . . . . . . . . . . . . . . . . . . . . . . . .
+33
+4.3
+Computation of Radio Map due to Diffraction
+. . . . . . . . . . . . . . . . . . . . . . . . . . .
+35
+4.4
+Non-Coherent vs. Coherent Radio Maps
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+36
+4.5
+Handling Multiple Transmit Antennas . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+36
+4.6
+Practical Notes
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+37
+A
+Primer on Electromagnetism
+39
+A.1 Coordinate System, Rotations, and Vector Fields . . . . . . . . . . . . . . . . . . . . . . . . . .
+39
+A.2
+Planar Time-Harmonic Waves . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+40
+A.3
+Far Field of a Transmitting Antenna . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+41
+A.4
+Modeling of a Receiving Antenna . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+42
+A.5 General Propagation Path
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+43
+A.6
+Frequency and Impulse Response . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+44
+A.7
+Specular Reflection and Refraction
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+44
+A.7.1
+Single-Layer Slab . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+46
+A.8
+Diffraction . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+47
+2
+Sionna RT: Technical Report
+A.9
+Diffuse Reflection . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+50
+B
+A Brief Overview of Importance Sampling
+52
+C
+Closed-Form Solution for First-Order Diffraction
+53
+D Weighting Factor for Diffraction Radio Maps
+55
+3
+Sionna RT: Technical Report
+List of Acronyms
+BSDF bidirectional scattering distribution function.
+CIR channel impulse response.
+EM electromagnetic.
+GCS global coordinate system.
+JIT just-in-time.
+LoS line-of-sight.
+RIS reflective intelligent surface.
+SBR shooting and bouncing of rays.
+4
+Sionna RT: Technical Report
+1. Introduction
+Ray tracing for simulating radio wave propagation has received renewed attention in the recent years, fueled
+by the growing interest in creating digital twins for wireless communication systems and research topics
+that require simulating spatially consistent CIRs. In 2023, we released Sionna RT [1], the world’s first fully
+differentiable ray tracer for radio propagation modeling, as part of version 0.14 of the Sionna open-source
+library for research in communication systems [2]. Over the following years, we have expanded the capabilities
+of Sionna RT with additional features, including support for diffraction and diffuse reflection (version 0.15),
+mobility (version 0.17), and reflective intelligent surfaces (RISs) (version 0.18).
+Sionna RT is built on top of the just-in-time (JIT) compiler Dr.Jit [3] and the differentiable physically-
+based renderer Mitsuba [4]. Sionna RT implements ray tracing-based algorithms to model the propagation of
+electromagnetic (EM) radio waves, enabling the computation of CIRs and radio maps (also known as coverage
+maps or power maps). Additionally, it includes radio material models to simulate the interaction of radio waves
+with scatterers in a radio propagation environment. The release of Sionna 1.0 marks a significant milestone
+as it features a complete revision of the ray tracing module.1 The ray tracer is now interoperable with major
+deep learning frameworks, including TensorFlow [5] and PyTorch [6]. Moreover, the computation of CIRs and
+radio maps has been substantially accelerated while maintaining full differentiability of the ray tracing process
+by leveraging the automatic differentiation capabilities of Dr.Jit. The ray tracer has also been made easier to
+extend to facilitate research on various aspects of radio propagation and digital twins.
+Figure 1: A propagation path, shown in 2D for clarity.
+The primary objective of Sionna RT is to identify the propagation paths that link radio devices within a
+given propagation environment. As depicted in Figure 1, a propagation environment is defined by a collection
+of scatterers. A radio device functions as either a transmitter, which emits radio waves, or a receiver, which
+captures them, and is equipped with one or more antennas. The channel frequency response 𝐻(𝑓) characterizes
+the propagation of radio waves from a transmitting antenna to a receiving antenna for the frequency 𝑓, and is
+expressed as the ratio of the received voltage to the voltage at the input of the transmitting antenna:
+𝐻(𝑓) = 𝑉R
+𝑉T
+.
+(1)
+As explained in Appendix A, the channel frequency response is the Fourier transform of the CIR, which is
+defined as:
+ℎ(𝜏) =
+𝑁
+∑︁
+𝑛=1
+𝑎𝑛𝛿(𝜏−𝜏𝑛).
+(2)
+Here, 𝑁represents the number of propagation paths connecting the transmit antenna to the receive antenna.
+The term 𝑎𝑛is the complex-valued path coefficient for the 𝑛-th path, and 𝜏𝑛= 𝑟𝑛/𝑐is the propagation delay,
+where 𝑟𝑛is the distance the radio wave travels, and 𝑐is the speed of light. This leads to:
+𝐻(𝑓) =
+∫︁∞
+−∞
+ℎ(𝜏)𝑒−𝑗2𝜋𝑓𝜏𝑑𝜏=
+𝑁
+∑︁
+𝑛=1
+𝑎𝑛𝑒−𝑗2𝜋𝑓𝜏𝑛.
+(3)
+Notably, the path coefficient 𝑎𝑛is calculated by considering the sequence of matrices that model the transfor-
+mations caused by interactions with scatterers along the 𝑛-th propagation path, as well as the characteristics of
+1As of version 1.2, Sionna RT does not support RISs. It remains available as part of Sionna version 0.19.2.
+5
+Sionna RT: Technical Report
+the transmit and receive antennas:
+𝑎𝑛= 𝜆
+4𝜋CR(𝜃R,𝑛, 𝜙R,𝑛)H
+(︃
+ℓ
+∏︁
+ℓ′=1
+T(ℓ′)
+𝑛
+)︃
+CT(𝜃T,𝑛, 𝜙T,𝑛).
+(4)
+Here, 𝜆is the wavelength, ℓis the number of scatterers along the 𝑛-th path, CT is the complex-valued vector
+of dimension 2 representing the transmit antenna pattern evaluated for the angles of departure of the path
+(𝜃T,𝑛, 𝜙T,𝑛), CR is the complex-valued vector of dimension 2 representing the receive antenna pattern evaluated
+for the angles of arrival of the path (𝜃R,𝑛, 𝜙R,𝑛), and T(ℓ′)
+𝑛
+is the 2 × 2 complex-valued matrix modeling the
+interaction with the ℓ′-th scatterer. Further details on the computation of the path coefficient are provided in
+Section 3. The corresponding channel gain is
+𝑔=
+𝑁
+∑︁
+𝑛=1
+|𝑎𝑛|2 .
+(5)
+It is crucial to understand that calculating the path coefficients and delays necessitates first determining the
+intersection points of the paths with the scene geometry, referred to as the path vertices. This is because
+computing the path coefficients (4) requires the knowledge of the geometrical features of the paths. Specifically,
+the antenna patterns are evaluated at the angles of departure and arrival of the paths, and computing the
+matrices T(ℓ′)
+𝑛
+requires the angles of incidence and scattering of waves at the scatterers as well as the traveled
+distances. Once the path vertices have been determined, the path coefficients and delays are computed,
+considering the characteristics of the antennas and scatterers’ materials.
+Paths are determined between two endpoints: a source and a target. Ideally, paths would be traced between
+every pair of transmitter and receiver antennas, designating the sources and targets as the set of transmit and
+receive antennas, respectively. However, when radio devices are equipped with a large number of antennas,
+computing paths for all antenna pairs becomes computationally demanding. To mitigate this issue, Sionna RT
+introduces a synthetic array feature, which calculates paths only between radio devices instead of each antenna
+pair. Phase shifts due to the array geometry are then applied synthetically, as detailed in Section 3. Note that
+the use of synthetic arrays can be disabled. Throughout this document, the endpoints of a path will be referred
+to as sources and targets, which can be either radio devices or antennas. Although the use of synthetic arrays
+does not change the pathfinding process, it does affect the computation of the path coefficient and delays.
+Figure 2: Sionna RT architecture overview.
+Figure 2 illustrates the overall architecture of Sionna RT. A scene represents a radio propagation environment,
+comprising a set of objects, radio materials, and radio devices. Each object acting as a scatterer is associated
+with a radio material that determines its interaction with incident radio waves. Multiple objects can share the
+same radio material. Radio materials are akin to bidirectional scattering distribution function (BSDF) in the
+field of computer graphics, see e.g. [7, Ch. 4.3.1]. Note that an object alone defines only the geometry of a
+scatterer and does not contain any information about the radio material. Radio devices are either transmitters
+or receivers. A solver implements an algorithm for simulating radio wave propagation within a scene. Given the
+distinct algorithmic requirements for CIRs and radio maps, Sionna RT provides two types of solvers:
+• The path solver computes a set of paths connecting a source to a target, which can then be used to
+compute a CIR.
+6
+Sionna RT: Technical Report
+• The radio map solver computes a radio map, a 2D grid of values that approximate the channel gain (5)
+that a receiver located on the grid would observe.
+While Sionna RT provides built-in solvers and radio material models, it is designed to facilitate the implemen-
+tation of custom alternatives.
+Contributions of the Technical Report
+Beyond serving as a technical reference, this technical report provides theoretical contributions by detailing the
+key methods implemented in Sionna RT for simulating radio wave propagation by ray tracing. For computing
+paths, a method that combines SBR with the image method is presented. Although this approach existed
+in earlier versions of Sionna RT, it has been significantly refined in Sionna 1, notably by incorporating a
+hashing-based mechanism to efficiently remove duplicate paths. The technical report also introduces a formal
+definition of radio maps, which forms the foundation for the radio map solver implemented in Sionna RT, as
+it enables efficient computation through SBR alone. It is worth noting that SBR is already extensively used
+in the graphics community (see e.g. [7]). Moreover, we include discussions on the limitations of the current
+algorithms and offer perspectives for future improvements.
+Structure of the Technical Report
+Section 2 introduces the essential concepts and terminology. Sections 3 and 4 provide an in-depth look at
+the built-in path solver and radio map solver of Sionna RT, respectively. These sections primarily focus on
+path tracing algorithms, specifically the methods used to determine the intersection points of paths with scene
+geometry. Appendix A provides a primer on EM theory and explains the computation of the electric field along
+a path. The remaining appendices contain further details and derivations.
+7
+Sionna RT: Technical Report
+2. Essential Concepts and Terminology
+2.1. Scene Objects and Meshes
+A scene object is represented as a mesh, which is composed of a set of triangles, also known as primitives,
+connected by their edges and vertices, as shown in Figure 3. Each object is identified by an index 𝑜∈N0,
+and each primitive within an object is identified by an index 𝑚∈N0. Each primitive possesses three edges,
+identified locally by an index 𝜄∈{0, 1, 2}. Primitives from different objects may share indices, therefore a
+primitive is uniquely identified by the pair (𝑜, 𝑚) ∈N2
+0. Similarly, an edge is uniquely identified by the triplet
+(𝑜, 𝑚, 𝜄) ∈N3
+0.
+Figure 3: A mesh is composed of triangular primitives connected by their edges and vertices. For clarity, only the
+indices of two primitives are displayed for each mesh. These meshes were downloaded from OpenStreetMap [8]
+using Blosm [9].
+2.2. Rays and Paths
+A ray
+(︁
+v, ̂︀k, 𝑡
+)︁
+is characterized by an origin v ∈R3, a direction ̂︀k ∈R3, and a length 𝑡≥0. The direction ̂︀k is a
+unit vector, meaning
+⃦⃦⃦̂︀k
+⃦⃦⃦
+2 = 1. If the length is unspecified, the ray is considered infinite, i.e. 𝑡= ∞. A path
+𝑝(𝐿) with depth 𝐿∈N is a sequence of 𝐿+ 1 rays that connect a source point s ∈R3 to a target point t ∈R3, as
+illustrated in Figure 4,
+𝑝(𝐿) =
+⎛
+⎜
+⎜
+⎝
+(︁
+v(0), ̂︀k(0), 𝑡(0))︁
+⏟
+ ⏞
+ 
+ray 0
+, · · · ,
+(︁
+v(𝐿), ̂︀k(𝐿), 𝑡(𝐿))︁
+⏟
+ ⏞
+ 
+ray 𝐿
+⎞
+⎟
+⎟
+⎠
+(6)
+where the superscript (𝐿) indicates the depth of the path, v(0) = s, v(𝑖+1) = v(𝑖) + 𝑡(𝑖)̂︀k(𝑖), and t = v(𝐿) +
+𝑡(𝐿)̂︀k(𝐿). The origins of the rays that form a path starting at the source and the target are known as the vertices
+of the path. Hence, a path may be as well defined by a sequence of 𝐿+ 2 vertices:
+𝑝(𝐿) =
+(︁
+v(0) = s, v(1), · · · , v(𝐿), v(𝐿+1) = t
+)︁
+(7)
+In this case, the rays have directions ̂︀k(𝑖) =
+v(𝑖+1)−v(𝑖)
+‖v(𝑖+1)−v(𝑖)‖2
+and lengths 𝑡(𝑖) =
+⃦⃦v(𝑖+1) −v(𝑖)⃦⃦
+2 for 0 ≤𝑖≤𝐿.
+The suffix of a path, denoted by 𝑝(ℓ:) where 0 ≤ℓ≤𝐿, is defined as the sub-path consisting of all the rays
+from the ℓ-th one onward, i.e.
+𝑝(ℓ:) =
+(︁(︁
+v(ℓ), ̂︀k(ℓ), 𝑡(ℓ))︁
+, · · · ,
+(︁
+v(𝐿), ̂︀k(𝐿), 𝑡(𝐿))︁)︁
+.
+(8)
+Similarly, the corresponding prefix is:
+𝑝(:ℓ) =
+(︁(︁
+v(0), ̂︀k(0), 𝑡(0))︁
+, · · · ,
+(︁
+v(ℓ−1), ̂︀k(ℓ−1), 𝑡(ℓ−1))︁)︁
+.
+(9)
+8
+Sionna RT: Technical Report
+Figure 4: A path consists of a sequence of ray segments connecting a source point s to a target point t.
+2.3. Interactions with Scene Objects
+Sionna RT currently supports four types of interactions with scene objects:
+Specular reflection (ℛ): The wave is reflected with a reflection angle equal to the incident angle, as illustrated
+in Figure 5a.
+Diffuse reflection (𝒮): The wave is reflected in multiple directions, as illustrated in Figure 5a.
+Refraction (𝒯): The wave propagates into the scattering medium. The solvers assume that object surfaces
+are thin enough that their effect on transmitted rays (i.e. rays that traverse the surfaces through double
+refraction) can be modeled by a single transmitted ray. The transmitted rays are traced without angular
+deflection. Surfaces like walls should be modeled as single flat surfaces, as illustrated in Figure 5c.
+However, when computing the transmitted and reflected fields, the thickness of the traversed object is
+considered.
+Diffraction (𝒟): The wave encounters a wedge-shaped object and is diffracted, as shown in Figure 5b. Diffrac-
+tion occurs in all directions along the Keller cone [10], where the angle between the incident ray and the
+wedge edge, denoted by 𝛽′
+0, equals the angle between the diffracted ray and the wedge edge, denoted
+by 𝛽0. The wedge exterior angle is denoted by 𝑛𝜋, such that 𝑛∈[1, 2]. If the wedge’s exterior angle 𝑛𝜋
+equals 2𝜋, i.e., 𝑛= 2, the wedge is termed an edge.
+The set of possible interaction types is denoted by ℐ= {ℛ, 𝒮, 𝒯𝒟}.
+2.4. Ray Tubes
+While a more detailed background on the propagation of EM waves is provided in Appendix A, we introduce
+here some essential EM concepts that are required for understanding the process of ray tracing. The source s is
+modeled as a point source, an infinitesimally small emitter of EM waves that radiates in all directions according
+to a user-defined transmitter antenna pattern. Note that modeling transmit antennas as point sources is a valid
+approximation when the distances to scatterers and targets are significantly greater than the wavelength of
+the propagating waves. Each ray traced from the source s serves as the axial ray of a ray tube [12, Chapter 2],
+which is a bundle of rays adjacent to the axial one. These ray tubes originate at the source and have a length 𝑟
+and an angular opening 𝜔, as illustrated in Figure 6. Importantly, specular reflection and refraction through
+planar surfaces only alter the ray direction. Diffuse reflection and diffraction alter the shape of the wavefront.
+As detailed in Sections 3 and 4, this process requires specific computations to determine the path vertices
+and corresponding fields. For a given path 𝑝(𝐿) with depth 𝐿, we denote by 𝜒(𝐿) =
+(︀
+𝜒(1), · · · , 𝜒(𝐿))︀
+∈ℐ𝐿the
+sequence of interaction types along the path. A key quantity for the remainder of this document is the depth of
+the last diffuse reflection or diffraction, denoted by ℓ𝑑∈N and defined as:
+ℓ𝑑=
+{︃
+max1≤ℓ≤𝐿
+{︀
+ℓ: 𝜒(ℓ) = 𝒮
+}︀
+if ∃ℓ: 𝜒(ℓ) = 𝒮
+0
+otherwise.
+(10)
+9
+Sionna RT: Technical Report
+(a) Specular (dashed line) and diffuse reflection
+(dotted lines). Inspired by a figure from [11].
+(b) Diffraction of an incident wave by a
+wedge-shaped object.
+(c) Transmission model.
+Figure 5: Sionna RT currently supports specular reflection, diffuse reflection, refraction, and diffraction.
+The dependency of ℓ𝑑on 𝜒(𝐿) is omitted for brevity. The case where ℓ𝑑= 0 corresponds to paths that do not
+contain any diffuse reflection, known as specular chains. If ℓ𝑑> 0, then the suffix 𝑝(ℓ𝑑:) is referred to as the
+specular suffix of 𝑝. The value ℓ𝑑represents the depth index from which the path is composed solely of specular
+reflections, refractions, and diffraction, and is termed the specular suffix index of 𝑝.
+Figure 6: A ray tube is a bundle of rays adjacent to an axial ray.
+10
+Sionna RT: Technical Report
+3. Path Solver
+Figure 7: The path solver constructs propagation paths that connect a source and a target in a scene.
+A path solver aims to determine a set of paths that connect two endpoints in a scene, as illustrated in
+Figure 7. From this set of paths, a time- or frequency-domain CIR can be computed. The path solver leverages
+SBR to efficiently compute paths in a scene. SBR operates as follows: First, rays2 are traced from the source
+into directions specified by a lattice on the unit sphere (see Section 3.1.1). Then, an SBR loop iteratively tests
+the intersection of the rays with the scene geometry. At every intersection, an interaction type is selected from
+ℐ, and a new ray is spawned according to the selected interaction type. The method for choosing interaction
+types is detailed in Section 3.1.2. The loop terminates when no more rays remain active, meaning they have
+either bounced out of the scene, reached a predefined maximum number of bounces, or satisfied another
+termination criterion. Notably, at each interaction of a ray with a surface in the scene, only one scattered ray is
+spawned, as spawning multiple rays would result in an exponential increase in the number of rays, quickly
+overwhelming the available computational resources.
+When a diffuse reflection occurs during the SBR loop, the solver checks whether there is a line-of-sight
+(LoS) to the target, meaning that the ray segment from the interaction point to the target point is not occluded.
+If such a connection exists, the path is deemed valid and is returned by the solver. This process is known
+as next-event estimation. Subsequently, a new ray is spawned in a random direction within the hemisphere
+defined by the surface normal of the primitive involved. This new ray may lead to the discovery of additional
+paths. Next-event estimation is only possible for diffuse reflections that scatter energy into all directions. For
+specular reflection and refraction, only a single ray is spawned in the only possible direction. Consequently, the
+probability of finding paths connecting the source to the target that end with a specular reflection or refraction
+by SBR is effectively zero, as depicted in Figure 8a. This is because hitting a specific point (the target) with a
+specular reflection or refraction requires perfect alignment of the incident ray, which has zero probability in
+continuous space. Likewise, for diffraction, the probability that the target is on the surface of the Keller cone
+is zero, as shown in Figure 8b. When diffraction occurs, a single ray is spawned in a random direction along
+the Keller cone to continue the sample. Paths ending with a specular suffix can therefore not be determined
+solely by SBR. In particular, specular chains cannot be computed by SBR. Since specular chains typically carry
+a significant amount of the transported energy, SBR alone is insufficient for computing CIRs.
+To compute paths ending with a specular suffix, including specular chains, the path solver uses an image
+method-based algorithm. However, a brute-force implementation of the image method that would test all
+possible combinations of primitives and wedges that constitute the scene is prohibitive even for moderately large
+scenes. Therefore, the path solver uses SBR as a heuristic to find path candidates. A path candidate consists
+of a sequence of primitives or wedges and interaction types ending with a specular reflection, refraction, or
+diffraction. As the path vertices determined during the SBR do not form a path that connects to the target, the
+image method is used to adjust the vertex locations to establish the connection. Intuitively, SBR pre-selects path
+candidates in the vicinity of the transmitter and receiver for the image method to compute corresponding valid
+paths to be returned by the solver. These steps of the Sionna RT path solver are depicted in Figure 9. Notably,
+2The processing of the rays is parallelized for accelerated computation.
+11
+Sionna RT: Technical Report
+(a)
+(b)
+Figure 8: (a) When a diffuse reflection occurs, next event estimation tests whether the LoS between the
+intersection point and the target is occluded (represented by the dotted line). This process is not applicable
+for specular reflection (represented by the dashed line) and refraction, as only one single direction for the
+scattered ray is valid. (b) Similarly, for diffraction, the probability that the target is on the surface of the Keller
+cone is zero, and a single ray is spawned in a random direction along the Keller cone to continue the sample.
+Shown in 2D for clarity.
+only path candidates ending with a specular suffix (including specular chains) require further processing by the
+image method algorithm. Finally, for each valid path identified, the path solver computes the corresponding
+channel coefficients and propagation delays that characterize the EM wave propagation along that path.
+Alternative methods for identifying paths that include specular chains or specular suffixes may involve
+detection spheres centered at the targets to capture paths ending with a specular suffix, and/or extending the
+direction of specular reflection (or refraction) to a lobe around the specular, refracted, or diffracted direction.
+Such methods only approximate the path vertex locations and the directions of the scattered rays, yielding
+inaccurate path coefficients and resulting in incorrect CIRs.
+Figure 9: Main steps of the Sionna RT path solver.
+The remainder of this section follows the architecture of the path solver shown in Figure 9. First, Section 3.1
+presents the SBR-based candidate generator. Section 3.2 then describes the image method-based algorithm
+that processes candidates to find valid paths with specular suffixes. Section 3.3 details how the solver computes
+the complex-valued channel coefficients and propagation delays, which characterize the radio channel. Finally,
+Section 3.4 discusses current limitations and potential improvements of the path solver.
+3.1. Generating Candidates by Shooting and Bouncing of Rays (SBR)
+The candidate generator utilizes the SBR-based method as illustrated in Figure 10. We first provide an overview
+of the SBR procedure, followed by a detailed explanation. We consider a scene with a single source located at
+s ∈R3 and 𝑁𝑇targets at t𝑘∈R3, where 𝑘= 1, . . . , 𝑁𝑇. Although the path solver built into Sionna RT can
+handle multiple sources, we focus on a single source for the sake of clarity. The process is identical for all
+sources. The paths traced by the candidate generator during the SBR procedure are referred to as samples in
+this section to avoid confusion with the valid paths returned to the user and the candidate paths forwarded to
+12
+Sionna RT: Technical Report
+Figure 10: Algorithm for one sample as implemented in the SBR-based candidate generator. In practice, many
+samples are processed in parallel.
+the image method-based algorithm. A sample therefore consists of a sequence of rays connected end-to-end,
+traced by the candidate generator. As we will see, a single sample can result in multiple valid or candidate
+paths, as illustrated in Figure 11.
+The SBR procedure begins by spawning a user-specified number of rays, denoted by 𝑁𝑆, from the source s
+in directions ̂︀k(0)
+𝑛
+on a Fibonacci lattice, where 𝑛= 1, . . . , 𝑁𝑆. Each ray starts a sample that is traced by the
+candidate generator. Details on the implemented Fibonacci lattice can be found in Section 3.1.1. The SBR
+loop then iterates until either all samples bounce out of the scene or reach a user-specified maximum number
+of bounces, denoted as the maximum depth 𝐿. We denote the depth of the samples by ℓ= 0, . . . , 𝐿. The first
+step of the SBR loop involves testing the intersection of the samples with the scene geometry. If a sample does
+not intersect any object, it has bounced out of the scene, and is deactivated. When a sample 𝑛with depth ℓ
+intersects the scene, we denote by v(ℓ)
+𝑛
+∈R3 the intersection point, by ̂︀n(ℓ)
+𝑛
+∈R3 (︁⃦⃦⃦̂︀n(ℓ)
+𝑛
+⃦⃦⃦
+2 = 1
+)︁
+the surface
+normal at the intersection point oriented towards the half-space containing the incident field, by 𝑜(ℓ)
+𝑛
+∈N0
+the index of the intersected object, and by 𝑚(ℓ)
+𝑛
+∈N0 the index of the specific intersected primitive within
+that object. The interaction type, denoted by 𝜒(ℓ)
+𝑛, is then sampled from ℐ, determining how the sample will
+continue to propagate. Details on the sampling of the interaction type are provided in Section 3.1.2. The rest
+of the loop depends on the sampled interaction type.
+Diffuse Reflection
+As previously indicated, diffuse reflection is assumed to scatter energy in all directions of the half-space
+containing the incident field, which enables next event estimation. Therefore, if a diffuse reflection is sampled
+(i.e. 𝜒(ℓ)
+𝑛= 𝒮), the LoS between the intersection point and each target t1, · · · , t𝑁𝑇is tested. For each target t𝑘
+13
+Sionna RT: Technical Report
+Figure 11: SBR procedure for a single sample 𝑛at depths 1, 2, and 3. At each interaction (i.e. iteration of the
+SBR loop), the sample may result in a candidate or valid path, and a new ray is spawned from the current
+interaction point to prolong the sample path. Shown in 2D for clarity.
+with an unobstructed LoS to the intersection point, a path connecting the source to the target
+𝑝(ℓ)
+𝑛=
+(︁
+s, v(1)
+𝑛, · · · , v(ℓ)
+𝑛, t𝑘
+)︁
+(11)
+is recorded as a valid path to be returned to the user. Finally, a new ray is spawned to continue the sample path,
+with its direction selected uniformly at random from the hemisphere defined by ̂︀n(ℓ)
+𝑛, i.e. ̂︀k(ℓ)
+𝑛
+∼𝒰2𝜋(̂︀n(ℓ)
+𝑛),
+where 𝒰2𝜋(̂︀n(ℓ)
+𝑛) represents the uniform distribution on the hemisphere.
+Specular Reflection and Refraction
+When a specular reflection or refraction is sampled (i.e. 𝜒(ℓ)
+𝑛= ℛor 𝜒(ℓ)
+𝑛= 𝒯), the path (11) is a valid path for
+target t𝑘, where 𝑘∈{1, . . . , 𝑁𝑇}, only if
+t𝑘−v(ℓ)
+𝑛
+⃦⃦⃦t𝑘−v(ℓ)
+𝑛
+⃦⃦⃦
+2
+= ̂︀k(ℓ)
+𝑛,
+(12)
+where
+̂︀k(ℓ)
+𝑛=
+⎧
+⎪
+⎨
+⎪
+⎩
+̂︀k(ℓ−1)
+𝑛
+−2
+(︁
+(̂︀k(ℓ−1)
+𝑛
+)
+T̂︀n(ℓ)
+𝑛
+)︁
+̂︀n(ℓ)
+𝑛
+⃦⃦⃦⃦̂︀k(ℓ−1)
+𝑛
+−2
+(︂(︁
+̂︀k(ℓ−1)
+𝑛
+)︁T̂︀n(ℓ)
+𝑛
+)︂
+̂︀n(ℓ)
+𝑛
+⃦⃦⃦⃦
+2
+if 𝜒(ℓ)
+𝑛= ℛ
+̂︀k(ℓ−1)
+𝑛
+if 𝜒(ℓ)
+𝑛= 𝒯
+(13)
+and where uT denotes the transpose of u. Since targets are modeled as points, condition (12) effectively occurs
+with zero probability, and, consequently, the path (11) is not a valid path. However, the specular suffix 𝑝(ℓ𝑑:)
+𝑛
+,
+where ℓ𝑑is defined as in (10), can be further processed to determine vertices
+(︁
+̃︀v(ℓ𝑑+1)
+𝑛
+, · · · , ̃︀v(ℓ)
+𝑛
+)︁
+such that
+̃︀𝑝(ℓ)
+𝑛=
+⎛
+⎜
+⎝s, v(1)
+𝑛, · · · , ̃︀v(ℓ𝑑+1)
+𝑛
+, · · · , ̃︀v(ℓ)
+𝑛, t𝑘
+⏟
+ ⏞
+ 
+Processed specular suffix
+⎞
+⎟
+⎠
+(14)
+14
+Sionna RT: Technical Report
+is a valid path, as illustrated in Figure 12. This additional processing is performed using the image method in
+the algorithm described in Section 3.2.
+Figure 12: Processing a candidate specular chain of depth ℓ= 2 (𝑝(2)
+𝑛, dashed line) to produce a valid path
+(̃︀𝑝(2)
+𝑛, solid line). The same process applies to specular suffixes. Shown in 2D for clarity.
+Importantly, for a sequence of primitives and interaction types
+(︁
+v(ℓ𝑑)
+𝑛
+,
+(︁
+𝑜(ℓ𝑑+1)
+𝑛
+, 𝑚(ℓ𝑑+1)
+𝑛
+, 𝜒(ℓ𝑑+1)
+𝑛
+)︁
+, · · · ,
+(︁
+𝑜(ℓ)
+𝑛, 𝑚(ℓ)
+𝑛, 𝜒(ℓ)
+𝑛
+)︁
+, t𝑖
+)︁
+(15)
+where v(0)
+𝑛
+= s, there exists at most a single set of vertices ̃︀v(ℓ𝑑+1)
+𝑛
+, · · · , ̃︀v(ℓ)
+𝑛
+such that ̃︀𝑝(ℓ)
+𝑛is a valid path. Conse-
+quently, if ℓ𝑑= 0, i.e. 𝑝(ℓ)
+𝑛is a specular chain, then further processing by the image method of multiple identical
+candidates (15) would result in multiple identical valid paths, which would lead to erroneous CIRs. Therefore,
+if the sample 𝑝(ℓ)
+𝑛is a specular chain, a hashing-based de-duplication mechanism, detailed in Section 3.1.3,
+ensures that specular chain candidates are only evaluated once. Notably, the path hashing mechanism discards
+redundant candidates “on-the-fly”, significantly reducing memory and compute requirements. However, when
+ℓ𝑑> 0, then v(ℓ𝑑)
+𝑛
+corresponds to a diffuse reflection point that is the result of a randomly sampled ray direction
+(either at the source or the last previous diffuse reflection point). Since the probability of two different paths
+having identical randomly sampled diffuse reflection points is effectively zero, path uniqueness is guaranteed
+in these cases without requiring the de-duplication mechanism.
+As shown in Figure 10, a LoS occlusion test to the target is used as a heuristic to discard path candidates
+that have little chance of resulting in a valid path after processing by the image method-based algorithm.
+Finally, a new ray is traced into the direction (13) to continue the sample path.
+Diffraction
+When tracing rays, the probability that a ray exactly intersects the edge of a wedge is zero. Therefore, when a
+ray intersects a primitive and diffraction is sampled (i.e., 𝜒(ℓ)
+𝑛
+= 𝒟), the intersection point between the ray
+(︁
+v(ℓ−1)
+𝑛
+, ̂︀k(ℓ−1)
+𝑛
+)︁
+and the primitive
+(︁
+𝑜(ℓ)
+𝑛, 𝑚(ℓ)
+𝑛
+)︁
+is projected onto one of the primitive’s edges, yielding the vertex
+v(ℓ)
+𝑛, as illustrated in Figure 13. The index of the edge onto which the intersection point is projected is denoted
+by 𝜄(ℓ)
+𝑛.
+The path (11) is a valid path to a target t𝑘(with 𝑘∈{1, . . . , 𝑁𝑇}) only if there exists an angle 𝜑∈[0, 𝑛𝜋],
+where 𝑛𝜋is the exterior angle of the wedge, such that
+t𝑘−v(ℓ)
+𝑛
+⃦⃦⃦t𝑘−v(ℓ)
+𝑛
+⃦⃦⃦
+2
+= ̂︀k(ℓ)
+𝑛,
+(16)
+with the diffraction direction given by
+̂︀k(ℓ)
+𝑛= sin (𝛽0) cos 𝜑̂︀t(ℓ)
+𝑛+ sin (𝛽0) sin 𝜑̂︀n(ℓ)
+𝑛+ cos (𝛽0)̂︀e(ℓ)
+𝑛,
+(17)
+15
+Sionna RT: Technical Report
+Figure 13: Diffracting edges are identified by projecting the intersection point onto the edges of the intersected
+primitive.
+where 𝛽0 is the angle between the incident ray direction ̂︀k(ℓ−1)
+𝑛
+and the wedge vector ̂︀e(ℓ)
+𝑛, and
+(︁
+̂︀t(ℓ)
+𝑛, ̂︀n(ℓ)
+𝑛, ̂︀e(ℓ)
+𝑛
+)︁
+is an orthonormal basis such that ̂︀t(ℓ)
+𝑛
+= ̂︀n(ℓ)
+𝑛× ̂︀e(ℓ)
+𝑛
+(see Figure 13). Note that ̂︀t(ℓ)
+𝑛
+is tangent to the wedge
+face. In (17), ensuring that the angle between the diffracted ray and the edge, denoted by 𝛽0, matches the
+angle between the incident ray and the edge, places the ray on the Keller cone. As with specular reflection
+and refraction, since targets are modeled as points, condition (16) is satisfied with zero probability for all
+𝜑∈[0, 𝑛𝜋], rendering the sampled path invalid. Therefore, candidate paths ending with a diffraction are
+further refined using the image method-based algorithm described in Section 3.2, just as for paths ending with
+specular reflection or refraction. As shown in Figure 10, the processing of diffraction thus follows the same
+steps as for specular reflection and refraction: a hashing-based de-duplication mechanism ensures uniqueness
+of specular chains, and an occlusion test to the target is used as a heuristic to eliminate candidates unlikely to
+produce valid paths after refinement with the image method. Finally, a new ray is traced in the direction (17)
+to continue the sample path, with 𝜑sampled uniformly from [0, 𝑛𝜋].
+As illustrated in Figure 13, projecting the intersection point onto an edge alters the scattered ray direction
+̂︀k(ℓ−1)
+𝑛
+departing from v(ℓ−1)
+𝑛
+. This modification invalidates any preceding specular reflections or refractions,
+meaning that path segments that are not suffixes would require refinement if a diffraction is followed by a
+diffuse reflection. To avoid significantly increased computational complexity from refining non-suffix path
+segments, the path solver prohibits sampling paths that contain both diffraction and diffuse reflection. Such
+paths typically contribute negligibly to the total transported energy and therefore have little impact on the
+accuracy of the CIRs. Moreover, Sionna RT currently supports only first-order diffraction, meaning that paths
+may contain at most one diffraction event.
+The candidate generator depicted in Figure 10 thus yields a set of valid paths connecting the source to all
+targets that do not require further processing (except for the computation of the corresponding path coefficients
+and delays) and end with a diffuse reflection. Additionally, it produces a set of candidate paths ending with
+specular suffixes, which require further processing to be either discarded or refined into valid paths.
+3.1.1. Sampling Initial Ray Directions
+The SBR procedure starts by spawning rays from the source with directions obtained from a spherical Fibonacci
+lattice with 𝑁𝑆points, which is defined as follows:
+̂︀k(0)
+𝑛
+=
+⎡
+⎣
+sin 𝜃𝑛cos 𝜑𝑛
+sin 𝜃𝑛sin 𝜑𝑛
+cos 𝜃𝑛
+⎤
+⎦
+(18)
+16
+Sionna RT: Technical Report
+(a) 100 points.
+(b) 1000 points.
+(c) 10000 points.
+Figure 14: Spherical Fibonacci lattice.
+where
+𝜃𝑛
+=
+arccos 2𝑛
+𝑁𝑆
+𝜑𝑛
+=
+2𝜋𝑛
+𝜙
+and −
+⌊︀𝑁𝑆
+2
+⌋︀
+≤𝑛≤
+⌈︀𝑁𝑆
+2
+⌉︀
+−1, 𝜙= 1+
+√
+5
+2
+is the golden ratio, and ⌊·⌋and ⌈·⌉the floor and ceiling function, respec-
+tively. Note that when defining the Fibonacci lattice, the index 𝑛takes values in the range −
+⌊︀𝑁𝑆
+2
+⌋︀
+, . . . ,
+⌈︀𝑁𝑆
+2
+⌉︀
+−1
+instead of the usual 1, . . . , 𝑁𝑆. Sampling rays from the Fibonacci lattice results in ray tubes sharing approxi-
+mately the same opening angle 4𝜋
+𝑁𝑆.
+The Fibonacci lattice was selected for its simple construction and its benefits over other lattices for numerical
+integration [13, 14]. Figure 14 shows the spherical Fibonacci lattice with 100, 1000, and 10000 points. The
+Sionna RT path solver uses 106 points as the default value for 𝑁𝑆, and higher values will ensure that more
+valid paths are found.
+3.1.2. Sampling Interaction Types
+Within the SBR loop, when a ray intersects the scene geometry, the algorithm generates at most one scattered
+ray. This constraint is necessary because generating multiple rays at each intersection, such as both reflected
+and refracted rays, would lead to an exponential increase in computational complexity and memory usage
+with the depth of the path. Instead, a single interaction type is randomly chosen based on a distribution:
+𝒬= {𝑞(ℛ) , 𝑞(𝒮) , 𝑞(𝒯) , 𝑞(𝒟)} ,
+where 𝑞(ℛ) + 𝑞(𝒮) + 𝑞(𝒯) + 𝑞(𝒟) = 1 and 𝑞(·) ≥0.
+(19)
+Here, 𝑞(𝜒) represents the probability of selecting the interaction type 𝜒∈ℐ. Importantly, the choice of
+distribution 𝒬does not affect the calculation of the paths’ electric fields, which are solely dependent on the
+propagation environment. However, the choice of distribution 𝒬significantly impacts the sample efficiency of
+the ray tracer, which affects the number of samples 𝑁𝑆needed to compute paths that connect a source to a
+target and capture the majority of the transported energy. Sampling only one interaction type per intersection
+may appear limiting, but this is offset by the large number of samples generated from each source. In most
+scenarios, a high sample count allows identifying all significant paths.
+For each sample 𝑛at depth ℓ, the interaction type is sampled independently for every interaction along every
+path. For specular reflection, diffuse reflection, and refraction, the probability of selecting each interaction type
+is proportional to the squared amplitudes of the corresponding reflection and refraction coefficients. Diffraction,
+on the other hand, is sampled using a fixed probability 𝑞(𝒟) ∈[0, 1]. This choice is motivated by the fact that
+diffraction typically carries much less energy compared to reflection and refraction, which would result in very
+low probabilities for sampling diffraction if its probability were also based on the diffraction coefficients. The
+17
+Sionna RT: Technical Report
+(a) Scene used for the comparison.
+101
+102
+103
+104
+105
+106
+107
+108
+Number of samples NS
+0.0
+0.5
+1.0
+1.5
+2.0
+2.5
+Channel gain  g
+1e
+5
+Importance sampling
+Uniform sampling
+(b) Channel gain at the target.
+Figure 15: Comparison of sampling strategies for interaction types. The scene consists of a closed metallic box
+containing a glass screen, with a source (red ball) and target (green ball) on opposite sides. The box is shown
+open to visualize the interior. Importance sampling achieves faster convergence of the channel gain compared
+to uniform sampling.
+resulting distribution for the interaction types is:
+𝑞(ℛ) = (1 −𝑞(𝒟)) 𝑅2
+|𝑟⊥|2 +
+⃒⃒𝑟‖
+⃒⃒2
+|𝑟⊥|2 +
+⃒⃒𝑟‖
+⃒⃒2 + |𝑡⊥|2 +
+⃒⃒𝑡‖
+⃒⃒2
+𝑞(𝒮) = (1 −𝑞(𝒟)) 𝑆2
+|𝑟⊥|2 +
+⃒⃒𝑟‖
+⃒⃒2
+|𝑟⊥|2 +
+⃒⃒𝑟‖
+⃒⃒2 + |𝑡⊥|2 +
+⃒⃒𝑡‖
+⃒⃒2
+𝑞(𝒯) = (1 −𝑞(𝒟))
+|𝑡⊥|2 +
+⃒⃒𝑡‖
+⃒⃒2
+|𝑟⊥|2 +
+⃒⃒𝑟‖
+⃒⃒2 + |𝑡⊥|2 +
+⃒⃒𝑡‖
+⃒⃒2
+𝑞(𝒟) ∈[0, 1]
+(20)
+In Sionna RT, 𝑞(𝒟) is set to 0.2. Here, 𝑟⊥, 𝑟‖, 𝑡⊥, and 𝑡‖ are the Fresnel coefficients (131), 𝑆is the scattering
+coefficient (see Section A.9), and 𝑅is the reflection reduction factor (164). This approach ensures that
+interaction types responsible for scattering more energy are sampled more frequently—-a technique known
+as importance sampling [15, 16]. This is similar to importance sampling techniques for light transport paths
+commonly used in computer graphics. A brief overview of importance sampling in the context of ray tracing for
+the simulation of radio wave propagation is provided in Appendix B.
+To illustrate the importance of optimized sampling strategies, we compare uniform sampling, where specular
+reflection, diffuse reflection, and refraction are selected with equal probability, to importance sampling using
+the scene shown in Figure 15a. The scene consists of a metallic box containing a glass screen, with a source
+and target positioned on opposite sides. Diffuse reflection, specular reflection, refraction, and diffraction are
+enabled, and the maximum depth 𝐿is set to 5. As shown in Figure 15b, using importance sampling leads to
+better sample efficiency when compared to uniform sampling, as convergence requires approximately 100×
+fewer samples to capture most of the received energy. This demonstrates the benefit of selecting interactions
+according to the material properties of the scatterers.
+3.1.3. Specular Chain Candidates Deduplication
+As mentioned in Section 3.1 and Figure 10, to avoid storing multiple identical specular chain candidates, a
+path hashing method is used to discard duplicates of previously found candidates “on-the-fly”. A specular chain
+candidate is defined by a sequence of interactions with the scene, each characterized by the intersected object
+𝑜(ℓ)
+𝑛∈N0, the corresponding intersected primitive 𝑚(ℓ)
+𝑛∈N0, the diffracted edge 𝜄(ℓ)
+𝑛∈{0, 1, 2} (if 𝜒(ℓ)
+𝑛= 𝒟),
+18
+Sionna RT: Technical Report
+and the interaction type 𝜒(ℓ)
+𝑛∈{ℛ, 𝒯, 𝒟} with ℓ𝑑= 0, i.e.
+𝑐(ℓ)
+𝑛=
+(︁
+s,
+(︁
+𝑜(1)
+𝑛, 𝑚(1)
+𝑛, 𝜄(1)
+𝑛, 𝜒(1)
+𝑛
+)︁
+, · · · ,
+(︁
+𝑜(ℓ)
+𝑛, 𝑚(ℓ)
+𝑛, 𝜄(ℓ)
+𝑛, 𝜒(ℓ)
+𝑛
+)︁)︁
+.
+(21)
+For specular chain candidates, we do not need to store the path vertices. If the candidate leads to a valid path,
+these vertices will be computed. Invalid candidates are discarded.
+Figure 16: Two candidate paths, 𝑝1 and 𝑝2, which differ by being reflected by different coplanar primitives and
+by encountering a refraction (in 𝑝1 only), yield the same path ̃︀𝑝once refined by the image method. Shown in
+2D for clarity.
+The hashing process guarantees that each specular chain candidate uniquely represents the geometry of a
+path after refinement with the image method (see Section 3.2). This is achieved by computing a hash value that
+uniquely identify the sequence of primitives constituting the path. Importantly, primitives that are coplanar
+(i.e., lie in the same plane) are treated as equivalent during hashing. This is because the image method assumes
+all reflection surfaces extend infinitely, making the exact in-plane position of a primitive irrelevant to the path
+geometry. Furthermore, refraction can be omitted from the hashing procedure since it does not change the
+ray direction and therefore does not alter the geometry of the path, as refraction is modeled without angular
+deflection. Figure 16 illustrates this concept: two candidate paths, 𝑝1 and 𝑝2, yield to the same refined path ̃︀𝑝,
+and thus they should share the same hash value. This holds even though only one candidate is refracted by
+primitive (𝑎), and both are reflected by different but coplanar primitives (𝑏) and (𝑐), respectively.
+Algorithm 1 depicts how path hashing works during ray tracing to avoid computing duplicate specular
+chain candidates. It starts by initializing a hash value hash(0)
+𝑛
+to 0 for each sample 𝑛= 1, . . . , 𝑁𝑆being traced.
+Then, as the sample interacts with objects in the scene, the algorithm computes a hash value inter_hash(ℓ)
+𝑛
+for each intersection, and updates the path hash hash(ℓ)
+𝑛
+by combining it with the hash of the intersection,
+creating a unique identifier for the entire sample up to that point. The computation of the interaction hash
+depend on the interaction type. For specular reflection, hashing is performed based on the primitive normal
+vector and an offset positioning the plane with respect to the origin. An integer hash value is then computed
+by sequentially combining the normal components and the offset using the FNV-1a hash function [17]. As
+numerical imprecision can lead to slight variations in the normal vectors of coplanar primitives, the real-valued
+normal components are quantized to a fixed precision and then converted to integers using a function Q(·)
+prior to hashing. Discussion on the choice of the quantization function Q(·) is provided below. For diffraction,
+hashing is performed on the two edge endpoints by applying the FNV-1a hash function sequentially to the
+components of the endpoints. In both hash_plane() and hash_edge(), the first call to the FNV-1a hash
+function uses a large constant H to seed the hash function.
+Once the interaction hash is computed, the hash_update function updates the sample hash value hash(ℓ)
+𝑛
+through a polynomial rolling hash function [18] with a prime base of 1373. For each new intersection, it
+updates the running hash by multiplying the current hash value by the prime number and adding the new
+intersection hash. When a specular chain candidate is considered for a target 𝑘∈{1, . . . , 𝑁𝑇}, the hash value
+of the candidate is paired with the target index 𝑘to form a new hash value
+hash(ℓ)
+𝑛,𝑘= FNV1a(hash(ℓ)
+𝑛, 𝑘).
+(22)
+This ensures that the specular chain candidate is unique for each target.
+19
+Sionna RT: Technical Report
+Algorithm 1 Hashing of specular chains
+1: hash(0)
+𝑛
+←0
+2: ℓ←1
+3: while <Stop condition> do
+◁SBR loop
+4:
+· · ·
+5:
+inter_hash(ℓ)
+𝑛←hash_intersection(𝑜(ℓ)
+𝑛, 𝑚(ℓ)
+𝑛, 𝜄(ℓ)
+𝑛, 𝜒(ℓ)
+𝑛)
+6:
+hash(ℓ)
+𝑛←hash_update(hash(ℓ−1)
+𝑛
+, inter_hash(ℓ)
+𝑛)
+7:
+· · ·
+8:
+ℓ←ℓ+ 1
+9: end while
+10:
+11: procedure hash_intersection(𝑜, 𝑚, 𝜄, 𝜒)
+12:
+if 𝜒= ℛthen return hash_plane(𝑜, 𝑚)
+13:
+else if 𝜒= 𝒟then return hash_edge(𝑜, 𝑚, 𝜄)
+14:
+end if
+15: end procedure
+16:
+17: procedure hash_plane(𝑜, 𝑚)
+18:
+n ←get_normal(𝑜, 𝑚)
+◁Read the primitive normal
+19:
+p ←get_vertex(𝑜, 𝑚)
+◁Read a primitive vertex
+20:
+𝑑←nTp
+◁Offset of the plane to the origin
+21:
+ℎ←FNV1a(Q(n𝑥), H)
+22:
+ℎ←FNV1a(Q(n𝑦), ℎ)
+23:
+ℎ←FNV1a(Q(n𝑧), ℎ)
+24:
+ℎ←FNV1a(Q(𝑑), ℎ)
+25:
+return ℎ
+26: end procedure
+27:
+28: procedure hash_edge(𝑜, 𝑚, 𝜄)
+29:
+p1, p2 ←get_endpoints(𝑜, 𝑚, 𝜄)
+◁Read the edge endpoints
+30:
+ℎ←FNV1a(Q(p1,𝑥), H)
+31:
+ℎ←FNV1a(Q(p1,𝑦), ℎ)
+32:
+ℎ←FNV1a(Q(p1,𝑧), ℎ)
+33:
+ℎ←FNV1a(Q(p2,𝑥), ℎ)
+34:
+ℎ←FNV1a(Q(p2,𝑦), ℎ)
+35:
+ℎ←FNV1a(Q(p2,𝑧), ℎ)
+36:
+return ℎ
+37: end procedure
+38:
+39: procedure hash_update(curr_hash, inter_hash)
+40:
+return (1373 · curr_hash + inter_hash)
+◁Update rolling hash
+41: end procedure
+20
+Sionna RT: Technical Report
+Practical Consideration: Hash Array
+To track information about previously encountered specular chains, an array of integers of size 𝑁𝐻is allocated
+in memory and initialized to zero, referred to as the hash array. When considering a specular chain candidate
+for target 𝑘with corresponding hash value hash(ℓ)
+𝑛,𝑘, the corresponding index 𝑖(ℓ)
+𝑛,𝑘in the hash array is computed
+as
+𝑖(ℓ)
+𝑛,𝑘= hash(ℓ)
+𝑛,𝑘
+mod 𝑁𝐻.
+(23)
+If the hash array entry at index 𝑖(ℓ)
+𝑛,𝑘is greater than zero, it indicates that this path has already been encountered
+and should be discarded. Otherwise, the entry is incremented by one and the candidate is retained for further
+processing by the image method. It is important to note that the index 𝑖(ℓ)
+𝑛,𝑘is not guaranteed to be unique
+for different specular chains. When two different specular chains share the same index value despite being
+different, the path solver will discard one of them. Such an event is referred to as a collision, and can result in
+the discarding of valid paths. However, when two candidates are identical, their indices values will also be
+identical.
+Figure 17: The hash array is used to track encountered path candidates. New candidates are stored in the buffer
+if they haven’t been encountered before. Non-specular chains are added to the buffer without a uniqueness
+check (not depicted in the figure).
+Valid paths and candidates are stored in a buffer of size 𝑁𝐵. This buffer holds, for each path, the sequence of
+interaction types, vertices, intersected objects, primitives, and more. When a valid path is found or a candidate
+is identified as unique, indicated by its corresponding entry 𝑖(ℓ)
+𝑛,𝑘(23) in the hash array being set to zero, the
+path data are stored in the buffer. It is important to note that the index 𝑖(ℓ)
+𝑛,𝑘is solely used for indexing the
+hash array and not for storing path data in the buffer. Instead, path data are stored contiguously in the next
+available slot of the path buffer, as shown in Figure 17. If the buffer becomes full, any newly found paths or
+candidates are discarded. Discarding paths rather than overwriting existing ones is based on the reason that
+paths with lower depth, which are added to the buffer first as the SBR loop advances from ℓ= 0 to ℓ= 𝐿,
+typically carry more energy and should not be replaced by higher depth paths when the buffer becomes full.
+Consequently, the buffer size 𝑁𝐵determines the maximum number of paths and candidates that can be stored.
+Due to the substantial amount of data stored for each path, setting 𝑁𝐵to excessively high values can lead
+to memory issues. This necessitates separating the hash array size 𝑁𝐻from the buffer size 𝑁𝐵. This is because
+a small hash array size can increase the probability of collisions. To reduce the risk of collisions, 𝑁𝐻is set to
+𝑁𝐻= max
+(︀
+𝑁𝐵, 106)︀
+(24)
+21
+Sionna RT: Technical Report
+ensuring a minimum array size of 106 elements. In the interface of the Sionna RT built-in path solver, 𝑁𝐵
+corresponds to the samples_per_src parameter, and 𝑁𝐻corresponds to max_num_paths_per_src.
+Practical Consideration: Quantization Function
+An important practical consideration is the design of the quantization function Q(·). When quantizing floating-
+point values to integers, values that are very close but lie on opposite sides of a quantization boundary can
+be mapped to different integers and therefore yield different hash values. For example, with rounding as the
+quantization function, Q(1.4999) = 1 and Q(1.5001) = 2. This can cause identical candidates, which differ only
+due to numerical imprecision, to be treated as distinct, resulting in duplicate paths. To mitigate this issue,
+multiple hash values are computed for each sample, each using a different quantization function. A path is
+only considered unique if all of its corresponding hash values are unique. In the current implementation of
+Sionna RT, two quantization functions are used: rounding and floor, leading to two hash values being computed
+per candidate. This approach can be interpreted as a form of locality-sensitive hashing [19], as it aims to group
+together candidates that differ only due to numerical imprecision by using multiple hash functions to reduce
+the risk of misclassification.
+3.2. Image Method-based Candidate Processing
+The image method processes path candidates to determine valid paths that are specular chains, or end with
+specular suffixes. Consider a candidate path
+𝑐(ℓ)
+𝑛=
+⎛
+⎜
+⎜
+⎝s,
+(︁
+𝑜(1)
+𝑛, 𝑚(1)
+𝑛, 𝜄(1)
+𝑛, 𝜒(1)
+𝑛
+)︁
+, · · · ,
+(︁
+𝑜(ℓ𝑑+1)
+𝑛
+, 𝑚(ℓ𝑑+1)
+𝑛
+, 𝜄(ℓ𝑑+1)
+𝑛
+, 𝜒(ℓ𝑑+1)
+𝑛
+)︁
+, · · · ,
+(︁
+𝑜(ℓ)
+𝑛, 𝑚(ℓ)
+𝑛, 𝜄(ℓ)
+𝑛, 𝜒(ℓ)
+𝑛
+)︁
+, t
+⏟
+ ⏞
+ 
+Specular suffix
+⎞
+⎟
+⎟
+⎠(25)
+where ℓdenotes the path depth, ℓ𝑑is the specular suffix index defined as in (10), and t is the target of the path.
+Recall that the sequence of interactions 𝜒(ℓ) =
+(︁
+𝜒(1)
+𝑛, · · · , 𝜒(ℓ)
+𝑛
+)︁
+was determined by the SBR-based candidate
+generator. For path candidates that end with a specular suffix but are not specular chains (i.e. ℓ𝑑> 0), the
+image method processes only the specular suffix. In these cases, the vertex of the last diffuse reflection v(ℓ𝑑)
+𝑛
+serves as the source point for the image method calculations. Since the processing algorithm is identical for both
+specular chains and specular suffixes, we treat them equivalently in the following discussion. For simplicity of
+notation, we will refer to both types as specular chains and assume ℓ𝑑= 0 throughout the remainder of this
+section.
+(a)
+(b)
+Figure 18: The two steps of the image method for paths without diffraction: (a) compute the images of the
+source and (b) backtrack the path. Shown in 2D for clarity.
+Paths without Diffraction
+We begin by describing the image method process for candidates that contain no diffraction; as illustrated in
+Figure 18, this process consists of two main steps. First, the method iteratively computes images of the source
+22
+Sionna RT: Technical Report
+by reflecting it across each plane at which a specular reflection occurs. Since refracted paths are modeled
+without angular deflection, incorporating refraction into the image method is straightforward: refractions
+may simply be skipped when computing the source images, as they do not alter the ray’s direction. Then,
+the algorithm backtracks from the target to determine the actual path vertices by intersecting lines between
+successive image sources.
+Formally, the image method iteratively computes images of the source s(𝑖)
+𝑛for 𝑖= 0, . . . , ℓ, starting from the
+original source s:
+s(𝑖)
+𝑛=
+⎧
+⎪
+⎪
+⎪
+⎨
+⎪
+⎪
+⎪
+⎩
+s
+if 𝑖= 0
+s(𝑖−1)
+𝑛
+−2
+(︂(︁
+s(𝑖−1)
+𝑛
+−p(𝑖)
+𝑛
+)︁T
+̂︀n(𝑖)
+𝑛
+)︂
+̂︀n(𝑖)
+𝑛
+if 𝜒(𝑖)
+𝑛= ℛ
+s(𝑖−1)
+𝑛
+if 𝜒(𝑖)
+𝑛= 𝒯
+(26)
+Here, p(𝑖)
+𝑛represents any point on the plane containing the primitive
+(︁
+𝑜(𝑖)
+𝑛, 𝑚(𝑖)
+𝑛
+)︁
+, and ̂︀n(𝑖)
+𝑛denotes the surface’s
+normal vector. For specular reflections (𝜒(𝑖)
+𝑛= ℛ), the image is computed by reflecting the previous image
+across the surface plane, while for refractions (𝜒(𝑖)
+𝑛= 𝒯), the image position remains unchanged.
+During backtracking, the algorithm traces rays iteratively from the target t back to the source s by intersecting
+lines between successive image points. The intersection points ̃︀v(𝑖)
+𝑛
+are the refined vertices of the path.
+Specifically, a sequence of ℓrays
+(︁
+̃︀v(𝑖+1)
+𝑛
+, ̂︀d(𝑖)
+𝑛
+)︁
+, 𝑖= ℓ, . . . , 1, is traced, where ̃︀v(ℓ+1)
+𝑛
+= t and
+̂︀d(𝑖)
+𝑛=
+s(𝑖)
+𝑛−̃︀v(𝑖+1)
+𝑛
+⃦⃦⃦s(𝑖)
+𝑛−̃︀v(𝑖+1)
+𝑛
+⃦⃦⃦
+2
+̃︀v(𝑖)
+𝑛= intersection
+(︁(︁
+̃︀v(𝑖+1)
+𝑛
+, ̂︀d(𝑖)
+𝑛
+)︁
+,
+(︁
+𝑜(𝑖)
+𝑛, 𝑚(𝑖)
+𝑛
+)︁)︁
+, only if 𝑖> 0
+(27)
+where ̃︀v(𝑖)
+𝑛is the intersection point between the ray
+(︁
+̃︀v(𝑖+1)
+𝑛
+, ̂︀d(𝑖)
+𝑛
+)︁
+and the primitive
+(︁
+𝑜(𝑖)
+𝑛, 𝑚(𝑖)
+𝑛
+)︁
+, as shown in
+Figure 18b. The path is considered valid only if two conditions are met: (i) each ray
+(︁
+̃︀v(𝑖+1)
+𝑛
+, ̂︀d(𝑖)
+𝑛
+)︁
+successfully
+intersects a primitive that is coplanar with the primitive
+(︁
+𝑜(𝑖)
+𝑛, 𝑚(𝑖)
+𝑛
+)︁
+, and (ii) the line segment between ̃︀v(𝑖+1)
+𝑛
+and ̃︀v(𝑖)
+𝑛is unobstructed by any other scene geometry. If either condition fails, then the path is discarded. The
+case 𝑖= 0 corresponds to the final segment of the path, which connects to the source s. If the path is valid,
+then the returned path will be (14).
+Paths with Diffraction
+To handle paths involving diffraction, we adopt an approach inspired by [20]. Since Sionna RT currently only
+supports first-order diffraction, each sample 𝑛contains at most a single diffracting edge, whose position within
+the path is denoted by 𝑖𝒟∈{1, . . . , ℓ}. For notational simplicity, we omit the explicit dependence of 𝑖𝒟on 𝑛.
+The core idea is to use image theory to compute the diffraction point in image space and subsequently map
+it back to the original space. The motivation for this approach is that, in the image space, all specular reflections
+and refractions are effectively “removed”, leaving only the diffraction event. This reduces the problem to a
+simpler form: finding the appropriate diffraction point for a path of the shape source →diffraction →target.
+More precisely, for every sample 𝑛, the diffracting edge at depth 𝑖𝒟, which is characterized by an endpoint o𝑛
+and an edge vector ̂︀e𝑛, has its images computed by reflecting its endpoint and edge vector across each plane at
+23
+Sionna RT: Technical Report
+which a specular reflection occurs over the following interactions 𝑖= 𝑖𝒟+ 1, . . . , ℓ:
+o(𝑖)
+𝑛=
+⎧
+⎪
+⎪
+⎪
+⎨
+⎪
+⎪
+⎪
+⎩
+o𝑛
+if 𝑖= 𝑖𝒟
+o(𝑖−1)
+𝑛
+if 𝜒(𝑖)
+𝑛̸= ℛ
+o(𝑖−1)
+𝑛
+−2
+(︂(︁
+o(𝑖−1)
+𝑛
+−p(𝑖)
+𝑛
+)︁T
+̂︀n(𝑖)
+𝑛
+)︂
+̂︀n(𝑖)
+𝑛
+if 𝜒(𝑖)
+𝑛= ℛ
+̂︀e(𝑖)
+𝑛=
+⎧
+⎪
+⎪
+⎪
+⎨
+⎪
+⎪
+⎪
+⎩
+̂︀e𝑛
+if 𝑖= 𝑖𝒟
+̂︀e(𝑖−1)
+𝑛
+if 𝜒(𝑖)
+𝑛̸= ℛ
+̂︀e(𝑖−1)
+𝑛
+−2
+(︂(︁
+̂︀e(𝑖−1)
+𝑛
+)︁T
+· ̂︀n(𝑖)
+𝑛
+)︂
+̂︀n(𝑖)
+𝑛
+if 𝜒(𝑖)
+𝑛= ℛ
+(28)
+where p(𝑖)
+𝑛represents any point on the plane containing the primitive
+(︁
+𝑜(𝑖)
+𝑛, 𝑚(𝑖)
+𝑛
+)︁
+, and ̂︀n(𝑖)
+𝑛denotes the surface’s
+normal vector. Applying image theory, specular reflections and refractions can be ignored when searching for
+the diffraction point in image space. The problem thus reduces to finding the diffraction point in image space,
+̃︀v(𝑖𝒟,ℓ)
+𝑛
+, of the path s(ℓ)
+𝑛
+→̃︀v(𝑖𝒟,ℓ)
+𝑛
+→t. According to Fermat’s principle, the diffraction point minimizes the
+total path length, denoted by ℒ(𝑥𝑛). Specifically,
+ℒ(𝑥𝑛) =
+⃦⃦⃦t −̃︀v(𝑖𝒟,ℓ)
+𝑛
+⃦⃦⃦
+2 +
+⃦⃦⃦s(ℓ)
+𝑛−̃︀v(𝑖𝒟,ℓ)
+𝑛
+⃦⃦⃦
+2
+(29)
+̃︀v(𝑖𝒟,ℓ)
+𝑛
+= o(ℓ)
+𝑛+ 𝑥𝑛̂︀e(ℓ)
+𝑛
+(30)
+where 𝑥𝑛∈R. For first-order diffraction, this minimization has a closed-form solution (see Annex C).
+(a)
+(b)
+(c)
+Figure 19: The three steps of the image method for paths with diffraction: (a) compute the images of the
+source, (b) compute the diffraction point in image space, and (c) backtrack the path. Shown in 2D for clarity.
+Once the diffraction point is found in the image space, the refined path vertices ̃︀v(𝑖)
+𝑛, 𝑖= 1, . . . , ℓ, are
+determined by backtracking as in the case without diffraction. However, for depths 𝑖= 𝑖𝒟+ 1, . . . , ℓ, the
+algorithm uses the intermediate images of the diffraction point:
+̃︀v(𝑖𝒟,𝑖)
+𝑛
+= o(𝑖)
+𝑛+ 𝑥𝑛̂︀e(𝑖)
+𝑛
+(31)
+in place of s(𝑖)
+𝑛in (27). For 𝑖= 1, . . . , 𝑖𝒟−1, s(𝑖)
+𝑛is used as in the non-diffraction case. The diffraction point is
+simply ̃︀v(𝑖𝒟)
+𝑛
+= o𝑛+ 𝑥𝑛̂︀e𝑛. This process is depicted in Figure 19.
+Typically, most of the candidates are discarded by the image method. This is illustrated in Figure 20, which
+shows the number of candidates discarded as a function of the path depth for a single source and target. The
+considered scene is shown in Figure 20a. The number of samples 𝑁𝑆is 106, diffuse reflection is disabled,
+and diffraction is enabled. As seen in Figure 20b, most of the candidates are discarded by the image method
+because only specular chains are generated by the candidate generator, and most of them do not result in valid
+paths.
+24
+Sionna RT: Technical Report
+(a) Scene for this experiment. Red ball: source, green
+ball: target.
+0
+5
+10
+15
+20
+25
+30
+Maximum depth L
+101
+102
+103
+Number of candidates/valid paths
+Path candidates
+Valid paths
+(b) Number of candidates and valid paths.
+Figure 20: The image method typically discards most candidates.
+3.3. Channel Coefficients, Delays, and Doppler Shifts Computation
+The final step of the path solver computes complex-valued channel coefficients and real-valued delays for each
+valid path (see Figure 9). For clarity, we will focus our discussion on a single valid path with index 𝑛and
+depth ℓ, though the same procedure applies to all valid paths computed by both the SBR-based candidate
+generator and image method. We denote the path vertices as v(𝑖)
+𝑛, 𝑖= 1, . . . , ℓ, which may correspond to
+vertices previously computed by the image method (denoted earlier as ̃︀v(𝑖)
+𝑛). The directions of propagation
+between vertices are represented by unit vectors ̂︀k(𝑖)
+𝑛, 𝑖= 0, . . . , ℓ, defined as
+̂︀k(𝑖)
+𝑛=
+v(𝑖+1)
+𝑛
+−v(𝑖)
+𝑛
+⃦⃦⃦v(𝑖+1)
+𝑛
+−v(𝑖)
+𝑛
+⃦⃦⃦
+2
+,
+𝑖= 0, . . . , ℓ
+(32)
+where v(0)
+𝑛
+= s is the source and v(ℓ+1)
+𝑛
+= t is the target. Note that these propagation directions may differ from
+those used during the initial SBR loop described in Section 3.1 due to the refinement by the image method.
+Figure 21: Due to the random sampling of interaction types, only some of the ray tubes that should reach the
+diffusely reflective surface (Scatterer 2) are traced. In this example, two out of four initial rays are transmitted
+when interacting with Scatterer 1, while the other two are reflected and reach the diffusely reflective surface.
+Ensuring Energy Conservation
+As explained in Section 3.1.2, at each interaction point, an interaction type is randomly chosen based on the
+probability distribution 𝒬(19). Initially, the energy emitted by the source is distributed across 𝑁𝑆samples
+according to the transmit antenna pattern (see Section A.3). Since only one interaction type is selected at
+each interaction point, ray tubes that do not match the chosen interaction type are discarded, as illustrated
+25
+Sionna RT: Technical Report
+in Figure 21. The remaining ray tubes must therefore compensate for the discarded ones to maintain energy
+conservation. Given that there is a finite number of specular chains with a specific depth, the channel gain (5)
+observed at the target due to specular chains is accurate if all specular chains are identified by the path solver,
+which is assumed to be the case. This assumption will be reasonable if the number of samples 𝑁𝑆is sufficiently
+large.
+In the context of diffuse reflections, an incident ray tube scatters an amount of energy that is determined by
+its footprint on the diffusely reflective surface (see Section A.9). Due to the random sampling of interaction
+types, only a portion of the ray tubes that should reach a diffusely reflective surface are actually traced (see
+Figure 21), which requires compensating for the untraced ones. For a given path 𝑝(ℓ) that includes a diffuse
+reflection and has a specular suffix index ℓ𝑑(10), we denote by Pr
+(︁
+𝜒(ℓ𝑑)
+𝑛
+)︁
+= ∏︀ℓ𝑑
+ℓ′=1 𝑞
+(︁
+𝜒(ℓ′)
+𝑛
+)︁
+the probability of
+sampling the prefix leading to the last diffuse reflection point, where 𝑞(·) is defined in (19). Consequently,
+on average, only a fraction Pr
+(︁
+𝜒(ℓ𝑑)
+𝑛
+)︁
+of the ray tubes that should reach the diffusely reflective surface are
+actually traced. To account for this, the electric field is scaled by 1/
+√︂
+Pr
+(︁
+𝜒
+(ℓ𝑑)
+𝑛
+)︁at the point of diffuse reflection.
+Algorithm 2 Electric field computation
+1: E𝑛←tx_pattern(̂︀k(0)
+𝑛)
+◁Electric field vector
+2: 𝜏𝑛←0
+◁Cumulative delay
+3: 𝑟𝑛←0
+◁Length of the ray tube
+4: 𝛾𝑛←1
+◁Cumulative path probability
+5: 𝑠𝑛←0
+◁Length of the incident ray tube on the diffracting edge
+6: for ℓ′ = 1, . . . , ℓdo
+7:
+T(ℓ′)
+𝑛
+←Evaluate_Material(𝑜(ℓ′)
+𝑛, 𝜒(ℓ′)
+𝑛, . . . )
+8:
+E𝑛←T(ℓ′)
+𝑛E𝑛
+9:
+𝛾𝑛←𝛾𝑛· 𝑞
+(︁
+𝜒(ℓ′)
+𝑛
+)︁
+10:
+𝑟𝑛←𝑟𝑛+
+⃦⃦⃦v(ℓ′)
+𝑛
+−v(ℓ′−1)
+𝑛
+⃦⃦⃦
+2
+11:
+if 𝜒(ℓ′)
+𝑛
+= 𝒮then
+12:
+E𝑛←
+E𝑛
+√𝛾𝑛
+13:
+𝛾𝑛←1
+14:
+𝑟𝑛←0
+15:
+else if 𝜒(ℓ′)
+𝑛
+= 𝒟then
+16:
+𝑠𝑛←𝑟𝑛
+17:
+𝑟𝑛←0
+18:
+end if
+19:
+𝜏𝑛←𝜏𝑛+
+⃦⃦⃦v(ℓ′)
+𝑛
+−v(ℓ′−1)
+𝑛
+⃦⃦⃦
+2
+𝑐
+20: end for
+21: 𝑟𝑛←𝑟𝑛+
+⃦⃦⃦t −v(ℓ)
+𝑛
+⃦⃦⃦
+2
+22: 𝜏𝑛←𝜏𝑛+ ‖t−v(ℓ)
+𝑛‖2
+𝑐
+23: Erx
+𝑛←rx_pattern(−̂︀k(ℓ)
+𝑛)
+24: 𝑎𝑛←
+𝜆
+4𝜋
+(︀
+ET
+𝑛Erx
+𝑛
+)︀
+25: if Diffracted path then
+26:
+𝑎𝑛←
+𝑎𝑛
+√
+𝑠𝑛𝑟𝑛(𝑠𝑛+𝑟𝑛)
+27: else
+28:
+𝑎𝑛←𝑎𝑛
+𝑟𝑛
+29: end if
+30: return 𝑎𝑛, 𝜏𝑛
+26
+Sionna RT: Technical Report
+Path Coefficient and Delay Computation
+Algorithm 2 outlines the computation of the electric field along a path, based on the EM background in
+Appendix A. The algorithm calculates the electric field vector for each path by iterating through its sequence
+of interactions. Computation begins by initializing the electric field E𝑛with the transmit antenna pattern,
+evaluated in the initial departure direction ̂︀k(0)
+𝑛. For dual polarization, two independent electric field vectors
+are tracked per path. The variable 𝜏𝑛accumulates the total propagation delay, and 𝑟𝑛tracks the ray tube
+length; both start at zero. The cumulative path probability 𝛾𝑛, used for energy normalization, is initialized to
+one (see previous paragraph) and updated at each interaction. The variable 𝑠𝑛is only used for diffracted paths.
+For these paths, it accumulates the length of the incident ray tube on the diffracting edge, which is required to
+compute the diffraction spreading factor, i.e., the field intensity decrease factor due to free space propagation
+(see Section A.8).
+At each interaction, the electric field is updated by the transfer matrix T(ℓ′)
+𝑛, which depends on the intersected
+object 𝑜(ℓ′)
+𝑛, the interaction type 𝜒(ℓ′)
+𝑛, and other parameters (omitted for brevity). The path probability 𝛾𝑛is
+multiplied by the current interaction probability 𝑞
+(︁
+𝜒(ℓ′)
+𝑛
+)︁
+. For diffuse reflections, the electric field is divided by
+√𝛾𝑛to ensure energy conservation and 𝛾𝑛and 𝑟𝑛are reset to one and zero, respectively, as diffuse reflection
+spawns a new ray tube. For diffractions, the length of the incident ray tube on the diffracting edge 𝑟𝑛is stored
+in 𝑠𝑛and 𝑟𝑛is reset to zero. Each segment’s travel time is added to 𝜏𝑛, with 𝑐the speed of light.
+After processing all interactions, the algorithm adds the final segment to the target to both 𝜏𝑛and 𝑟𝑛. The
+receive antenna pattern is then evaluated for the incoming direction, and the channel coefficient is computed
+following Section A.6. Finally, the spreading factor (lines 25–29) is computed and applied to the channel
+coefficient depending on whether the path involves diffraction or not.
+Remark
+The transfer matrices T(ℓ′)
+𝑛
+and the electric field vectors E𝑛are complex-valued, but are implemented using
+their real-valued representations defined as
+⎡
+⎣ℜ
+(︁
+T(ℓ′)
+𝑛
+)︁
+−ℑ
+(︁
+T(ℓ′)
+𝑛
+)︁
+ℑ
+(︁
+T(ℓ′)
+𝑛
+)︁
+ℜ
+(︁
+T(ℓ′)
+𝑛
+)︁
+⎤
+⎦
+(33)
+for matrices and
+[︂ℜ(E𝑛)
+ℑ(E𝑛)
+]︂
+(34)
+for vectors, where ℜ(·) and ℑ(·) denote the real and imaginary parts, respectively.
+3.3.1. Handling Multiple Antennas at the Transmitter and Receiver
+As explained in the introduction (Section 1), Sionna RT supports antenna arrays of any size at both the
+transmitter and receiver, utilizing either synthetic or non-synthetic arrays. In the case of non-synthetic arrays,
+each transmit antenna is treated as a source and each receive antenna as a target, meaning paths are traced
+from every transmit antenna, and the solver calculates paths for each transmit-receive antenna pair. For
+synthetic arrays, paths originate from a single “virtual” source at the center of the transmitter array, and a single
+“virtual” target is considered at the center of every receiver array. Channel coefficients are then computed by
+applying phase shifts synthetically. This method allows for efficient scaling with the number of antennas, but it
+is an approximation that is valid only when the transmitter and receiver array sizes are small relative to the
+distance from the radio devices to each other and to the scatterers. Formally, for synthetic arrays, the channel
+matrix for the 𝑛-th path is expressed as:
+Harray,𝑛= 𝑎𝑛urx
+𝐴
+(︀
+utx
+𝐴
+)︀T
+(35)
+27
+Sionna RT: Technical Report
+Figure 22: Each object as well as the source and target has an associated velocity vector that contributes to the
+total Doppler shift. Shown in 2D for clarity.
+where 𝑎𝑛is the channel coefficient for the 𝑛-th path, calculated using Algorithm 2. The array response vectors
+for the transmit (utx
+𝐴) and receive (urx
+𝐴) antenna arrays are defined as:
+utx
+𝐴=
+[︂
+𝑒𝑗2𝜋
+𝜆(̂︀k(0)
+𝑛)
+Tdtx
+1 , · · · , 𝑒
+𝑗2𝜋
+𝜆(̂︀k(0)
+𝑛)
+Tdtx
+𝑁tx
+𝐴
+]︂T
+,
+urx
+𝐴=
+[︂
+𝑒𝑗2𝜋
+𝜆(−̂︀k(ℓ)
+𝑛)
+Tdrx
+1 , · · · , 𝑒
+𝑗2𝜋
+𝜆(−̂︀k(ℓ)
+𝑛)
+Tdrx
+𝑁rx
+𝐴
+]︂T
+.
+(36)
+Here, ̂︀k(0)
+𝑛
+(̂︀k(ℓ)
+𝑛) represents the departure (arrival) direction of the 𝑛-th path, 𝑁tx
+𝐴(𝑁rx
+𝐴) denotes the number
+of antennas in the transmit (receive) array, and dtx
+𝑖(drx
+𝑖) indicates the relative position of the 𝑖-th antenna
+element to the virtual source (target) in the transmit (receive) array.
+3.3.2. Doppler Shifts
+The impact of moving scene objects on the paths can be simulated in two ways. The first approach involves
+moving objects in small incremental steps along their trajectories and recomputing the propagation paths at
+each step. While this method provides the highest accuracy, it is computationally expensive. However, when
+trajectory lengths are small (not exceeding a few wavelengths), a more efficient approach may be used. In this
+alternative method, we assign a velocity vector v (𝑜) ∈R3 to each object 𝑜and compute the time evolution by
+accumulating Doppler shifts along the propagation paths.
+Figure 22 illustrates this approach. When replaying the valid paths using Algorithm 2, the Doppler shift for
+each path 𝑛is computed by accumulating the contributions from individual objects:
+𝜈(ℓ′)
+𝑛
+=
+⎧
+⎨
+⎩
+0
+if ℓ′ = 0
+𝜈(ℓ′−1)
+𝑛
++
+v
+(︁
+𝑜(ℓ′)
+𝑛
+)︁T(︁
+̂︀k(ℓ′)
+𝑛
+−̂︀k(ℓ′−1)
+𝑛
+)︁
+𝜆
+if 1 ≤ℓ′ < ℓ
+(37)
+where 𝜆is the wavelength. This results in the total Doppler shift 𝜈(ℓ)
+𝑛
+caused by object movements along the
+path. The final Doppler shift observed at the target combines the accumulated shift from moving objects with
+the shifts caused by source and target motion:
+𝜈𝑛= 𝜈(ℓ)
+𝑛
++ v (s)T ̂︀k(0)
+𝑛
+𝜆
+−v (t)T ̂︀k(ℓ)
+𝑛
+𝜆
+.
+(38)
+where v (s) ∈R3 and v (t) ∈R3 denote the velocity vectors of the source and target, respectively.
+3.4. Current Limitations and Potential Improvements
+We discuss in this section some current limitations and potential improvements of the path solver.
+Sampling of Ray Directions
+Improved sample efficiency could be achieved by sampling initial ray directions and scattered ray directions
+based on the transmit antenna pattern and the scattering pattern, respectively. This approach is motivated by
+28
+Sionna RT: Technical Report
+Figure 23: Gain of the 3GPP TR 38.901 [21, Table 7.3-1] antenna pattern for each sample direction on a
+Fibonacci lattice with 104 points. The majority of sample directions exhibit low gain, indicating that importance
+sampling of ray directions may be beneficial.
+the substantial sample efficiency gains shown in Section 3.1.2 through the use of importance sampling. By
+applying optimized sampling strategies for ray directions, further improvements may be realized, as illustrated
+in Figure 23.
+Handling Large Numbers of Targets and Sources
+The current method for handling multiple targets involves iterating over all targets during each SBR loop
+iteration. Figure 24b illustrates this, showing the compute time of the candidate generator and the average
+number of candidates per target found as the number of targets varies. In this experiment, the built-in Sionna RT
+scene “simple street canyon” depicted in Figure 24a, was used. Targets were sampled uniformly at random
+on a plane parallel to the ground at an elevation of 1.5 meters. The maximum depth 𝐿was set to 5, diffuse
+reflections were disabled, and the number of samples 𝑁𝑆was set to 106. As observed, the compute time
+increases with the number of targets due to the iteration over all targets in each SBR loop iteration. However,
+the number of candidates per target remains stable, although with variations due to hash collisions. Note that,
+as discussed in Section 3.2, most candidates do not result in valid paths. This approach may be optimized by
+selecting only targets near intersection points or the source, which will enhance scalability when dealing with
+a large number of targets.
+Scaling with the number of sources presents its own set of challenges. When 𝑁𝑆samples are generated per
+source, the total number of samples produced by the candidate generator becomes 𝑁𝑆· 𝑁𝑂, where 𝑁𝑂denotes
+the number of sources. This results in increased computation time as the number of sources grows, as illustrated
+in Figure 24c. However, the number of candidates per source remains stable. In this experiment, a single target
+is positioned at the center of the scene at an elevation of 1.5 meters, while sources are randomly sampled on
+a plane parallel to the ground at an elevation of 70 meters, above all buildings. Recall that variations in the
+number of candidates per source may occur due to collisions. For a comprehensive view, Figure 24d presents
+results where the total number of samples is kept constant at 106, resulting in 𝑁𝑆=
+⌊︁
+106
+𝑁𝑂
+⌋︁
+samples per source.
+In this scenario, the computation time increases at a much slower rate with the number of sources, but the
+number of candidates found per source decreases rapidly as the number of sources increases.
+Higher-Order Diffraction and Diffuse Reflection
+The path solver supports only first-order diffraction and does not handle paths that contain both diffraction and
+diffuse reflection. Enabling support for such combined paths would require the refinement of non-suffix path
+segments, which is computationally expensive and thus not implemented at present. However, these mixed
+paths typically transport a negligible amount of energy and therefore have little impact on the accuracy of the
+29
+Sionna RT: Technical Report
+(a) Considered scene.
+100
+101
+102
+103
+Number of targets NT
+0
+50
+100
+150
+200
+Computation time (ms)
+2
+337
+672
+1007
+1341
+1559
+Avg. number of paths per target
+Latency
+Number of paths
+(b) Compute time and number of candidates found vs. the
+number of targets.
+100
+101
+102
+103
+Number of sources NO
+0
+50
+100
+150
+200
+250
+300
+Computation time (ms)
+203
+407
+610
+813
+1017
+1220
+Avg. number of paths per source
+Latency
+Number of paths
+(c) Compute time and number of candidates found vs. the
+number of sources and with a constant number of samples
+per source.
+100
+101
+102
+103
+Number of sources NO
+0
+50
+100
+150
+200
+250
+300
+Computation time (ms)
+203
+407
+610
+813
+1017
+1220
+Avg. number of paths per source
+Latency
+Number of paths
+(d) Compute time and number of candidates found vs. the
+total number of samples with a constant number of samples
+in total.
+Figure 24: Computation time and number of candidates found as a function of the number of sources and
+targets. The experiments are conducted on an NVIDIA RTX 4090 GPU.
+computed CIRs.
+Regarding high-order diffraction, there are algorithms for determining the diffraction vertices [22]. However,
+calculating the electric field along these high-order diffraction paths remains an open problem, and as a result,
+high-order diffraction is not currently supported.
+Collisions of Specular Chain Candidates
+The path solver does not handle collisions of specular chain candidates. More precisely, when two different
+specular chains share the same index value in the hash array despite having a different hash due to the modulo
+operation (23), the path solver discards one of them. This could be avoided by using a collision resolution
+mechanism, and by dynamically adjusting the hash array size to reduce the probability of collisions. Currently,
+it is assumed that the hash array size is set to a sufficiently large value to make collisions negligible.
+30
+Sionna RT: Technical Report
+4. Radio Map Solver
+In the previous sections, we have detailed the path solver, which computes propagation paths and the related
+electric fields from a source to a target. Now, we turn our attention to the radio map solver, which computes a
+radio map (also known as coverage map or power map) for a given scene and source. While we describe the
+algorithm for a single source, Sionna RT can compute radio maps for multiple sources in parallel.
+(a) Scene with a measurement plane.
+(b) Radio map for the measurement plane in (a).
+Figure 25: (a) A measurement surface, which is here a plane parallel to the ground, is placed in the scene to
+capture paths without affecting their propagation, (b) the resulting radio map showing the spatial distribution
+of channel gains.
+A radio map estimates the channel gain (5) from a source to each point on a measurement surface, as
+illustrated in Figure 25. The measurement surface is partitioned into measurement cells, which are assumed
+to be planar. For each cell, the solver estimates the average channel gain that would be observed by a target
+placed within that cell. Note that the measurement surface does not interact with the electromagnetic waves,
+but only serves to capture the paths that intersect it. Moreover, a ray can intersect the measurement surface at
+multiple points.
+In Section 4.1, we present a definition of radio maps that allows for their efficient computation using SBR.
+This approach makes the computation of radio maps both fast and scalable.
+4.1. Definition of Radio Map
+We define radio maps as path integrals, similar to how measurements are defined in computer graphics [23, 24,
+Section 3.7]. Consider a point source s. The measurement surface, denoted by ℳ, is divided into 𝑁𝑀cells
+𝑀𝑖, for 𝑖= 1, . . . , 𝑁𝑀, each of area |𝑀𝑖|. Ignoring diffraction for now, let 𝒜denote the union of all scatterer
+surfaces in the scene. We define
+𝒜ℓ= 𝒜× · · · × 𝒜
+⏟
+ ⏞
+ 
+ℓtimes
+(39)
+31
+Sionna RT: Technical Report
+as the set of all sequences of ℓvertices representing interactions with scatterers surfaces—that is, all paths of
+length ℓthat are not diffracted,
+𝑝=
+(︁
+v(1), · · · , v(ℓ))︁
+.
+(40)
+A path from s to a point t ∈ℳcan be written as (s, 𝑝, t), though for brevity we refer simply to the path 𝑝.
+Note that 𝒜0 corresponds to the LoS path from s to t.
+Focusing on paths of a fixed length ℓ, we define the radio map value for the 𝑖-th cell as follows:
+𝐶(ℓ)
+𝑖
+=
+1
+|𝑀𝑖|
+∫︁
+𝑀𝑖
+∫︁
+𝒜ℓ𝑒(𝑝) 𝒱(𝑝) 𝑤(𝑝) 𝑑𝜇(ℓ)(𝑝) 𝑑t
+(41)
+where 𝑑t is an infinitesimal surface element on the measurement surface 𝑀𝑖, and 𝜇(ℓ)(𝑝) is the area-product
+measure on the scattering surface, i.e.,
+𝑑𝜇(ℓ)(𝑝) = 𝑑𝐴(v(1)) . . . 𝑑𝐴(v(ℓ)).
+(42)
+𝒱(𝑝) is the indicator function which equals to 1 if the path is not occluded and 0 otherwise, and 𝑒(𝑝) is the
+channel gain for the path, defined as
+𝑒(𝑝) =
+⃦⃦⃦⃦
+𝜆
+4𝜋TCT(𝜃T, 𝜙T)
+⃦⃦⃦⃦
+2
+2
+.
+(43)
+Here, 𝜆is the wavelength, CT is the 2-dimensional complex vector of the transmit antenna pattern evaluated
+at the departure angles (𝜃T, 𝜙T) of 𝑝, and T is a 2 × 2 complex matrix modeling the effects of scatterers and
+free-space path loss along 𝑝. Unlike in (4), the receive antenna pattern is not applied; instead, the squared
+norm of the electric field is used. This corresponds to assuming a receiver equipped with an isotropic antenna
+whose polarization is matched to the one of the incident wave. Note that since 𝑒(𝑝) is the squared norm of the
+electric field amplitude, the radio map represents a non-coherent sum of the path gains.
+In (41), 𝑤(𝑝) restricts which paths are considered:
+𝑤(𝑝) =
+ℓ
+∏︁
+𝑖=1
+𝑤(𝑖)(̂︀k(𝑖)
+𝑖, ̂︀k(𝑖)
+𝑠),
+(44)
+where ̂︀k(𝑖)
+𝑖
+is the incident wave direction at the 𝑖-th interaction, ̂︀k(𝑖)
+𝑠
+is the scattered wave direction at the 𝑖-th
+interaction, and 𝑤(𝑖) depends on the types of interactions considered for the 𝑖-th interaction. For instance, if
+only specular reflections and refractions are allowed at the 𝑖-th interaction,
+𝑤(𝑖)(̂︀k(𝑖)
+𝑖, ̂︀k(𝑖)
+𝑠) = 𝛿
+⎛
+⎝̂︀k(𝑖)
+𝑠
+−
+̂︀k(𝑖)
+𝑖
+−2
+(︁
+̂︀nT̂︀k(𝑖)
+𝑖
+)︁
+̂︀n(𝑖)
+𝑠
+⃦⃦⃦̂︀k(𝑖)
+𝑖
+−2
+(︁
+̂︀nT̂︀k(𝑖)
+𝑖
+)︁
+̂︀n(𝑖)
+𝑠
+⃦⃦⃦
+2
+⎞
+⎠
+⏟
+ ⏞
+ 
+Specular reflection
++ 𝛿
+(︁
+̂︀k(𝑖)
+𝑠
+−̂︀k(𝑖)
+𝑖
+)︁
+⏟
+ ⏞
+ 
+Refraction
+(45)
+where ̂︀n is the normal to the scatterer’s surface. Although 𝑤(𝑝) could in principle be absorbed into 𝑒(𝑝), as
+usually done in the computer graphics literature, we keep it separate for clarity.
+The overall radio map value for the 𝑖-th cell is given by summing over all possible path depths ℓ= 0, 1, . . . , ∞:
+𝐶𝑖=
+∞
+∑︁
+ℓ=0
+𝐶(ℓ)
+𝑖
+=
+1
+|𝑀𝑖|
+∫︁
+𝑀𝑖
+∞
+∑︁
+ℓ=0
+∫︁
+𝒜ℓ𝑒(𝑝) 𝒱(𝑝) 𝑤(𝑝) 𝑑𝜇(ℓ)(𝑝)𝑑t.
+(46)
+Relation to computer graphics
+Defining radio maps as path integrals closely parallels the measurement equation used in computer graphics
+(see, e.g., [24, Eq. 3.18]). Specifically, following [24, Chapter 8], the radio map definition (46) can be rewritten
+as:
+𝐶𝑖=
+1
+|𝑀𝑖|
+∫︁
+𝑀𝑖
+∫︁
+𝒜∞𝑒(𝑝) 𝒱(𝑝) 𝑤(𝑝) 𝑑𝜇(𝑝)𝑑t,
+(47)
+32
+Sionna RT: Technical Report
+where
+𝒜∞=
+∞
+⋃︁
+ℓ=0
+𝒜ℓ,
+(48)
+𝜇(𝑃) =
+∞
+∑︁
+ℓ=0
+𝜇(ℓ) (︀
+𝑃∩𝒜ℓ)︀
+(49)
+where 𝑃⊂𝒜∞is any set of paths. Intuitively, by defining (48) and (49), the infinite sum over path depths
+in (46) can be replaced with the integral in (47). This provides a path integral formulation for the radio
+map, analogous to [24, Eq. 8.5]. This analogy enables the use of computer graphics techniques for radio map
+computation, including methods for improving sample efficiency.
+It is important to note that this analogy does not extend to the path solver, which is not concerned with
+evaluating an integral but rather with finding a set of paths, which are not aggregated into a single scalar value.
+However, if the objective is limited to calculating channel tap coefficients, then a similar analogy can be made.
+Considering a target t, the definition of a channel tap coefficient [25, Eq. 2.36] can be rewritten as:
+ℎ𝑖=
+∫︁
+𝒜∞𝑎(𝑝)𝒱(𝑝) 𝑤(𝑝)sinc
+(︂
+𝑖−𝜏(𝑝)
+𝑇𝑠
+)︂
+𝑑𝜇(𝑝)
+(50)
+where, 𝑖∈Z denotes the tap index, 𝑎(𝑝) is the complex-valued path coefficient (4), 𝜏(𝑝) the propagation delay,
+and 𝑇𝑠the sampling period. Note that, as previously mentioned, 𝑝is a shorthand for the path (s, 𝑝, t). Unlike [25,
+Eq. 2.36], an integral is used (instead of a sum) to account for the continuous set of propagation directions. In
+this equation, each tap coefficient can be interpreted as a measurement. However, in contrast to computer
+graphics and radio map computations—which involve a non-coherent sum of amplitude magnitudes—the tap
+coefficients involve a coherent aggregation of the path contributions, since the complex-valued 𝑎(𝑝) is used
+rather than only its amplitude. The same analogy applies to the channel frequency response (see, e.g., [25,
+Eq. 3.138]), for which each frequency bin is likewise treated as a measurement.
+While the definition (46) is comprehensive, it is not practical for computation as-is. Indeed, directly
+integrating over the surfaces of the measurement cells would require connecting points on the measurement
+surface to the source, for example by placing one or more targets within each cell and using the path solver
+to compute the connecting paths. However, because accurately computing fine-grained radio maps typically
+demands a large number of target points, this approach is computationally prohibitive. Instead, we use Monte
+Carlo integration with a single SBR loop to efficiently estimate the value of each cell. However, SBR is not
+applicable to paths that include diffraction: as explained in Section 3.1, the probability of a ray intersecting an
+edge is zero. To address this, Sionna RT computes the radio map in two steps, as illustrated in Figure 26. First,
+the radio map is computed for all interaction types except diffraction using a single SBR loop; wedges near
+the source are detected and stored during this step. Second, only diffracted paths are computed. Currently,
+Sionna RT supports only first-order diffraction for radio map computation, i.e., paths connecting the source to
+the measurement surface through a single diffracting wedge. The two radio maps are then summed to obtain
+the final result. The following describes the computation for each step.
+4.2. Computation of Radio Map without Diffraction
+When diffraction is ignored, the radio map can be efficiently computed using a single SBR loop. This is achieved
+by reformulating the radio map definition (46) so that the integration is performed over the directions of rays
+originating from points that spawn ray tubes intersecting the measurement surface, rather than directly over
+the measurement surface itself. This is enabled by applying the change of variables 𝑑t =
+𝑟2
+cos 𝜃𝑑𝜔, where 𝑟is the
+length of the ray tube on the measurement surface, 𝜃is the angle between the incident ray and the normal of
+the measurement surface, and 𝑑𝜔is the infinitesimal solid angle subtended by the ray tube (see Section 2.4).
+Thus, 𝑑t represents the intersection area of the ray tube on the measurement surface. With this change of
+33
+Sionna RT: Technical Report
+Figure 26: Computation of the radio map in two steps: first, the radio map is computed for all interaction types
+except diffraction using a single SBR loop; second, only diffracted paths are computed. The two radio maps
+are then summed to obtain the final radio map.
+variables, the radio map definition (46) can be rewritten as:
+𝐶𝑖=
+1
+|𝑀𝑖|
+∞
+∑︁
+ℓ=0
+∫︁
+𝒜ℓ
+∫︁
+Ω
+𝑒(𝑝) 𝒱(𝑝) 𝑤(𝑝) 𝑟2
+cos 𝜃𝑑𝜔𝑑𝜇(ℓ)(𝑝).
+(51)
+where Ωis the set of all directions of rays originating from points that spawn ray tubes intersecting the
+measurement surface, typically a hemisphere or a sphere.
+Expression (51) can be estimated as follows. Paths are generated by launching 𝑁𝑆rays from the source s
+and tracing their interactions with the scene geometry, thus performing a Monte Carlo integration over the
+surfaces of the scatterers 𝒜. Intuitively, when a ray intersects a scatterer surface, it samples a surface element
+∆𝐴that corresponds to the ray tube intersection area, given by ∆𝐴=
+𝑟2
+cos 𝜃∆𝜔, where 𝑟denotes the ray tube
+length, 𝜃is the angle between the incident ray and the surface normal, and ∆𝜔is the solid angle subtended by
+the ray tube. The maximum path depth is set to 𝐿< ∞, and since a single path may intersect the measurement
+surface at multiple depths, all path depths ℓ= 0, 1, . . . , 𝐿are considered. Interaction types (specular reflection,
+refraction, or diffuse reflection) are sampled according to (20).
+(a) Specular reflection
+(b) Diffuse reflection
+Figure 27: A specular reflection (left) deviates the incident ray tube, while a diffuse reflection (right) spawns a
+new ray tube. Shown in 2D for clarity.
+This process leads to the following Monte Carlo estimator for the radio map (51):
+̂︀𝐶𝑖=
+1
+|𝑀𝑖|
+𝑁𝑆
+∑︁
+𝑛=1
+𝐿
+∑︁
+ℓ=0
+𝑒
+(︁
+𝑝(ℓ)
+𝑛
+)︁
+I
+(︁
+𝑝(ℓ)
+𝑛
+)︁
+𝛽(ℓ)
+𝑛
+Pr
+(︁
+𝜒(ℓ)
+𝑛
+)︁,
+(52)
+where 𝑝(ℓ)
+𝑛
+denotes the 𝑛-th path at depth ℓ; I
+(︁
+𝑝(ℓ)
+𝑛
+)︁
+is an indicator function equal to 1 if 𝑝(ℓ)
+𝑛
+intersects the
+measurement surface at depth ℓand 0 otherwise; and Pr
+(︁
+𝜒(ℓ)
+𝑛
+)︁
+is the probability of sampling the specific
+sequence of interaction types 𝜒(ℓ)
+𝑛
+corresponding to 𝑝(ℓ)
+𝑛. 𝛽(ℓ)
+𝑛
+is a weighting factor that incorporates the
+intersection area of the ray tubes on the scatterer and measurement surfaces, and thus absorbs the factor
+𝑟2
+cos 𝜃,
+𝛽(ℓ)
+𝑛
+=
+𝑛rt
+∏︁
+𝑖=1
+𝑟2
+𝑖
+cos 𝜃𝑖
+∆𝜔𝑖,
+(53)
+where, for the 𝑛-th path at depth ℓ, 𝑛rt is the number of ray tubes that constitute the path, 𝑟𝑖is the length of the
+𝑖-th ray tube, 𝜃𝑖is the angle between the incident ray tube and the surface normal, and ∆𝜔𝑖is the solid angle
+34
+Sionna RT: Technical Report
+subtended by the 𝑖-th ray tube. In the current propagation model of Sionna RT, only the source s and diffuse
+reflection points act as point sources that spawn new ray tubes, whereas specular reflection and refraction
+points merely deviate existing ray tubes rather than spawning new ones. This is illustrated in Figure 27. The
+source emits 𝑁𝑆ray tubes, each subtending a solid angle of 4𝜋
+𝑁𝑆, while each diffuse reflection point spawns a
+single ray tube, uniformly sampled over the hemisphere, with a solid angle of 2𝜋. Thus, 𝑛rt equals the number
+of diffuse reflection points along the path plus one.
+4.3. Computation of Radio Map due to Diffraction
+The Sionna RT radio map solver currently supports only first-order diffraction, i.e., paths connecting the source
+to the measurement surface via a single diffracting wedge. For clarity, we consider diffraction on a single edge
+ℰ, defined by an origin o, an edge vector ̂︀e, and length 𝐿ℰ. Sionna RT processes all such wedges found near
+the source (see Figure 26) in parallel.
+For a single diffraction wedge, the radio map definition (46) is rewritten by integrating along the edge ℰ
+instead of the scattering surface 𝒜:
+𝐶(𝒟)
+𝑖
+=
+1
+|𝑀𝑖|
+∫︁
+𝑀𝑖
+∫︁𝐿ℰ
+0
+𝑒(𝑝) 𝒱(𝑝) 𝑤(𝑝) 𝑑𝑥𝑑t.
+(54)
+Here, the inner integral is over the diffraction point position 𝑥along the edge ℰ, i.e., v = o + 𝑥̂︀e, while the
+outer integral is over the measurement cell 𝑀𝑖. The function 𝑤(𝑝) ensures the scattered wave lies on the Keller
+cone:
+𝑤(𝑝) = 𝛿
+⎛
+⎜
+⎜
+⎜
+⎝
+(v −s)T ̂︀e
+‖v −s‖2
+⏟
+ ⏞
+ 
+cos 𝛽′
+0
+−(t −v)T ̂︀e
+‖t −v‖2
+⏟
+ ⏞
+ 
+cos 𝛽0
+= 0
+⎞
+⎟
+⎟
+⎟
+⎠,
+(55)
+where 𝛽′
+0 and 𝛽0 are the angles between the edge and the incident and diffracted wave, respectively (see
+Figure 5b).
+Direct integration over the measurement surface is inefficient, as it would require connecting surface points
+to the source (for example, by placing targets within each cell and running the path solver). To overcome
+this, consider an orthogonal basis
+(︁
+̂︀t0, ̂︀n0, ̂︀e
+)︁
+, where ̂︀n0 is the normal to a wedge face and ̂︀t0 × ̂︀n0 = ̂︀e, as
+illustrated in Figure 28. For a given angle of incidence 𝛽′
+0, any point on 𝑀𝑖that can be reached by a diffracted
+ray can be written as:
+t = o + 𝑥′̂︀e
+⏟ ⏞ 
+v′
++𝛾
+(︁
+sin 𝛽′
+0 cos 𝜑̂︀t0 + sin 𝛽′
+0 sin 𝜑̂︀n0 + cos 𝛽′
+0̂︀e
+)︁
+⏟
+ ⏞
+ 
+̂︀k𝑠
+.
+(56)
+Here, v′ is a point on the edge ℰparametrized by 𝑥′, ̂︀k𝑠is the direction of the diffracted ray (with 𝜑the Keller
+cone azimuth), and 𝛾> 0 is the distance for which the ray from v′ in direction ̂︀k𝑠intersects the measurement
+cell 𝑀𝑖(see Figure 28). Since a ray and a plane intersect at most once, t is uniquely determined by 𝑥′ and 𝜑,
+and thus t(𝑥′, 𝜑) forms a reparametrization of the subset of 𝑀𝑖that can be reached by a diffracted ray when
+the angle of incidence is 𝛽′
+0.
+With this reparametrization, (54) becomes:
+𝐶(𝒟)
+𝑖
+=
+1
+|𝑀𝑖|
+∫︁𝐿ℰ
+0
+∫︁
+𝑛𝜋
+∫︁𝐿ℰ
+0
+𝑒(𝑝) 𝒱(𝑝) 𝑤(𝑝)
+⃦⃦⃦⃦
+𝛿t
+𝛿𝑥× 𝛿t
+𝛿𝜑
+⃦⃦⃦⃦
+2
+𝑑𝑥𝑑𝜑𝑑𝑥′
+(57)
+where 𝑛𝜋is the wedge exterior angle, and
+⃦⃦⃦𝛿t
+𝛿𝑥× 𝛿t
+𝛿𝜑
+⃦⃦⃦
+2 accounts for the change of variables [26].
+The condition in (55) is only satisfied when 𝑥= 𝑥′ for a given 𝜑, leading to:
+𝐶(𝒟)
+𝑖
+=
+1
+|𝑀𝑖|
+∫︁𝐿ℰ
+0
+∫︁
+𝑛𝜋
+𝑒(𝑝) 𝒱(𝑝)
+⃦⃦⃦⃦
+𝛿t
+𝛿𝑥× 𝛿t
+𝛿𝜑
+⃦⃦⃦⃦
+2
+𝑑𝑥𝑑𝜑.
+(58)
+35
+Sionna RT: Technical Report
+(a) 3D view
+(b) 2D cross-section
+Figure 28: A measurement point t reachable by a diffracted ray from a wedge is determined by a distance
+along the edge 𝑥′ and the Keller cone azimuth 𝜑, while the cone opening angle is 𝛽′
+0.
+To estimate (58), 𝑁′
+𝑆samples are drawn on the wedge: 𝑥uniformly in [0, 𝐿ℰ] and 𝜑uniformly in [0, 𝑛𝜋].
+This yields the Monte Carlo estimator:
+̂︀𝐶(𝒟)
+𝑖
+=
+1
+|𝑀𝑖|
+𝐿ℰ𝑛𝜋
+𝑁′
+𝑆
+𝑁′
+𝑆
+∑︁
+𝑛=1
+𝑒(𝑝𝑛) I (𝑝𝑛)
+⃦⃦⃦⃦
+𝛿t
+𝛿𝑥× 𝛿t
+𝛿𝜑
+⃦⃦⃦⃦
+2
+(59)
+where 𝑝𝑛is the 𝑛-th path, I (𝑝𝑛) is 1 if 𝑝𝑛intersects the measurement surface and is not occluded by other
+scatterers and 0 otherwise, and the weighting factor
+⃦⃦⃦𝛿t
+𝛿𝑥× 𝛿t
+𝛿𝜑
+⃦⃦⃦
+2 is computed as described in Annex D.
+4.4. Non-Coherent vs. Coherent Radio Maps
+The proposed definition of radio maps involves a non-coherent summation of path gains (43). As a result, it
+does not capture fast fading effects, which result from the constructive and destructive interference of multiple
+paths. Figure 29 demonstrates this by comparing three scenarios: a radio map generated using the radio map
+solver, a radio map created by non-coherently summing the path coefficients (4) calculated with the path solver
+(Section 3) by placing a single target at the center of each measurement cell, and a radio map produced by
+coherently summing the path coefficients (4) calculated with the path solver, also by placing a single target
+at the center of each measurement cell. The radio map obtained using the radio map solver aligns with the
+non-coherent summation of path coefficients calculated using the path solver, as anticipated. However, it does
+not account for fast fading effects, which requires the coherent summation of path coefficients.
+4.5. Handling Multiple Transmit Antennas
+The Sionna RT radio map solver supports antenna arrays of any size at the transmitter and allows for user-
+defined precoding vectors. However, it only supports synthetic arrays. In this setup, paths are generated from
+a single source located at the center of the array, and the channel response for each individual antenna is
+calculated by applying the appropriate phase shifts synthetically. This approximation holds true as long as the
+array size is small compared to the distance from the transmitter to the measurement plane and scatterers.
+Using synthetic arrays enables efficient scaling with respect to the number of antennas. To see this, let 𝑁tx
+𝐴
+denote the number of antennas at the transmitter, and let u𝑃∈C𝑁tx
+𝐴be the precoding vector. For a given
+path connecting the source to the measurement plane, let E ∈C2 represent the electric field observed at the
+measurement plane. By employing a synthetic array, the corresponding electric fields for each antenna element
+are obtained by applying the array response vector (36), denoted as utx
+𝐴, leading to
+E𝐴= E
+(︀
+utx
+𝐴
+)︀T .
+(60)
+Here, E𝐴is a matrix of size 2 × 𝑁tx
+𝐴, where each column represents the electric fields radiated by each transmit
+antenna. The contribution of this path to the radio map is given by
+‖E𝐴u𝑃‖2
+2 .
+(61)
+This expression allows the path’s contribution to the radio map to be represented as
+‖E𝐴u𝑃‖2
+2 =
+⃦⃦⃦
+(︁
+E
+(︀
+utx
+𝐴
+)︀T u𝑃
+)︁⃦⃦⃦
+2
+2 = ‖E𝛼‖2
+2
+(62)
+36
+Sionna RT: Technical Report
+Figure 29: Comparison of radio maps: one computed using the radio map solver, one by non-coherently
+summing path coefficients from the path solver, and one by coherently summing path coefficients from the
+path solver. The transmitter is depicted as a red ball. All radio maps are computed with a maximum depth of
+𝐿= 3, cell sizes of 10 × 10 cm, using isotropic antenna patterns on both the transmitter and receiver, and for
+the “box” scene built in Sionna RT. The “non-coherent sum” and “coherent sum” radio maps are generated by
+placing a single target point at the center of each measurement cell.
+where 𝛼= (utx
+𝐴)T u𝑃is a scalar, which depends on the departure direction of the path from the transmitter
+and thus varies for paths originating from the source. By precomputing 𝛼for each path, the effect of the
+transmitter array can be efficiently simulated by multiplying the electric field of each path by 𝛼whenever the
+path intersects the measurement surface. This operation does not depend on the size of the array.
+Figure 30b illustrates the computation time needed to generate a radio map for a single source as the
+number of samples 𝑁𝑆and the number of transmit antennas 𝑁tx
+𝐴are varied. The setup, depicted in Figure 30a,
+employs the “simple street canyon” scene built into Sionna RT. The red ball indicates the source, positioned 20
+meters above the ground. The radio map in Figure 30a is calculated using 108 samples and a linear array of 512
+transmit antennas. Notably, the radio map solver can compute radio maps with 109 samples on a single NVIDIA
+RTX 4090 GPU. The computation time increases with both the number of samples and antennas, exceeding
+one second only for the most demanding computations. It is important to note that while the computation
+time increases with the number of antennas due to the precomputation of the array weighting factor 𝛼, it does
+not increase the memory usage of the radio map solver.
+Handling of Dual-Polarized Transmit Antennas
+The radio map solver supports dual-polarized transmit antennas by considering two independent electric field
+vectors for each path. These are processed as if they were separate antenna elements (see Section 4.5).
+4.6. Practical Notes
+Mesh-based Measurement Surface
+Sionna RT supports mesh-based measurement surfaces, which are defined as collections of triangles (see
+Section 2.1). In this case, each triangle serves as a measurement cell. Meshes can possess arbitrary topology,
+making this feature well suited for computing radio maps over complex terrains.
+Scaling with the Number of Measurement Cells
+A key benefit of the radio map solver is that the compute required to generate the radio map remains constant
+regardless of the number of measurement cells. However, increasing the number of measurement cells will
+naturally require more memory for storage. Additionally, when the size of the measurement cells is reduced,
+it may be necessary to increase the number of samples 𝑁𝑆to maintain the accuracy of the estimators (52)
+37
+Sionna RT: Technical Report
+(a) Scene with the radio map.
+106
+107
+108
+109
+Number of samples NS
+101
+102
+103
+Computation time (ms)
+1 TX antennas
+16 TX antennas
+64 TX antennas
+256 TX antennas
+512 TX antennas
+1024 TX antennas
+(b) Computation time vs. number of samples 𝑁𝑆.
+Figure 30: Computation time for calculating radio maps using an NVIDIA RTX 4090 GPU for a single transmitter
+with a linear array of 1 to 1024 antennas.
+and (59), as fewer paths will intersect with each measurement cell, resulting in noisier radio maps.
+Early Termination with Russian Roulette and Gain Thresholding
+The radio map solver allows for early deactivation of paths using two techniques: Russian roulette and gain
+thresholding. With gain thresholding, a path with ray tube length 𝑟is deactivated when the squared amplitude
+of the electric field ‖E‖2
+2 falls below a user-defined threshold. With Russian roulette, at each iteration, a path
+continues with a probability given by
+𝑝rr = min
+(︁
+𝑟2 ‖E‖2
+2 , 𝑝rr,max
+)︁
+(63)
+where 𝑝rr,max is the maximum probability, set by the user, for keeping the path active. Both features can be
+enabled simultaneously and are applied only after a user-defined depth is reached.
+Extension to other Types of Radio Maps
+The Sionna RT solver currently supports the calculation of channel gain maps, which are radio maps that
+provide an estimate of the channel gain for each cell. It is possible to extend the solver to calculate other types
+of radio maps, such as root-mean-square delay spread maps and angular spread maps [27].
+38
+Sionna RT: Technical Report
+A. Primer on Electromagnetism
+This section provides useful background for the general understanding of ray tracing for wireless propagation
+modeling. In particular, our goal is to provide a concise definition of a “channel impulse response” between a
+transmitting and receiving antenna, as in [28, Ch. 2 & 3].
+A.1. Coordinate System, Rotations, and Vector Fields
+We consider a global coordinate system (GCS) with Cartesian canonical basis ˆx, ˆy, ˆz. The spherical unit vectors
+are defined as
+ˆr(𝜃, 𝜙) = sin(𝜃) cos(𝜙)ˆx + sin(𝜃) sin(𝜙)ˆy + cos(𝜃)ˆz
+ˆ𝜃(𝜃, 𝜙) = cos(𝜃) cos(𝜙)ˆx + cos(𝜃) sin(𝜙)ˆy −sin(𝜃)ˆz
+ˆ𝜙(𝜃, 𝜙) = −sin(𝜙)ˆx + cos(𝜙)ˆy.
+(64)
+For an arbitrary unit norm vector ˆv = (𝑥, 𝑦, 𝑧), the zenith and azimuth angles 𝜃and 𝜙can be computed as
+𝜃= cos−1(𝑧)
+𝜙= atan2(𝑦, 𝑥)
+(65)
+where atan2(𝑦, 𝑥) is the two-argument inverse tangent function [29]. As any vector uniquely determines 𝜃and
+𝜙, we sometimes also write ˆ𝜃(ˆv) and ˆ𝜙(ˆv) instead of ˆ𝜃(𝜃, 𝜙) and ˆ𝜙(𝜃, 𝜙).
+A 3D rotation with yaw, pitch, and roll angles 𝛼, 𝛽, and 𝛾, respectively, is expressed by the matrix
+R(𝛼, 𝛽, 𝛾) = R𝑧(𝛼)R𝑦(𝛽)R𝑥(𝛾)
+(66)
+where R𝑧(𝛼), R𝑦(𝛽), and R𝑥(𝛾) are rotation matrices around the 𝑧, 𝑦, and 𝑥axes, respectively, which are
+defined as
+R𝑧(𝛼) =
+⎛
+⎝
+cos(𝛼)
+−sin(𝛼)
+0
+sin(𝛼)
+cos(𝛼)
+0
+0
+0
+1
+⎞
+⎠
+R𝑦(𝛽) =
+⎛
+⎝
+cos(𝛽)
+0
+sin(𝛽)
+0
+1
+0
+−sin(𝛽)
+0
+cos(𝛽)
+⎞
+⎠
+R𝑥(𝛾) =
+⎛
+⎝
+1
+0
+0
+0
+cos(𝛾)
+−sin(𝛾)
+0
+sin(𝛾)
+cos(𝛾)
+⎞
+⎠.
+(67)
+A closed-form expression for R(𝛼, 𝛽, 𝛾) can be found in [21, Sec. 7.1-4]. The inverse rotation is simply defined
+by R−1(𝛼, 𝛽, 𝛾) = RT(𝛼, 𝛽, 𝛾). A vector x defined in a first coordinate system is represented in a second
+coordinate system rotated by R(𝛼, 𝛽, 𝛾) with respect to the first one as x′ = RT(𝛼, 𝛽, 𝛾)x. If a point in the
+first coordinate system has spherical angles (𝜃, 𝜙), the corresponding angles (𝜃′, 𝜙′) in the second coordinate
+system can be found to be
+𝜃′ = cos−1 (︀ˆzTRT(𝛼, 𝛽, 𝛾)ˆr(𝜃, 𝜙)
+)︀
+𝜙′ = arg
+(︁
+(ˆx + 𝑗ˆy)T RT(𝛼, 𝛽, 𝛾)ˆr(𝜃, 𝜙)
+)︁
+.
+(68)
+For a vector field F′(𝜃′, 𝜙′) expressed in local spherical coordinates
+F′(𝜃′, 𝜙′) = 𝐹𝜃′(𝜃′, 𝜙′)ˆ𝜃
+′(𝜃′, 𝜙′) + 𝐹𝜙′(𝜃′, 𝜙′)ˆ𝜙′(𝜃′, 𝜙′)
+(69)
+that are rotated by R = R(𝛼, 𝛽, 𝛾) with respect to the GCS, the spherical field components in the GCS can be
+expressed as
+[︂𝐹𝜃(𝜃, 𝜙)
+𝐹𝜙(𝜃, 𝜙)
+]︂
+=
+[︃
+ˆ𝜃(𝜃, 𝜙)TRˆ𝜃
+′(𝜃′, 𝜙′)
+ˆ𝜃(𝜃, 𝜙)TRˆ𝜙′(𝜃′, 𝜙′)
+ˆ𝜙(𝜃, 𝜙)TRˆ𝜃
+′(𝜃′, 𝜙′)
+ˆ𝜙(𝜃, 𝜙)TRˆ𝜙′(𝜃′, 𝜙′)
+]︃[︂𝐹𝜃′(𝜃′, 𝜙′)
+𝐹𝜙′(𝜃′, 𝜙′)
+]︂
+(70)
+so that
+F(𝜃, 𝜙) = 𝐹𝜃(𝜃, 𝜙)ˆ𝜃(𝜃, 𝜙) + 𝐹𝜙(𝜃, 𝜙)ˆ𝜙(𝜃, 𝜙).
+(71)
+39
+Sionna RT: Technical Report
+Sometimes, it is also useful to find the rotation matrix that maps a unit vector ˆa to ˆb. This can be achieved
+with the help of Rodrigues’ rotation formula [30] which defines the matrix
+R(ˆa, ˆb) = I + sin(𝜃)K + (1 −cos(𝜃))K2
+(72)
+where
+K =
+⎡
+⎣
+0
+−ˆ𝑘𝑧
+ˆ𝑘𝑦
+ˆ𝑘𝑧
+0
+−ˆ𝑘𝑥
+−ˆ𝑘𝑦
+ˆ𝑘𝑥
+0
+⎤
+⎦
+(73)
+ˆk =
+ˆa × ˆb
+⃦⃦⃦ˆa × ˆb
+⃦⃦⃦
+2
+(74)
+𝜃= ˆaTˆb
+(75)
+such that R(ˆa, ˆb)ˆa = ˆb.
+A.2. Planar Time-Harmonic Waves
+A time-harmonic planar electric wave E(x, 𝑡) ∈C3 traveling in a homogeneous medium with wave vector
+k ∈C3 can be described at position x ∈R3 and time 𝑡as
+E(x, 𝑡) = E0𝑒𝑗(𝜔𝑡−kHx)
+(76)
+= E(x)𝑒𝑗𝜔𝑡
+(77)
+where E0 ∈C3 is the field phasor. The wave vector can be decomposed as k = 𝑘ˆk, where ˆk is a unit norm vector,
+𝑘= 𝜔√𝜀𝜇is the wave number, and 𝜔= 2𝜋𝑓is the angular frequency. The permittivity 𝜀and permeability 𝜇
+are defined as
+𝜀= 𝜂𝜀0
+(78)
+𝜇= 𝜇𝑟𝜇0
+(79)
+where 𝜂and 𝜀0 are the complex relative and vacuum permittivities, 𝜇𝑟and 𝜇0 are the relative and vacuum
+permeabilities, and 𝜎is the conductivity. The complex relative permittivity 𝜂is given as
+𝜂= 𝜀𝑟−𝑗𝜎
+𝜀0𝜔
+(80)
+where 𝜀𝑟is the real relative permittivity of a non-conducting dielectric.
+With these definitions, the speed of light is given as [31, Eq. 4-28d]
+𝑐=
+1
+√𝜀0𝜀𝑟𝜇
+⎧
+⎨
+⎩
+1
+2
+⎛
+⎝
+√︃
+1 +
+(︂
+𝜎
+𝜔𝜀0𝜀𝑟
+)︂2
++ 1
+⎞
+⎠
+⎫
+⎬
+⎭
+−1
+2
+(81)
+where the factor in curly brackets vanishes for non-conducting materials. The speed of light in vacuum is
+denoted 𝑐0 =
+1
+√𝜀0𝜇0 and the vacuum wave number 𝑘0 =
+𝜔
+𝑐0 . In conducting materials, the wave number is
+complex which translates to propagation losses.
+The associated magnetic field H(x, 𝑡) ∈C3 is
+H(x, 𝑡) =
+ˆk × E(x, 𝑡)
+𝑍
+= H(x)𝑒𝑗𝜔𝑡
+(82)
+where 𝑍=
+√︀
+𝜇/𝜀is the wave impedance. The vacuum impedance is denoted by 𝑍0 =
+√︀
+𝜇0/𝜀0 ≈376.73 Ω.
+The time-averaged Poynting vector is defined as
+S(x) = 1
+2ℜ{E(x) × H(x)} = 1
+2ℜ
+{︂1
+𝑍
+}︂
+‖E(x)‖2
+2 ˆk
+(83)
+which describes the directional energy flux [W m−2], i.e. energy transfer per unit area per unit time. Note that
+the actual electromagnetic waves are the real parts of E(x, 𝑡) and H(x, 𝑡).
+40
+Sionna RT: Technical Report
+A.3. Far Field of a Transmitting Antenna
+We assume that the electric far field of an antenna in free space can be described by a spherical wave originating
+from the center of the antenna:
+E(𝑟, 𝜃, 𝜙, 𝑡) = E(𝑟, 𝜃, 𝜙)𝑒𝑗𝜔𝑡= E0(𝜃, 𝜙)𝑒−𝑗𝑘0𝑟
+𝑟
+𝑒𝑗𝜔𝑡
+(84)
+where E0(𝜃, 𝜙) is the electric field phasor, 𝑟is the distance (or radius), 𝜃the zenith angle, and 𝜙the azimuth
+angle. In contrast to a planar wave, the field strength decays as 1/𝑟.
+The complex antenna field pattern F(𝜃, 𝜙) is defined as
+F(𝜃, 𝜙) =
+E0(𝜃, 𝜙)
+max𝜃,𝜙‖E0(𝜃, 𝜙)‖2
+.
+(85)
+The time-averaged Poynting vector for such a spherical wave is
+S(𝑟, 𝜃, 𝜙) =
+1
+2𝑍0
+‖E(𝑟, 𝜃, 𝜙)‖2
+2 ˆr
+(86)
+where ˆr is the radial unit vector. It simplifies for an ideal isotropic antenna with input power 𝑃T to
+Siso(𝑟, 𝜃, 𝜙) =
+𝑃T
+4𝜋𝑟2 ˆr.
+(87)
+The antenna gain 𝐺is the ratio of the maximum radiation power density of the antenna in radial direction
+and that of an ideal isotropic radiating antenna:
+𝐺= max𝜃,𝜙‖S(𝑟, 𝜃, 𝜙)‖2
+‖Siso(𝑟, 𝜃, 𝜙)‖2
+=
+2𝜋
+𝑍0𝑃T
+max
+𝜃,𝜙‖E0(𝜃, 𝜙)‖2
+2 .
+(88)
+One can similarly define a gain with directional dependency by ignoring the computation of the maximum the
+last equation:
+𝐺(𝜃, 𝜙) =
+2𝜋
+𝑍0𝑃T
+‖E0(𝜃, 𝜙)‖2
+2 = 𝐺‖F(𝜃, 𝜙)‖2
+2 .
+(89)
+If one uses in the last equation the radiated power 𝑃= 𝜂rad𝑃T, where 𝜂rad is the radiation efficiency, instead
+of the input power 𝑃T, one obtains the directivity 𝐷(𝜃, 𝜙). Both are related through 𝐺(𝜃, 𝜙) = 𝜂rad𝐷(𝜃, 𝜙).
+Antenna Pattern
+Since F(𝜃, 𝜙) contains no information about the maximum gain 𝐺and 𝐺(𝜃, 𝜙) does not carry any phase
+information, we define the “antenna pattern” C(𝜃, 𝜙) as
+C(𝜃, 𝜙) =
+√
+𝐺F(𝜃, 𝜙)
+(90)
+such that 𝐺(𝜃, 𝜙) = ‖C(𝜃, 𝜙)‖2
+2. Using the spherical unit vectors ˆ𝜃∈R3 and ˆ𝜙∈R3, we can rewrite C(𝜃, 𝜙) as
+C(𝜃, 𝜙) = 𝐶𝜃(𝜃, 𝜙)ˆ𝜃+ 𝐶𝜙(𝜃, 𝜙)ˆ𝜙
+(91)
+where 𝐶𝜃(𝜃, 𝜙) ∈C and 𝐶𝜙(𝜃, 𝜙) ∈C are the “zenith pattern” and “azimuth pattern”, respectively.
+Combining 𝐹and 𝐺, we can obtain the following expression of the electric far field
+ET(𝑟, 𝜃T, 𝜙T) =
+√︂
+𝑃T𝐺T𝑍0
+2𝜋
+𝑒−𝑗𝑘0𝑟
+𝑟
+FT(𝜃T, 𝜙T)
+(92)
+where we have added the subscript T to all quantities that are specific to the transmitting antenna.
+41
+Sionna RT: Technical Report
+The input power 𝑃T of an antenna with (conjugate matched) impedance 𝑍T, fed by a voltage source with
+complex amplitude 𝑉T, is given by (see e.g., [32]).
+𝑃T =
+|𝑉T|2
+8ℜ{𝑍T}.
+(93)
+Normalization of Antenna Patterns
+The radiated power 𝜂rad𝑃T of an antenna can be obtained by integrating the Poynting vector over the surface
+of a closed sphere of radius 𝑟around the antenna:
+𝜂rad𝑃T =
+∫︁2𝜋
+0
+∫︁𝜋
+0
+S(𝑟, 𝜃, 𝜙)Tˆr𝑟2 sin(𝜃)𝑑𝜃𝑑𝜙
+(94)
+=
+∫︁2𝜋
+0
+∫︁𝜋
+0
+1
+2𝑍0
+‖E(𝑟, 𝜃, 𝜙)‖2
+2 𝑟2 sin(𝜃)𝑑𝜃𝑑𝜙
+(95)
+= 𝑃T
+4𝜋
+∫︁2𝜋
+0
+∫︁𝜋
+0
+𝐺(𝜃, 𝜙) sin(𝜃)𝑑𝜃𝑑𝜙.
+(96)
+We can see from the last equation that the directional gain of any antenna must satisfy
+∫︁2𝜋
+0
+∫︁𝜋
+0
+𝐺(𝜃, 𝜙) sin(𝜃)𝑑𝜃𝑑𝜙= 4𝜋𝜂rad.
+(97)
+A.4. Modeling of a Receiving Antenna
+Although the transmitting antenna radiates a spherical wave ET(𝑟, 𝜃T, 𝜙T), we assume that the receiving antenna
+observes a planar incoming wave ER that arrives from the angles 𝜃R and 𝜙R which are defined in the local
+spherical coordinates of the receiving antenna. The Poynting vector of the incoming wave SR is hence (86)
+SR = −1
+2𝑍0
+‖ER‖2
+2 ˆr(𝜃R, 𝜙R)
+(98)
+where ˆr(𝜃R, 𝜙R) is the radial unit vector in the spherical coordinate system of the receiver.
+The aperture or effective area 𝐴R of an antenna with gain 𝐺R is defined as the ratio of the available received
+power 𝑃R at the output of the antenna and the absolute value of the Poynting vector, i.e. the power density:
+𝐴R =
+𝑃R
+‖SR‖2
+= 𝐺R
+𝜆2
+4𝜋
+(99)
+where 𝜆2
+4𝜋is the aperture of an isotropic antenna. In the definition above, it is assumed that the antenna is
+ideally directed towards and polarization matched to the incoming wave. For an arbitrary orientation of the
+antenna (but still assuming polarization matching), we can define a direction dependent effective area
+𝐴R(𝜃R, 𝜙R) = 𝐺R(𝜃R, 𝜙R) 𝜆2
+4𝜋.
+(100)
+The available received power at the output of the antenna can be expressed as
+𝑃R =
+|𝑉R|2
+8ℜ{𝑍R}
+(101)
+where 𝑍R is the impedance of the receiving antenna and 𝑉R the open circuit voltage. We can now com-
+bine (101), (100), and (99) to obtain the following expression for the absolute value of the voltage |𝑉R|
+42
+Sionna RT: Technical Report
+assuming matched polarization:
+|𝑉R| =
+√︀
+𝑃R8ℜ{𝑍R}
+(102)
+=
+√︃
+𝜆2
+4𝜋𝐺R(𝜃R, 𝜙R)8ℜ{𝑍R}
+2𝑍0
+‖ER‖2
+2
+(103)
+=
+√︃
+𝜆2
+4𝜋𝐺R
+4ℜ{𝑍R}
+𝑍0
+‖FR(𝜃R, 𝜙R)‖2 ‖ER‖2 .
+(104)
+By extension of the previous equation, we can obtain an expression for 𝑉R which is valid for arbitrary
+polarizations of the incoming wave and the receiving antenna:
+𝑉R =
+√︃
+𝜆2
+4𝜋𝐺R
+4ℜ{𝑍R}
+𝑍0
+FR(𝜃R, 𝜙R)HER.
+(105)
+Recovering Friis Equation
+In the case of free space propagation, we have ER = ET(𝑟, 𝜃T, 𝜙T). Combining (105), (101), and (92), we
+obtain the following expression for the received power:
+𝑃R =
+(︂𝜆
+4𝜋𝑟
+)︂2
+𝐺R𝐺T𝑃T
+⃒⃒FR(𝜃R, 𝜙R)HFT(𝜃T, 𝜙T)
+⃒⃒2 .
+(106)
+It is important that FR and FT are expressed in the same coordinate system for the last equation to make
+sense. For perfect orientation and polarization matching, we can recover the well-known Friis transmission
+equation
+𝑃R
+𝑃T
+=
+(︂𝜆
+4𝜋𝑟
+)︂2
+𝐺R𝐺T.
+(107)
+A.5. General Propagation Path
+A single propagation path consists of a sequence of scattering processes, where a scattering process can be
+anything that prevents the wave from propagating as in free space. This includes specular reflection, refraction,
+diffraction, and diffuse reflection. For each scattering process, one needs to compute a relationship between the
+incoming field at the scatter center and the created far field at the next scatter center or the receiving antenna.
+We can represent this cascade of scattering processes by a single matrix ̃︀T that describes the transformation
+that the radiated field ET(𝑟, 𝜃T, 𝜙T) undergoes until it reaches the receiving antenna:
+ER =
+√︂
+𝑃T𝐺T𝑍0
+2𝜋
+̃︀TFT(𝜃T, 𝜙T).
+(108)
+Note that we have obtained this expression by replacing the free space propagation term 𝑒−𝑗𝑘0𝑟
+𝑟
+in (92) by
+the matrix ̃︀T. This requires that all quantities are expressed in the same coordinate system which is also
+assumed in the following expressions. Further, it is assumed that the matrix ̃︀T includes the necessary coordinate
+transformations. In some cases, e.g., for diffuse reflection (see (168) in Section A.9), the matrix ̃︀T depends on
+the incoming field and is not a linear transformation.
+Plugging (108) into (105), we can obtain a general expression for the received voltage of a propagation
+path:
+𝑉R =
+√︃(︂𝜆
+4𝜋
+)︂2
+𝐺R𝐺T𝑃T8ℜ{𝑍R} FR(𝜃R, 𝜙R)H ̃︀TFT(𝜃T, 𝜙T).
+(109)
+43
+Sionna RT: Technical Report
+If the electromagnetic wave arrives at the receiving antenna over 𝑁propagation paths, we can simply add the
+received voltages from all paths to obtain
+𝑉R =
+√︃(︂𝜆
+4𝜋
+)︂2
+𝐺R𝐺T𝑃T8ℜ{𝑍R}
+𝑁
+∑︁
+𝑛=1
+FR(𝜃R,𝑖, 𝜙R,𝑖)H ̃︀T𝑖FT(𝜃T,𝑖, 𝜙T,𝑖)
+(110)
+=
+√︃(︂𝜆
+4𝜋
+)︂2
+𝑃T8ℜ{𝑍R}
+𝑁
+∑︁
+𝑛=1
+CR(𝜃R,𝑖, 𝜙R,𝑖)H ̃︀T𝑖CT(𝜃T,𝑖, 𝜙T,𝑖)
+(111)
+where all path-dependent quantities carry the subscript 𝑖. Note that the matrices ̃︀T𝑖also ensure appropriate
+scaling so that the total received power can never be larger than the transmit power.
+A.6. Frequency and Impulse Response
+The channel frequency response 𝐻(𝑓) at frequency 𝑓= 𝑐
+𝜆is defined as the ratio between the received voltage
+and the voltage at the input to the transmitting antenna:
+𝐻(𝑓) = 𝑉R
+𝑉T
+= 𝑉R
+|𝑉T|
+(112)
+where it is assumed that the input voltage has zero phase.
+It is useful to separate phase shifts due to wave propagation from the transfer matrices ̃︀T𝑖. If we denote by
+𝑟𝑖the total length of path 𝑖with average propagation speed 𝑐𝑖, the path delay is 𝜏𝑖= 𝑟𝑖/𝑐𝑖. We can now define
+the new transfer matrix
+T𝑖= ̃︀T𝑖𝑒𝑗2𝜋𝑓𝜏𝑖.
+(113)
+Using (93) and (113) in (110) while assuming equal real parts of both antenna impedances, i.e. ℜ{𝑍T} = ℜ{𝑍R}
+(which is typically the case), we obtain the final expression for the channel frequency response:
+𝐻(𝑓) =
+𝑁
+∑︁
+𝑖=1
+𝜆
+4𝜋CR(𝜃R,𝑖, 𝜙R,𝑖)HT𝑖CT(𝜃T,𝑖, 𝜙T,𝑖)
+⏟
+ ⏞
+ 
+≜𝑎𝑖
+𝑒−𝑗2𝜋𝑓𝜏𝑖
+(114)
+Taking the inverse Fourier transform, we finally obtain the channel impulse response
+ℎ(𝜏) =
+∫︁∞
+−∞
+𝐻(𝑓)𝑒𝑗2𝜋𝑓𝜏𝑑𝑓=
+𝑁
+∑︁
+𝑖=1
+𝑎𝑖𝛿(𝜏−𝜏𝑖)
+(115)
+The baseband equivalent channel impulse response is then defined as [25, Eq. 2.28]:
+ℎb(𝜏) =
+𝑁
+∑︁
+𝑖=1
+𝑎𝑖𝑒−𝑗2𝜋𝑓𝜏𝑖
+⏟
+ ⏞
+ 
+≜𝑎b
+𝑖
+𝛿(𝜏−𝜏𝑖).
+(116)
+A.7. Specular Reflection and Refraction
+When a plane wave hits a plane interface which separates two materials, e.g., air and concrete, a part of
+the wave gets reflected and the other refracted, i.e. it propagates into the other material. We assume in the
+following description that both materials are uniform non-magnetic dielectrics, i.e. 𝜇𝑟= 1, and follow the
+definitions as in [33]. The incoming wave phasor Ei is expressed by two arbitrary orthogonal polarization
+components, i.e.
+Ei = 𝐸i,𝑠ˆei,𝑠+ 𝐸i,𝑝ˆei,𝑝
+(117)
+which are both orthogonal to the incident wave vector, i.e. ˆeT
+i,𝑠ˆei,𝑝= ˆeT
+i,𝑠ˆki = ˆeT
+i,𝑝ˆki = 0.
+44
+Sionna RT: Technical Report
+Figure 31: Reflection and refraction of a plane wave at a plane interface between two materials.
+Figure 31 shows reflection and refraction of the incoming wave at the plane interface between two materials
+with relative permittivities 𝜂1 and 𝜂2. The coordinate system is chosen such that the wave vectors of the
+incoming, reflected, and transmitted waves lie within the plane of incidence, which is chosen to be the x-z
+plane. The normal vector of the interface ˆn is pointing toward the negative z axis. The incoming wave is must
+be represented in a different basis, i.e. in the form two different orthogonal polarization components 𝐸i,⊥and
+𝐸i,‖, i.e.
+Ei = 𝐸i,⊥ˆei,⊥+ 𝐸i,‖ˆei,‖
+(118)
+where the former is orthogonal to the plane of incidence and called transverse electric (TE) polarization (left),
+and the latter is parallel to the plane of incidence and called transverse magnetic (TM) polarization (right). In
+the following, we adopt the convention that all transverse components are coming out of the figure (indicated
+by the ⊙symbol). One can easily verify that the following relationships must hold:
+ˆei,⊥=
+ˆki × ˆn
+⃦⃦⃦ˆki × ˆn
+⃦⃦⃦
+2
+ˆei,‖ = ˆei,⊥× ˆki
+[︂
+𝐸i,⊥
+𝐸i,‖
+]︂
+=
+[︂ˆeT
+i,⊥ˆei,𝑠
+ˆeT
+i,⊥ˆei,𝑝
+ˆeT
+i,‖ˆei,𝑠
+ˆeT
+i,‖ˆei,𝑝
+]︂[︂
+𝐸i,𝑠
+𝐸i,𝑝
+]︂
+= W
+(︀ˆei,⊥, ˆei,‖, ˆei,𝑠, ˆei,𝑝
+)︀[︂
+𝐸i,𝑠
+𝐸i,𝑝
+]︂
+(119)
+where we have defined the following matrix-valued function
+W
+(︁
+ˆa, ˆb, ˆq, ˆr
+)︁
+=
+[︂ˆaTˆq
+ˆaTˆr
+ˆbTˆq
+ˆbTˆr
+]︂
+.
+(120)
+While the angles of incidence and reflection are both equal to 𝜃1, the angle of the refracted wave 𝜃2 is given
+by Snell’s law
+sin(𝜃2) =
+√︂𝜂1
+𝜂2
+sin(𝜃1)
+(121)
+or, equivalently,
+cos(𝜃2) =
+√︂
+1 −𝜂1
+𝜂2
+sin2(𝜃1).
+(122)
+The reflected and transmitted wave phasors Er and Et are similarly represented as
+Er = 𝐸r,⊥ˆer,⊥+ 𝐸r,‖ˆer,‖
+(123)
+Et = 𝐸t,⊥ˆet,⊥+ 𝐸t,‖ˆet,‖
+(124)
+45
+Sionna RT: Technical Report
+where
+ˆer,⊥= ˆei,⊥
+ˆer,‖ =
+ˆer,⊥× ˆkr
+⃦⃦⃦ˆer,⊥× ˆkr
+⃦⃦⃦
+2
+ˆet,⊥= ˆei,⊥
+ˆet,‖ =
+ˆet,⊥× ˆkt
+⃦⃦⃦ˆet,⊥× ˆkt
+⃦⃦⃦
+2
+(125)
+and
+ˆkr = ˆki −2
+(︁
+ˆkT
+i ˆn
+)︁
+ˆn
+ˆkt =
+√︂𝜂1
+𝜂2
+ˆki +
+(︂√︂𝜂1
+𝜂2
+cos(𝜃1) −cos(𝜃2)
+)︂
+ˆn.
+(126)
+The Fresnel equations provide relationships between the incident, reflected, and refracted field components
+for
+√︀
+|𝜂1/𝜂2| sin(𝜃1) < 1:
+𝑟⊥= 𝐸r,⊥
+𝐸i,⊥
+=
+√𝜂1 cos(𝜃1) −√𝜂2 cos(𝜃2)
+√𝜂1 cos(𝜃1) + √𝜂2 cos(𝜃2)
+𝑟‖ = 𝐸r,‖
+𝐸i,‖
+=
+√𝜂2 cos(𝜃1) −√𝜂1 cos(𝜃2)
+√𝜂2 cos(𝜃1) + √𝜂1 cos(𝜃2)
+𝑡⊥= 𝐸t,⊥
+𝐸i,⊥
+=
+2√𝜂1 cos(𝜃1)
+√𝜂1 cos(𝜃1) + √𝜂2 cos(𝜃2)
+𝑡‖ = 𝐸t,‖
+𝐸i,‖
+=
+2√𝜂1 cos(𝜃1)
+√𝜂2 cos(𝜃1) + √𝜂1 cos(𝜃2).
+(127)
+If
+√︀
+|𝜂1/𝜂2| sin(𝜃1) ≥1, we have 𝑟⊥= 𝑟‖ = 1 and 𝑡⊥= 𝑡‖ = 0, i.e. total reflection. For the case of an incident
+wave in vacuum, i.e. 𝜂1 = 1, the Fresnel equations (127) simplify to
+𝑟⊥=
+cos(𝜃1) −
+√︁
+𝜂2 −sin2(𝜃1)
+cos(𝜃1) +
+√︁
+𝜂2 −sin2(𝜃1)
+𝑟‖ =
+𝜂2 cos(𝜃1) −
+√︁
+𝜂2 −sin2(𝜃1)
+𝜂2 cos(𝜃1) +
+√︁
+𝜂2 −sin2(𝜃1)
+𝑡⊥=
+2 cos(𝜃1)
+cos(𝜃1) +
+√︁
+𝜂2 −sin2(𝜃1)
+𝑡‖ =
+2√𝜂2 cos(𝜃1)
+𝜂2 cos(𝜃1) +
+√︁
+𝜂2 −sin2(𝜃1)
+.
+(128)
+Putting everything together, we obtain the following relationships between incident, reflected, and trans-
+mitted waves:
+[︂𝐸r,⊥
+𝐸r,‖
+]︂
+=
+[︂𝑟⊥
+0
+0
+𝑟‖
+]︂
+W
+(︀ˆei,⊥, ˆei,‖, ˆei,𝑠, ˆei,𝑝
+)︀[︂𝐸i,𝑠
+𝐸i,𝑝
+]︂
+(129)
+[︂𝐸t,⊥
+𝐸t,‖
+]︂
+=
+[︂𝑡⊥
+0
+0
+𝑡‖
+]︂
+W
+(︀ˆei,⊥, ˆei,‖, ˆei,𝑠, ˆei,𝑝
+)︀[︂𝐸i,𝑠
+𝐸i,𝑝
+]︂
+.
+(130)
+A.7.1. Single-Layer Slab
+The reflection and refraction coefficients described above assume that the object reflecting the wave or allowing
+it to penetrate is of infinite size (or thickness). However, since this is rarely the case, it is often more practical
+46
+Sionna RT: Technical Report
+𝑛2
+𝑛1 = 1 
+𝑑 
+𝜃1
+𝜃1
+𝜃1
+𝒌𝑖
+𝒌𝑖
+𝒌𝑟
+Air
+Slab
+Air
+Figure 32: Reflection and refraction of a plane wave at a single-layer slab.
+to assume that the object has a finite thickness. In such cases, the object can be modeled as a slab consisting of
+a single layer made of the same material, as shown in Figure 32. The reflection and transmission coefficients,
+which should be used instead of (128), are then computed as described in [33, Section 2.2.2.2]:
+𝑟= 𝑟′ (︀
+1 −𝑒−𝑗2𝑞)︀
+1 −𝑟
+′2𝑒−𝑗2𝑞
+(131)
+𝑡=
+(︁
+1 −𝑟
+′2)︁
+𝑒−𝑗𝑞
+1 −𝑟
+′2𝑒−𝑗2𝑞
+(132)
+where
+𝑞= 2𝜋𝑑
+𝜆
+√︁
+𝜂−sin2 𝜃0
+(133)
+𝑑[m] is the thickness of the slab, 𝜂the complex relative permittivity as defined in (80), and 𝑟′ denotes either
+𝑟⊥or 𝑟‖ from (128), depending on the polarization of the incident electric field.
+A.8. Diffraction
+While modern geometrical optics (GO) [34, 35] can accurately describe phase and polarization properties
+of electromagnetic fields undergoing reflection and refraction (transmission) as described above, they fail to
+account for the phenomenon of diffraction, e.g., bending of waves around corners. This leads to the undesired
+and physically incorrect effect that the field abruptly falls to zero at geometrical shadow boundaries (for incident
+and reflected fields).
+Joseph Keller presented in [10] a method which allowed the incorporation of diffraction into GO which is
+known as the geometrical theory of diffraction (GTD). He introduced the notion of diffracted rays that follow
+the law of edge diffraction, i.e., the diffracted and incident rays make the same angle with the edge at the
+point of diffraction and lie on opposite sides of the plane normal to the edge. The GTD suffers, however from
+several shortcomings, most importantly the fact that the diffracted field is infinite at shadow boundaries.
+The uniform theory of diffraction (UTD) [36] alleviates this problem and provides solutions that are
+uniformly valid, even at shadow boundaries. For a great introduction to the UTD, we refer to [12]. While [36]
+deals with diffraction at edges of perfectly conducting surfaces, it was heuristically extended to finitely
+conducting wedges in [37]. This solution, which is also recomended by the ITU [38], is implemented in Sionna.
+However, both [37] and [38] only deal with two-dimensional scenes where source and observation lie in the
+same plane, orthogonal to the edge. We will provide below the three-dimensional version of [37], following
+the defintitions of [12, Ch. 6]. A similar result can be found, e.g., in [39, Eq. 6-29–6-39].
+We consider an infinitely long wedge with unit norm edge vector ˆe, as shown in Figure 33. An incident ray
+of a spherical wave with field phasor E𝑖(𝑆′) at point 𝑆′ propagates in the direction ˆs′ and is diffracted at point
+47
+Sionna RT: Technical Report
+𝑆′
+𝑆
+𝒔′
+𝒔
+𝒆
+𝑄𝑑
+𝛽0′
+𝛽0
+0-face
+n-face
+𝜷0
+′
+𝜷0
+𝑠′
+𝑠
+Keller’s cone
+Figure 33: Incident and diffracted rays for an infinitely long wedge in an edge-fixed coordinate system.
+𝑄𝑑on the edge. The diffracted ray of interest (there are infinitely many on Keller’s cone) propagates in the
+direction ˆs towards the point of observation 𝑆. We denote by 𝑠′ = ‖𝑆′ −𝑄𝑑‖2 and 𝑠= ‖𝑄𝑑−𝑆‖2 the lengths
+of the incident and diffracted path segments, respectively. By the law of edge diffraction, the angles 𝛽′
+0 and 𝛽0
+between the edge and the incident and diffracted rays, respectively, satisfy:
+cos (𝛽′
+0) =
+⃒⃒ˆs′Tˆe
+⃒⃒=
+⃒⃒ˆsTˆe
+⃒⃒= cos(𝛽0).
+(134)
+To be able to express the diffraction coefficients as a 2x2 matrix—similar to what is done for reflection and
+refraction—the incident field must be resolved into two components 𝐸𝑖,𝜑′ and 𝐸𝑖,𝛽′
+0, the former orthogonal
+and the latter parallel to the edge-fixed plane of incidence, i.e., the plane containing ˆe and ˆs′. The diffracted
+field is then represented by two components 𝐸𝑑,𝜑and 𝐸𝑑,𝛽0 that are respectively orthogonal and parallel to the
+edge-fixed plane of diffraction, i.e., the plane containing ˆe and ˆs. The corresponding component unit vectors
+are defined as
+ˆ𝜑
+′ =
+ˆs′ × ˆe
+‖ˆs′ × ˆe‖2
+(135)
+ˆ𝛽
+′
+0 = ˆ𝜑
+′ × ˆs′
+(136)
+ˆ𝜑= −
+ˆs × ˆe
+‖ˆs × ˆe‖2
+(137)
+ˆ𝛽0 = ˆ𝜑× ˆs.
+(138)
+Figure 34 shows the top view on the wedge that we need for some additional definitions. The wedge has
+two faces called 0-face and n-face, respectively, with surface normal vectors ˆn0 and ˆn𝑛. The exterior wedge
+angle is 𝑛𝜋, with 1 ≤𝑛≤2. Note that the surfaces are chosen such that ˆe = ˆn0 × ˆn𝑛. For 𝑛= 2, the wedge
+reduces to a screen and the choice of the 0-face and n-face is arbitrary as they point in opposite directions.
+The incident and diffracted rays have angles 𝜑′ and 𝜑measured with respect to the 0-face in the plane
+perpendicular to the edge. They can be computed as follows:
+𝜑′ = 𝜋−
+[︀
+𝜋−arccos
+(︀
+−ˆs′T
+𝑡ˆt0
+)︀]︀
+sgn
+(︀
+−ˆs′T
+𝑡ˆn0
+)︀
+(139)
+𝜑= 𝜋−
+[︀
+𝜋−arccos
+(︀ˆsT
+𝑡ˆt0
+)︀]︀
+sgn
+(︀ˆsT
+𝑡ˆn0
+)︀
+(140)
+where
+ˆt0 = ˆn0 × ˆe
+(141)
+ˆs′
+𝑡=
+ˆs′ −
+(︀ˆs′Tˆe
+)︀ˆe
+‖ˆs′ −(ˆs′Tˆe) ˆe‖2
+(142)
+ˆs𝑡=
+ˆs −
+(︀ˆsTˆe
+)︀ˆe
+‖ˆs −(ˆsTˆe) ˆe‖2
+(143)
+48
+Sionna RT: Technical Report
+𝑥
+𝒆
+𝑆′
+𝑆
+𝜙′
+𝜙
+0-face
+n-face
+𝑛𝜋
+𝜂0
+𝜂𝑛
+𝜌= 𝑠sin(𝛽0)
+𝜌′ = 𝑠′ sin(𝛽0)
+𝒏𝑛
+𝝓′
+𝝓
+𝒏0
+𝒕0
+𝒔𝑡
+𝒔𝑡′
+Figure 34: Top view on the wedge with edge vector pointing upwards.
+are the unit vector tangential to the 0-face, as well as the unit vectors pointing in the directions of ˆs′ and ˆs,
+projected on the plane perpendicular to the edge, respectively. The function sgn(𝑥) is defined in this context as
+sgn(𝑥) =
+{︃
+1
+, 𝑥≥0
+−1
+, 𝑥< 0.
+(144)
+With these definitions, the diffracted field at point ‘𝑆‘ can be computed from the incoming field at point ‘𝑆′
+as follows:
+[︂𝐸𝑑,𝜑
+𝐸𝑑,𝛽0
+]︂
+(𝑆) = −((𝐷1 + 𝐷2) I −𝐷3R𝑛−𝐷4R0)
+[︂𝐸𝑖,𝜑′
+𝐸𝑖,𝛽′
+0
+]︂
+(𝑆′)
+√︃
+1
+𝑠′𝑠(𝑠′ + 𝑠)𝑒−𝑗𝑘(𝑠′+𝑠)
+(145)
+where 𝑘= 2𝜋/𝜆is the wave number and the matrices R𝜈, 𝜈∈[0, 𝑛], are given as
+R𝜈= W
+(︁
+ˆ𝜑, ˆ𝛽0, ˆe𝑟,⊥,𝜈, ˆe𝑟,‖,𝜈
+)︁[︂𝑟⊥(𝜃𝑟,𝜈, 𝜂𝜈)
+0
+0
+𝑟‖(𝜃𝑟,𝜈, 𝜂𝜈)
+]︂
+W
+(︁
+ˆe𝑖,⊥,𝜈, ˆe𝑖,‖,𝜈, ˆ𝜑
+′, ˆ𝛽
+′
+0
+)︁
+(146)
+with W(·) as defined in (120), where 𝑟⊥(𝜃𝑟,𝜈, 𝜂𝜈) and 𝑟‖(𝜃𝑟,𝜈, 𝜂𝜈) are the Fresnel reflection coefficents
+from (128), evaluated for the complex relative permittivities 𝜂𝜈and angles 𝜃𝑟,𝜈with cosines
+cos (𝜃𝑟,0) = |sin(𝜑′)|
+(147)
+cos (𝜃𝑟,𝑛) = |sin(𝑛𝜋−𝜑)| .
+(148)
+and where
+ˆe𝑖,⊥,𝜈=
+ˆs′ × ˆn𝜈
+‖ˆs′ × ˆn𝜈‖2
+(149)
+ˆe𝑖,‖,𝜈= ˆe𝑖,⊥,𝜈× ˆs′
+(150)
+ˆe𝑟,⊥,𝜈= ˆe𝑖,⊥,𝜈
+(151)
+ˆe𝑟,‖,𝜈= ˆe𝑖,⊥,𝜈× ˆs
+(152)
+as already defined in (119) and (125), but made explicit here for the case of diffraction. The matrices R𝜈
+simply describe the reflected field from both surfaces in the basis used for the description of the diffraction
+process. Note that the absolute value is used in (147) to account for virtual reflections from shadowed surfaces,
+49
+Sionna RT: Technical Report
+see the discussion in [12, p.185]. The diffraction coefficients 𝐷1, . . . , 𝐷4 are computed as
+𝐷1 =
+−𝑒−𝑗𝜋
+4
+2𝑛
+√
+2𝜋𝑘sin(𝛽0)
+cot
+(︂𝜋+ (𝜑−𝜑′)
+2𝑛
+)︂
+𝐹
+(︀
+𝑘𝐿𝑎+(𝜑−𝜑′)
+)︀
+(153)
+𝐷2 =
+−𝑒−𝑗𝜋
+4
+2𝑛
+√
+2𝜋𝑘sin(𝛽0)
+cot
+(︂𝜋−(𝜑−𝜑′)
+2𝑛
+)︂
+𝐹
+(︀
+𝑘𝐿𝑎−(𝜑−𝜑′)
+)︀
+(154)
+𝐷3 =
+−𝑒−𝑗𝜋
+4
+2𝑛
+√
+2𝜋𝑘sin(𝛽0)
+cot
+(︂𝜋+ (𝜑+ 𝜑′)
+2𝑛
+)︂
+𝐹
+(︀
+𝑘𝐿𝑎+(𝜑+ 𝜑′)
+)︀
+(155)
+𝐷4 =
+−𝑒−𝑗𝜋
+4
+2𝑛
+√
+2𝜋𝑘sin(𝛽0)
+cot
+(︂𝜋−(𝜑+ 𝜑′)
+2𝑛
+)︂
+𝐹
+(︀
+𝑘𝐿𝑎−(𝜑+ 𝜑′)
+)︀
+(156)
+where
+𝐿=
+𝑠𝑠′
+𝑠+ 𝑠′ sin2(𝛽0)
+(157)
+𝑎±(𝛽) = 2 cos2
+(︂2𝑛𝜋𝑁± −𝛽
+2
+)︂
+(158)
+𝑁± = round
+(︂𝛽± 𝜋
+2𝑛𝜋
+)︂
+(159)
+𝐹(𝑥) = 2𝑗√𝑥𝑒𝑗𝑥
+∫︁∞
+√𝑥
+𝑒−𝑗𝑡2𝑑𝑡
+(160)
+and round(·) is the function that rounds to the closest integer. The function 𝐹(𝑥) can be expressed with the
+help of the standard Fresnel integrals [40].
+𝑆(𝑥) =
+∫︁𝑥
+0
+sin
+(︀
+𝜋𝑡2/2
+)︀
+𝑑𝑡
+(161)
+𝐶(𝑥) =
+∫︁𝑥
+0
+cos
+(︀
+𝜋𝑡2/2
+)︀
+𝑑𝑡
+(162)
+as
+𝐹(𝑥) =
+√︂𝜋𝑥
+2 𝑒𝑗𝑥[︁
+1 + 𝑗−2
+(︁
+𝑆
+(︁√︀
+2𝑥/𝜋
+)︁
++ 𝑗𝐶
+(︁√︀
+2𝑥/𝜋
+)︁)︁]︁
+.
+(163)
+A.9. Diffuse Reflection
+When an electromagnetic wave impinges on a surface, one part of the energy gets reflected while the other
+part gets refracted, i.e. it propagates into the surface. We distinguish between two types of reflection, specular
+and diffuse. The former type is discussed in Section A.7 and we will focus now on the latter type. When a
+rays hits a diffuse reflection surface, it is not reflected into a single (specular) direction but rather scattered
+toward many different directions. Since most surfaces give both specular and diffuse reflections, we denote by
+𝑆2 the fraction of the reflected energy that is diffusely scattered, where 𝑆∈[0, 1] is the so-called scattering
+coefficient [41]. Similarly, 𝑅2 is the specularly reflected fraction of the reflected energy, where 𝑅∈[0, 1] is the
+reflection reduction factor. The following relationship between 𝑅and 𝑆holds:
+𝑅=
+√︀
+1 −𝑆2.
+(164)
+Whenever a material has a scattering coefficient 𝑆> 0, the Fresnel reflection coefficients in (127) must be
+multiplied by (164).
+Let us consider an incoming locally planar linearly polarized wave with field phasor Ei(q) at the scattering
+point q on the surface, as shown in Figure 35. We focus on the scattered field of and infinitesimally small
+surface element 𝑑𝐴in the direction ˆks. Note that the surface normal ˆn has an arbitrary orientation with respect
+to the global coordinate system, whose (𝑥, 𝑦, 𝑧) axes are shown in green dotted lines. Also, the small surface
+element is related to the incident ray tube solid angle 𝑑𝜔through 𝑑𝐴= 𝑟2𝑑𝜔, where 𝑟is the ray tube length.
+50
+Sionna RT: Technical Report
+𝒓
+𝑑𝐴
+𝒒
+𝒌𝑖
+𝒌𝑠
+𝒌𝑟
+𝒏
+Diffuse reflection
+Specular
+Incoming wave
+𝑥
+𝑦
+𝑧
+𝜃𝑖
+𝜃𝑠
+reflection
+Figure 35: Diffuse and specular reflection of an incoming wave.
+The incoming field phasor can be represented by two arbitrary orthogonal polarization components (both
+orthogonal to the incoming wave vector ˆk𝑖):
+Ei(q) = 𝐸i,𝑠ˆei,𝑠+ 𝐸i,𝑝ˆei,𝑝
+(165)
+= 𝐸i,⊥ˆei,⊥+ 𝐸i,‖ˆei,‖
+(166)
+= 𝐸i,𝜃ˆ𝜃(ˆki) + 𝐸i,𝜑ˆ𝜙(ˆki)
+(167)
+where me have omitted the dependence of the field strength on the position q for brevity. The second
+representation via (𝐸i,⊥, 𝐸i,‖) is used for the computation of the specularly reflected field as explained in
+Section A.7. The third representation decomposes the field into a vertically and horizontally polarized
+component, where ˆ𝜃, ˆ𝜙are defined in (64).
+According to [42, Eq. 9], the diffusely scattered field Es(r) at the observation point r can be modeled as
+Es(r) = 𝐸s,𝜃ˆ𝜃(ˆks) + 𝐸s,𝜙ˆ𝜙(ˆks), where the orthogonal field components are computed as
+[︂𝐸s,𝜃
+𝐸s,𝜙
+]︂
+=
+𝑆Γ
+‖r −q‖2
+√︂
+𝑓s
+(︁
+ˆk𝑖, ˆk𝑠, ˆn
+)︁
+cos(𝜃𝑖)𝑑𝐴
+[︂√1 −𝐾𝑥𝑒𝑗𝜒1
+−√𝐾𝑥𝑒𝑗𝜒1
+√𝐾𝑥𝑒𝑗𝜒2
+√1 −𝐾𝑥𝑒𝑗𝜒2
+]︂[︂𝐸i,𝜃
+𝐸i,𝜙
+]︂
+.
+(168)
+Here, Γ2 is the percentage of the incoming power that is reflected (specularly and diffuse), which can be
+computed as
+Γ =
+√︀
+|𝑟⊥𝐸i,⊥|2 + |𝑟‖𝐸i,‖|2
+‖Ei(q)‖2
+(169)
+where 𝑟⊥, 𝑟‖ are defined in (127), 𝜒1, 𝜒2 ∈[0, 2𝜋] are (optional) independent random phase shifts, and the
+quantity 𝐾𝑥∈[0, 1] is defined by the scattering cross-polarization discrimination
+XPDs = 10 log10
+(︂|𝐸s,pol|2
+|𝐸s,xpol|2
+)︂
+= 10 log10
+(︂1 −𝐾𝑥
+𝐾𝑥
+)︂
+.
+(170)
+This quantity determines how much energy gets transferred from one polarization direction into the other
+through the scattering process. Lastly, 𝑑𝐴is the size of the small area element on the reflecting surface under
+consideration, and 𝑓s
+(︁
+ˆk𝑖, ˆk𝑠, ˆn
+)︁
+is the scattering pattern, which has similarities with the BSDF in computer
+graphics [7, Ch. 4.3.1]. The scattering pattern must be normalized to satisfy the condition
+∫︁𝜋/2
+0
+∫︁2𝜋
+0
+𝑓s
+(︁
+ˆki, ˆks, ˆn
+)︁
+sin(𝜃𝑠)𝑑𝜑𝑠𝑑𝜃𝑠= 1
+(171)
+which ensures the power balance between the incoming, reflected, and refracted fields.
+51
+Sionna RT: Technical Report
+Example scattering patterns
+The authors of [41] derived several simple scattering patterns that were shown to achieve good agreement
+with measurements when correctly parametrized.
+Lambertian: This model describes a perfectly diffuse scattering surface whose scattering radiation lobe has its
+maximum in the direction of the surface normal:
+𝑓Lambert
+s
+(︁
+ˆki, ˆks, ˆn
+)︁
+= ˆnTˆks
+𝜋
+= cos(𝜃𝑠)
+𝜋
+(172)
+Directive: This model assumes that the scattered field is concentrated around the direction of the specular
+reflection ˆkr (defined in (126)). The width of the scattering lobe can be controlled via the integer
+parameter 𝛼R = 1, 2, . . . :
+𝑓directive
+s
+(︁
+ˆki, ˆks, ˆn
+)︁
+= 𝐹𝛼R(𝜃𝑖)−1
+(︃
+1 + ˆkT
+r ˆks
+2
+)︃𝛼R
+𝐹𝛼(𝜃𝑖) = 1
+2𝛼
+𝛼
+∑︁
+𝑘=0
+(︂𝛼
+𝑘
+)︂
+𝐼𝑘,
+𝜃𝑖= cos−1(−ˆkT
+i ˆn)
+𝐼𝑘=
+2𝜋
+𝑘+ 1
+{︃
+1
+𝑘even
+cos(𝜃𝑖) ∑︀(𝑘−1)/2
+𝑤=0
+(︀2𝑤
+𝑤
+)︀sin2𝑤(𝜃𝑖)
+22𝑤
+𝑘odd
+(173)
+Backscattering: This model adds a scattering lobe to the directive model described above which points toward
+the direction from which the incident wave arrives (i.e. −ˆki). The width of this lobe is controlled by the
+parameter 𝛼I = 1, 2, . . . . The parameter Λ ∈[0, 1] determines the distribution of energy between both
+lobes. For Λ = 1, this models reduces to the directive model.
+𝑓bs
+s
+(︁
+ˆki, ˆks, ˆn
+)︁
+= 𝐹𝛼R,𝛼I(𝜃𝑖)−1
+[︃
+Λ
+(︃
+1 + ˆkT
+r ˆks
+2
+)︃𝛼R
++ (1 −Λ)
+(︃
+1 −ˆkT
+i ˆks
+2
+)︃𝛼I]︃
+𝐹𝛼,𝛽(𝜃𝑖)−1 = Λ𝐹𝛼(𝜃𝑖) + (1 −Λ)𝐹𝛽(𝜃𝑖)
+(174)
+B. A Brief Overview of Importance Sampling
+This section provides a brief overview of importance sampling [15, 16] in the context of ray tracing for the
+simulation of radio wave propagation. We consider the channel gain 𝑔(5). To account for a continuum of paths,
+such as those arising from diffuse reflections, we generalize the gain from a discrete sum to a path integral:
+𝑔=
+∫︁
+𝒫
+|𝑎(𝑝)|2 𝑑𝜇(𝑝).
+(175)
+Here, 𝒫represents the high-dimensional space of all possible propagation paths from the transmitter to the
+receiver. A single element 𝑝∈𝒫denotes a specific path. The term 𝑎(𝑝) is the path coefficient associated with
+that path, and 𝜇(𝑝) is the measure on the path space 𝒫. For a more in-depth discussion of path integrals within
+ray tracing, see [24, Chapter 8].
+We aim to estimate the channel gain 𝑔using 𝑁𝑆samples, by sampling paths following a distribution 𝑞(𝑝),
+such that 𝑞(𝑝) > 0 if |𝑎(𝑝)|2 > 0 and
+∫︀
+𝒫𝑞(𝑝)𝑑𝜇(𝑝) = 1. The estimate of the channel gain is then given by:
+̂︀𝑔=
+1
+𝑁𝑆
+𝑁𝑆
+∑︁
+𝑛=1
+|𝑎(𝑝𝑛)|2
+𝑞(𝑝𝑛) .
+(176)
+52
+Sionna RT: Technical Report
+An important consideration is that the estimate ̂︀𝑔is unbiased, i.e., E[̂︀𝑔] = 𝑔for any sampling distribution
+𝑞(·). Therefore, we aim to choose the sampling distribution 𝑞(·) such that the variance of the estimate ̂︀𝑔is
+minimized. Practically, this would result in estimating the channel gain with a smaller number of samples 𝑁𝑆,
+i.e., achieving a higher sample efficiency. The variance of the estimator ̂︀𝑔is given by:
+Var(̂︀𝑔) = E[̂︀𝑔2] −𝑔2
+(177)
+=
+1
+𝑁2
+𝑆
+E
+[︃𝑁𝑆
+∑︁
+𝑛=1
+𝑁𝑆
+∑︁
+𝑚=1
+|𝑎(𝑝𝑛)|2 |𝑎(𝑝𝑚)|2
+𝑞(𝑝𝑛)𝑞(𝑝𝑚)
+]︃
+−𝑔2
+(178)
+=
+1
+𝑁𝑆
+⎛
+⎝E
+⎡
+⎣
+(︃
+|𝑎(𝑝)|2
+𝑞(𝑝)
+)︃2⎤
+⎦−𝑔2
+⎞
+⎠.
+(179)
+where the last equality holds because the samples 𝑝𝑛are independent. Observe that
+E
+⎡
+⎣
+(︃
+|𝑎(𝑝)|2
+𝑞(𝑝)
+)︃2⎤
+⎦=
+∫︁
+𝒫
+𝑞(𝑝)
+(︃
+|𝑎(𝑝)|2
+𝑞(𝑝)
+)︃2
+𝑑𝜇(𝑝) =
+∫︁
+𝒫
+|𝑎(𝑝)|4
+𝑞(𝑝) 𝑑𝜇(𝑝).
+(180)
+If we choose the sampling distribution
+𝑞*(𝑝) := |𝑎(𝑝)|2
+𝑔
+(181)
+then
+E
+⎡
+⎣
+(︃
+|𝑎(𝑝)|2
+𝑞*(𝑝)
+)︃2⎤
+⎦=
+∫︁
+𝒫
+𝑔|𝑎(𝑝)|2 𝑑𝜇(𝑝) = 𝑔2.
+(182)
+This implies that the variance of the estimator ̂︀𝑔is zero, i.e., Var(̂︀𝑔) = 0, which is optimal. A zero-variance
+estimator would allow us to determine the channel gain exactly from a single sample. In practice, however,
+this is unattainable because evaluating the optimal distribution 𝑞*(·) requires prior knowledge of the path
+coefficients 𝑎(𝑝) and the channel gain 𝑔—the quantity we aim to estimate. Nevertheless, this result provides
+useful guidance: an effective sampling distribution 𝑞(·) should give more importance to paths that contribute
+more to the channel gain 𝑔. The distribution 𝒬, introduced in (20), is designed as a practical choice by selecting
+interaction types based on the squared magnitudes of the corresponding reflection and refraction coefficients.
+However, it does not account for the antenna pattern, the free-space propagation loss, or the scattering pattern
+from diffuse reflection, and is thus suboptimal. Developing effective, practical importance sampling strategies
+remains an an open and challenging problem.
+C. Closed-Form Solution for First-Order Diffraction
+For first-order diffraction, the position of the diffraction point can be determined in closed form. Consider
+a source s, a target t, and an edge defined by its direction ̂︀e. For convenience, we assume the edge passes
+through the origin of the coordinate system, denoted by o.
+According to Fermat’s principle, the diffraction point v on the edge minimizes the total path length
+s →v →t. This corresponds to minimizing the function
+ℒ(𝑥) = ‖s −v‖2 + ‖v −t‖2
+(183)
+where
+v = 𝑥̂︀e.
+(184)
+As shown in [22], ℒ(·) is strictly convex and thus has a unique minimizer.
+53
+Sionna RT: Technical Report
+We introduce the set of vectors (̂︀u1, ̂︀u2, ̂︀u3), where
+̂︀u1 =
+s −
+(︀̂︀eTs
+)︀̂︀e
+‖s −(̂︀eTs) ̂︀e‖2
+(185)
+̂︀u2 =
+t −
+(︀̂︀eTs
+)︀̂︀e
+‖t −(̂︀eTs) ̂︀e‖2
+(186)
+̂︀u3 =
+{︃
+̂︀u1 × ̂︀u2
+if ̂︀u1 × ̂︀u2 ̸= 0
+̂︀e
+if ̂︀u1 × ̂︀u2 = 0 .
+(187)
+Note that ̂︀u3 = ±̂︀e, and that the source and the edge lie within the plane (o, ̂︀u1, ̂︀e). A key observation is that
+rotating the target t about the edge does not alter the path length. Specifically, let R̂︀u3 (𝜑) denote the rotation
+matrix for an angle 𝜑around the edge (o, ̂︀e). Then,
+ℒ(𝑥) = ‖s −v‖2 + ‖v −t‖2
+(188)
+= ‖s −v‖2 + ‖v −R̂︀u3 (𝜑) t
+⏟
+ ⏞
+ 
+t′
+‖2
+(189)
+(190)
+holds for any 𝜑∈R. Especially, by rotating the target around the axis (o, ̂︀u3) by the angle
+𝜑= 𝜋−arccos
+(︀̂︀uT
+1 ̂︀u2
+)︀
+,
+(191)
+the rotated target t′ is placed in the same plane (o, ̂︀u1, ̂︀e) as the source and the edge, but on the side opposite to
+the source with respect to the edge, as depicted in Figure 36. The rotation matrix R̂︀u3 (𝜑) is given by Rodrigues’
+rotation formula [30].
+(a) View in the plane (o, ̂︀u1, ̂︀u2), which is
+perpendicular to the edge ̂︀e.
+(b) View in the plane (o, ̂︀u1, ̂︀e), containing s, the edge,
+and the rotated target t′.
+Figure 36: Illustration of rotating the target t about the edge ̂︀e by the angle 𝜑to obtain the rotated target t′,
+which is coplanar with the source s and the edge. The diffraction point v is such that s, v, and t′ are collinear.
+Minimizing ℒ(𝑥) with the rotated target t′ is equivalent to s, v, and t′ being collinear, i.e.
+(v −s) ×
+−→
+st′ = 0
+(192)
+⇔
+𝑥
+(︁
+̂︀e ×
+−→
+st′)︁
+= s ×
+−→
+st′
+(193)
+where −→
+st′ = t′ −s. Since ̂︀e × −→
+st′ and s × −→
+st′ are parallel, the solution for 𝑥is
+𝑥= sign
+(︂[︁
+̂︀e ×
+−→
+st′]︁T [︁
+s ×
+−→
+st′]︁)︂
+⃦⃦⃦s × −→
+st′⃦⃦⃦
+2
+⃦⃦⃦̂︀e × −→
+st′⃦⃦⃦
+2
+.
+(194)
+54
+Sionna RT: Technical Report
+D. Weighting Factor for Diffraction Radio Maps
+This section details the computation of the weighting factor
+⃦⃦⃦𝛿t
+𝛿𝑥× 𝛿t
+𝛿𝜑
+⃦⃦⃦
+2, required for the calculation of the
+radio map due to diffraction as described in Section 4.3. Recall that t(𝑥, 𝜑) denotes the reparametrization of a
+point on the measurement cell 𝑀𝑖reached by a diffracted ray originating from the diffraction point v on the
+edge ℰ, with 𝜑representing the Keller cone azimuth.
+We begin by rewriting (56) as
+t(𝑥, 𝜑) = v(𝑥) + 𝛾̂︀k𝑠(𝑥, 𝜑),
+(195)
+where v(𝑥) = o + 𝑥̂︀e is the diffraction point along the edge ℰ, and ̂︀k𝑠denotes the direction of the diffracted
+ray, defined by the Keller cone azimuth 𝜑and the opening angle 𝛽′
+0:
+̂︀k𝑠(𝑥, 𝜑) = sin 𝛽′
+0 cos 𝜑̂︀t0 + sin 𝛽′
+0 sin 𝜑̂︀n0 + cos 𝛽′
+0 ̂︀e.
+(196)
+The dependencies of v and ̂︀k𝑠on 𝑥and 𝜑are shown explicitly for clarity. Let ̂︀n denote the normal to the
+measurement cell 𝑀𝑖, and 𝐾a point on the plane containing the measurement cell. Since t lies on 𝑀𝑖, 𝛾can
+be found by requiring
+nT (t(𝑥, 𝜑) −𝐾) = 0
+(197)
+which yields
+𝛾= nT (𝐾−v(𝑥))
+nT̂︀k𝑠(𝑥, 𝜑)
+.
+(198)
+Additionally, for a fixed source position s, the angle of incidence 𝛽′
+0 depends on the location of the diffraction
+point v(𝑥) along edge ℰ
+cos 𝛽′
+0 = ‖v(𝑥) −sℰ‖2
+‖v(𝑥) −s‖2
+,
+sin 𝛽′
+0 =
+‖s −sℰ‖2
+‖v(𝑥) −s‖2
+(199)
+where sℰdenotes the projection of the source point s onto the edge ℰ.
+Equations (195), (196), (198), and (199) together provide the reparametrization of t in terms of 𝑥and
+𝜑, for a given source position s. In Sionna RT, the derivatives of t with respect to 𝑥and 𝜑are computed via
+automatic differentiation. Specifically, Dr.Jit [3] is employed to obtain 𝛿t
+𝛿𝑥∈R3 and 𝛿t
+𝛿𝜑∈R3 by differentiating
+through these equations. The weighting factor is then evaluated as the norm of the cross product of these two
+derivatives. One could also have implemented the derivatives by hand, but using automatic differentiation
+simplifies the implementation without incurring significant overhead.
+55
+Sionna RT: Technical Report
+Version History
+Version
+Date
+Description
+1.2
+September 2025
+Support for first-order diffraction and path solver improvements
+1.1
+June 2025
+Support for mesh-based measurement surfaces
+1.0
+April 2025
+Major release: Complete re-architecture of Sionna RT
+56
+Sionna RT: Technical Report
+References
+[1] J. Hoydis, F. Aït Aoudia, S. Cammerer, M. Nimier-David, N. Binder, G. Marcus, and A. Keller, “Sionna RT:
+Differentiable ray tracing for radio propagation modeling,” arXiv:2303.11103, 2023. [Online]. Available:
+https://arxiv.org/abs/2303.11103 5
+[2] J. Hoydis, S. Cammerer, F. Aït Aoudia, A. Vem, N. Binder, G. Marcus, and A. Keller, “Sionna: An
+open-source library for next-generation physical layer research,” arXiv:2203.11854, 2022. [Online].
+Available: https://arxiv.org/abs/2203.11854 5
+[3] W. Jakob, S. Speierer, N. Roussel, and D. Vicini, “Dr.Jit: A just-in-time compiler for differentiable rendering,”
+Transactions on Graphics (Proceedings of SIGGRAPH), vol. 41, no. 4, Jul. 2022. 5, 55
+[4] W. Jakob, S. Speierer, N. Roussel, M. Nimier-David, D. Vicini, T. Zeltner, B. Nicolet, M. Crespo, V. Leroy, and
+Z. Zhang, “Mitsuba 3 Physically Based Renderer,” 2022. [Online]. Available: https://mitsuba-renderer.org
+5
+[5] M. Abadi, A. Agarwal, P. Barham, E. Brevdo, Z. Chen, C. Citro, G. S. Corrado, A. Davis, J. Dean,
+M. Devin, S. Ghemawat, I. Goodfellow, A. Harp, G. Irving, M. Isard, Y. Jia, R. Jozefowicz, L. Kaiser,
+M. Kudlur, J. Levenberg, D. Mané, R. Monga, S. Moore, D. Murray, C. Olah, M. Schuster, J. Shlens,
+B. Steiner, I. Sutskever, K. Talwar, P. Tucker, V. Vanhoucke, V. Vasudevan, F. Viégas, O. Vinyals,
+P. Warden, M. Wattenberg, M. Wicke, Y. Yu, and X. Zheng, “TensorFlow: Large-scale machine learning on
+heterogeneous systems,” 2015. [Online]. Available: https://www.tensorflow.org/ 5
+[6] A. Paszke, S. Gross, F. Massa, A. Lerer, J. Bradbury, G. Chanan, T. Killeen, Z. Lin, N. Gimelshein, L. Antiga,
+A. Desmaison, A. Köf, E. Yang, Z. DeVito, M. Raison, , A. Tejani, S. Chilamkurthy, B. Steiner, L. Fang,
+J. Bai, and S. Chintala, “PyTorch: An imperative style, high-performance deep learning library,” 2019.
+[Online]. Available: https://pytorch.org 5
+[7] M. Pharr, W. Jakob, and G. Humphreys, Physically Based Rendering: From Theory to Implementation,
+4th ed.
+The MIT Press, 2023. 6, 7, 51
+[8] OpenStreetMap, “Planet dump retrieved from https://planet.osm.org ,” https://www.openstreetmap.org,
+2017. 8
+[9] Prochitecture, “Blosm for Blender: OpenStreetMap, Google 3D cities, terrain,” accessed 18-February-2025.
+[Online]. Available: https://github.com/vvoovv/blosm 8
+[10] J. B. Keller, “Geometrical Theory of Diffraction*,” J. Opt. Soc. Am., vol. 52, no. 2, pp. 116–130, Feb 1962.
+9, 47
+[11] Wikipedia. Diffuse reflection. [Online]. Available: https://en.wikipedia.org/wiki/Diffuse_reflection 10
+[12] D. A. McNamara, C. W. I. Pistorius, and J. Malherbe, Introduction to the Uniform Geometrical Theory of
+Diffraction.
+Artech House, 1990. 9, 47, 50
+[13] Á. González, “Measurement of areas on a sphere using Fibonacci and latitude–longitude lattices,” Mathe-
+matical Geosciences, vol. 42, pp. 49–64, 2010. 17
+[14] J. Hannay and J. Nye, “Fibonacci numerical integration on a sphere,” Journal of Physics A: Mathematical
+and General, vol. 37, no. 48, p. 11591, 2004. 17
+[15] T. Kloek and H. K. van Dijk, “Bayesian Estimates of Equation System Parameters: An Application of
+Integration by Monte Carlo,” Econometrica, vol. 46, no. 1, pp. 1–19, 1978. 18, 52
+[16] Wikipedia. Importance sampling. Accessed November-2025. [Online]. Available: https://en.wikipedia.
+org/wiki/Importance_sampling 18, 52
+[17] G. Fowler and L. C. Noll and K. P. Vo, “Fowler–noll–vo hash function,” http://www.isthe.com/chongo/
+tech/comp/fnv/#FNV-1a, accessed: 2025-02-18. 19
+[18] Wikipedia. Rolling hash. [Online]. Available: https://en.wikipedia.org/wiki/Rolling_hash 19
+57
+Sionna RT: Technical Report
+[19] ——. Locality-sensitive hashing. Accessed November-2025. [Online]. Available: https://en.wikipedia.
+org/wiki/Locality-sensitive_hashing 22
+[20] F. Puggelli, G. Carluccio, and M. Albani, “A novel ray tracing algorithm for scenarios comprising pre-
+ordered multiple planar reflectors, straight wedges, and vertexes,” IEEE Transactions on Antennas and
+Propagation, vol. 62, no. 8, pp. 4336–4341, 2014. 23
+[21] 3rd Generation Partnership Project (3GPP), “Study on channel model for frequencies from 0.5 to
+100 GHz,” 3GPP, Technical Report TR 38.901, 2024, Release 18.0.0. [Online]. Available: https:
+//portal.3gpp.org/desktopmodules/Specifications/SpecificationDetails.aspx?specificationId=3173 29,
+39
+[22] P. Bagnerini, A. Buffa, and A. Cangiani, “A fast algorithm for determining the propagation path of multiple
+diffracted rays,” IEEE Transactions on Antennas and Propagation, vol. 55, no. 5, pp. 1416–1422, 2007. 30,
+53
+[23] J. T. Kajiya, “The Rendering Equation,” SIGGRAPH Comput. Graph., vol. 20, no. 4, p. 143–150, Aug. 1986.
+[Online]. Available: https://doi.org/10.1145/15886.15902 31
+[24] E. Veach, “Robust monte carlo methods for light transport simulation,” Ph.D. dissertation, Stanford
+University, December 1997. 31, 32, 33, 52
+[25] D. Tse and P. Viswanath, Fundamentals of Wireless Communication.
+Cambridge University Press, 2005.
+[Online]. Available: https://web.stanford.edu/~dntse/wireless_book.html 33, 44
+[26] Wikipedia. Surface integral. Accessed November-2025. [Online]. Available: https://en.wikipedia.org/
+wiki/Surface_integral 35
+[27] F. Aït Aoudia, J. Hoydis, M. Nimier-David, S. Cammerer, and A. Keller, “Instant radio maps,” 2024.
+[Online]. Available: https://github.com/NVlabs/instant-rm 38
+[28] N. Geng and W. Wiesbeck, Planungsmethoden für die Mobilkommunikation: Funknetzplanung unter realen
+physikalischen Ausbreitungsbedingungen.
+Springer-Verlag, 2013. 39
+[29] Wikipedia. atan2. Accessed 10-February-2025. [Online]. Available: https://en.wikipedia.org/wiki/Atan2
+39
+[30] ——. Rodrigues’ rotation formula. Accessed 10-February-2025. [Online]. Available: https://en.wikipedia.
+org/wiki/Rodrigues%27_rotation_formula 40, 54
+[31] C. A. Balanis, Advanced Engineering Electromagnetics.
+John Wiley & Sons, 2012. 40
+[32] Wikipedia. Maximum power transfer theorem. Accessed 10-February-2025. [Online]. Available:
+https://en.wikipedia.org/wiki/Maximum_power_transfer_theorem 42
+[33] ITU, “Recommendation ITU-R P.2040-3: Effects of building materials and structures on radiowave
+propagation above about 100 MHz,” International Telecommunication Union, Recommendation ITU-R
+P.2040-3, August 2023. [Online]. Available: https://www.itu.int/rec/R-REC-P.2040/en 44, 47
+[34] M. Kline, “An asymptotic solution of maxwell’s equations,” Communications on Pure and Applied Mathe-
+matics, vol. 4, no. 2-3, pp. 225–262, 1951. 47
+[35] R. K. Luneburg and M. Herzberger, Mathematical Theory of Optics, 1st ed.
+University of California Press,
+1964. [Online]. Available: http://www.jstor.org/stable/jj.8501483 47
+[36] R. G. Kouyoumjian and P. H. Pathak, “A uniform geometrical theory of diffraction for an edge in a perfectly
+conducting surface,” Proceedings of the IEEE, vol. 62, no. 11, pp. 1448–1461, 1974. 47
+[37] R. Luebbers, “Finite conductivity uniform gtd versus knife edge diffraction in prediction of propagation
+path loss,” IEEE Transactions on Antennas and Propagation, vol. 32, no. 1, pp. 70–76, 1984. 47
+58
+Sionna RT: Technical Report
+[38] ITU, “Recommendation ITU-R P.526-15: Propagation by diffraction,” International Telecommunication
+Union, Recommendation ITU-R P.526-15, October 2019. [Online]. Available: https://www.itu.int/rec/
+R-REC-P.526/en 47
+[39] METIS Project, “METIS Channel Models,” Mobile and wireless communications Enablers for
+Twenty-twenty (2020) Information Society (METIS), Deliverable D1.4, February 2015. [Online].
+Available: https://metis2020.com/wp-content/uploads/deliverables/METIS_D1.4_v1.0.pdf 47
+[40] Wikipedia. Fresnel integral. Accessed 21-April-2023. [Online]. Available: https://en.wikipedia.org/wiki/
+Fresnel_integral 50
+[41] V. Degli-Esposti, F. Fuschini, E. M. Vitucci, and G. Falciasecca, “Measurement and modelling of scattering
+from buildings,” IEEE Transactions on Antennas and Propagation, vol. 55, no. 1, pp. 143–153, 2007. 50,
+52
+[42] V. Degli-Esposti, V.-M. Kolmonen, E. M. Vitucci, and P. Vainikainen, “Analysis and modeling on co- and
+cross-polarized urban radio propagation for dual-polarized MIMO wireless systems,” IEEE Transactions
+on Antennas and Propagation, vol. 59, no. 11, pp. 4247–4256, 2011. 51
+59

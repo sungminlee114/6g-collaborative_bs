@@ -1,0 +1,1251 @@
+1
+Adaptive Layer Splitting for Wireless LLM
+Inference in Edge Computing: A Model-Based
+Reinforcement Learning Approach
+Yuxuan Chen, Rongpeng Li, Xiaoxue Yu, Zhifeng Zhao, and Honggang Zhang
+Abstract—Optimizing the deployment of large language models
+(LLMs) in edge computing environments is critical for enhancing
+privacy and computational efficiency. Toward efficient wireless
+LLM inference in edge computing, this study comprehensively
+analyzes the impact of different splitting points in mainstream
+open-source LLMs. On this basis, this study introduces a frame-
+work taking inspiration from model-based reinforcement learning
+(MBRL) to determine the optimal splitting point across the edge
+and user equipment (UE). By incorporating a reward surrogate
+model, our approach significantly reduces the computational
+cost of frequent performance evaluations. Extensive simulations
+demonstrate that this method effectively balances inference
+performance and computational load under varying network
+conditions, providing a robust solution for LLM deployment in
+decentralized settings.
+I. INTRODUCTION
+The field of natural language processing (NLP) has recently
+experienced transformative changes, driven by the rapid ad-
+vancement of large language models (LLMs) such as GPT-
+4 [1] and Gemini [2]. These models are highly proficient at
+generating human-like text [3]–[7], catalyzing progress across
+various domains [8]–[11]. Although LLMs perform well in
+centralized cloud environments, they face significant scalabil-
+ity and privacy issues [12], [13] in sensitive applications like
+healthcare and finance [14], which have driven the exploration
+of edge computing [15], [16] as a complementary paradigm.
+Notably, edge computing processes sensitive information lo-
+cally rather than traversing through a centralized cloud [17],
+[18]. Consequently, it minimizes the exposure to potential
+privacy breaches and unauthorized access. Moreover, edge
+computing allows for a flexible and distributed architecture,
+and can accommodate allocated computational resources to
+specific requirements [19], [20]. Therefore, the integration
+of edge computing and LLMs empowers LLMs with en-
+hanced personalized and domain-specific generative capabili-
+ties [21]. However, LLMs’ substantial computational demands
+often exceed the processing capacities of communication-
+limited user equipment (UE) in radio access network or
+Internet of Things (IoT) systems [22]–[24]. Correspondingly,
+split learning and inference [25]–[27] are proposed to jointly
+leverage the computing capability of UE and edge nodes (e.g.,
+base stations [BSs]).
+Y. Chen, R. Li, X. Yu and H. Zhang are with Zhejiang University,
+Hangzhou 310027, China, (email: {cyx00, lirongpeng, sdwhyxx, hong-
+gangzhang}@zju.edu.cn).
+Z. Zhao is with Zhejaing Lab, Hangzhou 310012, China as well as Zhejiang
+University, Hangzhou 310027, China (email: zhaozf@zhejianglab.com).
+User Equipment
+Cloud
+LLM
+RL Agent
+Edge Node
+Transformer layer
+Transformer layer
+···
+Transformer layer
+Transformer layer
+···
+Transformer layer
+Transformer layer
+···
+Layers deployed on UE 
+Transformer layer
+Transformer layer
+Transformer layer
+···
+Layers deployed on 
+Edge / Cloud 
+Fig. 1: A high-level architecture of the framework, depicting
+the distribution of the LLM across edge and UEs, highlights
+the role of the RL agent in managing interactions between the
+LLM and wireless networks.
+Though most of the existing works [25], [26], [28]–[32]
+focus on careful model splitting to balance the computational
+and communication costs, splitting different layers of LLMs
+is quite unique, as the intermediate outputs have consistent di-
+mensions, leading to the same communication cost. Addition-
+ally, transmitting tensors between LLM layers over potentially
+noisy channels could hinder LLM inference performance. As
+validated in this work lately, given different splitting points,
+the possible loss induced by unreliable wireless channels
+produces a significantly diverse impact on model performance.
+These attributes necessitate a shift in focus from optimizing
+transmission efficiency to managing the computational burden
+on UE. In LLM deployment scenarios, where the scale and
+complexity of the models impose significant demands on
+UE’s limited computational resources, the challenge lies in
+balancing the computational load without degrading inference
+performance. Thus, it is critical to identify the optimal splitting
+point for model inference while combating wireless channel
+volatility. Such a viewpoint transcends traditional single-step
+optimization techniques and warrants a new framework ac-
+commodating the sequential nature of decision-making.
+Reinforcement learning (RL) emerges as an apt methodol-
+ogy, known for its proficiency in sequential decision-making
+tasks [33]–[36]. RL learns optimal strategies over successive
+arXiv:2406.02616v5  [cs.LG]  11 Sep 2024
+2
+iterations, continuously adapting to the dynamic and uncertain
+edge environment. The iterative nature of RL, requiring multi-
+ple interactions with the LLM to ascertain the rewards of dif-
+ferent actions, complements the continuous and unpredictable
+variations in wireless channels. Nevertheless, it inevitably
+incurs significant interaction costs before collecting sufficient
+records. Fortunately, with the merits in sampling efficiency,
+model-based reinforcement learning (MBRL) is particularly
+suited to this context [37]–[40]. In particular, MBRL capably
+simulates the uncertain environment and assesses the potential
+outcomes of actions, thus enabling a more informed and
+anticipatory optimization strategy for the dynamical splitting
+point determination process.
+As illustrated in Fig. 1, we propose an adaptive layer split-
+ting algorithm for efficient LLM inference in edge computing,
+where only a few selected transformer layers are provisionally
+activated at the UE. Meanwhile, faced with wireless channel
+fluctuations, we leverage a sample-efficient MBRL-inspired
+approach to determine the suitable splitting point. While
+highlighting the key differences with existing works in Table
+I, the primary contributions of this paper are summarized as
+follows.
+• We comprehensively evaluate the impact of LLM splitting
+points on LLM inference performance under varying
+channel conditions, and formulate the determination of
+appropriate LLM splitting points as a sequential decision-
+making process.
+• We leverage proximal policy optimization (PPO) [42]
+for adaptive splitting point determination and devise a
+sample-efficient reward surrogate model to facilitate the
+learning.
+• We conduct extensive empirical studies to evaluate the
+robustness and effectiveness of the MBRL-inspired split-
+ting point determination method.
+The rest of this paper is organized as follows: Section II
+reviews related works, setting the context for our research.
+Section III first describes our system model and highlights
+the impact of splitting points on LLM inference performance.
+Afterward, Section III presents the formulated problem, while
+Section IV explores an MBRL-inspired splitting point deter-
+mination solution. Section V presents our experimental setup
+and results. Finally, we conclude the paper with future research
+directions in Section VI.
+II. RELATED WORKS
+A. Edge-Enhanced LLM Deployment
+In the realm of LLMs, [43], [44] provide a comprehensive
+overview of the challenges faced by LLMs in cloud-based
+settings, particularly emphasizing the constraints related to
+data privacy and processing efficiency. [45] proposes the
+concept of edge computing as a viable solution. Subsequently,
+[21] proposes an LLM cloud-edge collaboration framework,
+which utilizes small-scale models deployed at edge nodes
+to enhance the generative capabilities of cloud-based LLMs.
+Additionally, [22] emphasizes the importance of optimizing
+LLM deployment at 6G edges but does not provide specific
+methodologies for leveraging edge computing capabilities.
+[46] proposes to use LLMs as offline compilers to meet
+low-latency requirements in edge computing. However, these
+approaches do not fully address the computational constraints
+of edge nodes. Our research bridges this gap by introducing a
+dynamical layer splitting framework to alleviate these limita-
+tions.
+B. Split Inference in Distributed Computing
+[41] introduce to split models between clients and servers
+to avoid transferring raw data, offering new perspectives on
+distributed computing and privacy-preserving AI. [25], [28],
+[29] broaden the application of split learning to encompass
+the distributed deployment of deep neural networks (DNNs) in
+wireless networks. [26], [30]–[32] distribute different portions
+of DNNs between edge nodes and cloud for collaborative
+inference task execution, thus reducing response latency and
+improving the scalability.
+Different from these existing works [26], [30]–[32], LLM
+splitting presents unique challenges. Due to the large compu-
+tational demands of LLMs, deploying different layers across
+UE and edge nodes requires careful consideration of the
+computational load on the UE. The significant disparity in
+computational capabilities between heterogeneous devices fur-
+ther complicates the deployment process [47], [48]. Also, split-
+ting at different points within the LLM significantly impacts
+the overall inference performance, as demonstrated by our
+experiments in Section 3. To our best knowledge, this belongs
+to the first efforts to address this important issue, and lays the
+very foundation for further adaptive layer splitting to balance
+LLM inference performance and UE computation cost.
+C. Reinforcement Learning in Network Optimization
+RL emerges as a pivotal tool for optimizing decision-
+making processes in dynamic and uncertain environments,
+as highlighted by [49], [50]. [51], [52] demonstrate RL’s
+efficacy in enhancing performance optimization within dis-
+tributed networks, highlighting its potential to adapt and
+respond to evolving environmental conditions. In the context
+of wireless network environments, [53], [54] leverage RL to
+address the challenges of resource allocation and network
+traffic management, showcasing its capability to optimize
+system performance amidst the fluctuating nature of wire-
+less communications. With its predictive modeling capabil-
+ities and remarkable sampling efficiency, MBRL is adept
+at navigating environments with variable factors [38], [55].
+To address computational constraints and wireless channel
+volatility, our research draws inspiration from MBRL and
+develops a computation-efficient reward surrogate model to
+optimize LLM deployment at the edge.
+III. SYSTEM MODEL AND PROBLEM FORMULATION
+In this section, we begin with a comprehensive description
+of the system model, which highlights the deployment of a
+splitting LLM across wireless network. Afterward, we discuss
+the impact of the layer splitting point on LLM performance
+under various channel conditions. Finally, we formulate the
+3
+TABLE I: Summary and comparison of related works
+Refs
+Brief description
+Limitations
+[22]
+Discusses the deployment of LLMs at 6G edges, advo-
+cating for edge computing to optimize LLM deployment.
+Lacks detailed methodologies for handling computa-
+tional constraints at edge nodes.
+[41]
+Introduces split learning, which splits models between
+clients and servers to avoid transferring raw data.
+Focuses on DNNs without considering the unique chal-
+lenges of wireless channels and high deployment costs
+associated with LLMs.
+[26]
+Explores split inference in wireless networks, distributing
+DNNs for collaborative inference.
+Does not account for the specific challenges of LLMs,
+such as high computational requirements and the impact
+of wireless channel volatility on performance.
+[39]
+Investigates model-based machine learning for communi-
+cation systems, emphasizing the advantages of predictive
+modeling in dynamic environments.
+Limited focus on LLMs and their unique characteristics,
+including high processing demands and sensitivity to
+channel noise.
+channel-aware splitting point optimization problem to balance
+the UE computational load and LLM inference performance.
+Beforehand, we summarize the mainly used notations in
+Table II.
+TABLE II: Notations used in the paper.
+Notation
+Definition
+L
+Total number of layers in the LLM
+p
+Adjustable splitting point, indicat-
+ing the number of layers deployed
+at the UE
+LU(·), LC(·)
+Layers deployed on UE and edge
+respectively
+x ∈Rdin
+Input data
+y, ˆy ∈Rdmid
+Intermediate tensor before and af-
+ter the channel
+θUE, θedge
+Parameters of the LLM layers de-
+ployed on the UE and edge
+h
+Nakagami-m fading channel gain
+m
+Nakagami-m fading channel shape
+parameter
+Ω
+Nakagami-m
+fading
+channel
+spread parameter
+n ∼N(0, σ2) Gaussian
+distributed
+noise
+with
+mean 0 and variance σ2
+hth
+Threshold for channel gain below
+which packet loss occurs
+P
+Probability of packet loss
+z ∈Rdout
+Inference output provided by the
+edge
+θsurr
+Parameters of the reward surrogate
+model
+A. System Model
+To characterize the LLM provisioning with model splitting,
+we primarily consider a system model illustrated in Fig. 2.
+Without loss of generality, we assume that for an L-layer
+LLM, the first p layers LU(·) are deployed at the UE, and
+the remaining L −p layers LC(·) are in the edge, where
+the splitting point p is adjustable. Based on this, for an input
+x ∈Rdin, typically a sequence of text tokens, a UE transforms
+x into a higher-dimensional intermediate tensor y ∈Rdmid, that
+is,
+y = LU(x; θUE),
+(1)
+where θUE denotes the parameters of layers in LU(·). This
+procedure inevitably incurs a certain computational load on
+UEs, typically measured in floating-point operations per sec-
+ond (FLOPs). Typically, for the layer 1 with an input sequence
+of length din and hidden dimension dmid, utilizing a multi-head
+self-attention mechanism with κ heads, the computations for
+the involved multi-head attention mechanism and feed-forward
+network components can be obtained as FLOPs(L1)
+=
+3dind2
+mid
+κ
++ 2d2
+indmid
+κ
++ 9dind2
+mid. Thus, the computational load on
+the UE can be approximated as
+CUE(p) =
+p
+X
+i=1
+FLOPs(Li)
+= p ·
+ 3dind2
+mid
+κ
++ 2d2
+indmid
+κ
++ 9dind2
+mid
+
+.
+(2)
+The intermediate tensor y is transmitted from the UE to the
+edge over a wireless communication channel. Mathematically,
+the received signal ˆy ∈Rdmid after a Nakagami-m fading
+channel [56], [57] can be represented as
+ˆy = h · y + n,
+(3)
+where h ∼Nakagami(m, Ω) represents the Nakagami-m
+fading with shape parameter m and spread parameter Ω,
+and n ∼N(0, σ2) represents the noise following a normal
+distribution with zero mean and variance σ2. In our simulation,
+each element of the intermediate tensor is independently
+subjected to a packet loss probability, abstracting each element
+as a separate packet to capture the impact of noise at a
+granular level. When h = 1, it degenerates to an additive white
+Gaussian noise (AWGN) channel. The probability density
+function (PDF) of the Nakagami-m distribution for the channel
+4
+1
+2
+3
+4
+Request 
+Input 
+···
+4
+5
+32
+Inference 
+Output 
+3
+UE
+Edge / Cloud
+Output of layer 3
+Whole LLM
+1    2    3         4    5            32
+Wireless 
+Channel
+···
+LLM splitting point(s)
+x
+y
+ˆy
+U
+L
+C
+L
+z
+x : Input data
+U
+L : LLM layers deployed at
+  the UE
+y : Intermediate tensor
+ˆy : Noisy intermediate tensor
+C
+L : LLM layers deployed at
+  the edge node/cloud
+: Final output
+z
+h : Nakagami-m fading      
+  channel gain
+n : AWGN
+n
+h
+Fig. 2: Overview of the split model architecture in wireless channel, with layer 3 designated as the example splitting point.
+We use the 32-layer LLaMA2-7B model as an example.
+gain h is given by:
+f(h) = 2mmh2m−1
+Γ(m)Ωm e−mh2
+Ω,
+(4)
+where Γ(m) denotes the Gamma function. The shape param-
+eter m controls the severity of fading. When m = 1, the
+Nakagami-m distribution degenerates to a Rayleigh fading
+channel; at lower values of m, the channel experiences more
+severe fading, leading to greater variability in noise levels. In
+practical scenarios, particularly when splitting LLMs between
+UE and base stations, the mobile nature of devices often leads
+to rapidly changing channel conditions. For instance, as a user
+moves from an open outdoor area into a building or dense
+urban environment, the shape parameter m in the Nakagami-m
+distribution would decrease, reflecting more severe multipath
+fading and greater noise intensity fluctuations. This dynamic
+environment necessitates continuous adaptation of the splitting
+strategy to maintain inference performance under varying
+noise conditions.
+Besides, when the channel gain h falls below a certain
+threshold hth, the lower signal-to-noise ratio (SNR) and rela-
+tively higher bit error rate (BER) imply retransmission, thus
+exceeding the latency requirement in quality of service (QoS)
+with a rather high probability. Hence, such a case can be
+regarded as a packet loss. Accordingly, recalling the formula
+of Nakagami-m distribution, the probability of packet loss can
+be expressed as
+P(Packet Loss) = P(h < hth)
+=
+Z hth
+0
+2mmh2m−1
+Γ(m)Ωm e−mh2
+Ωdh.
+(5)
+Subsequently, the edge delivers an inference output z ∈Rdout
+as
+z = LC(ˆy; θedge).
+(6)
+The performance of the LLMs is commonly quantified using
+the perplexity (PPL) metric, a standard means in NLP to eval-
+uate how well a probability model predicts a sample. Given
+an LLM and a sequence of N tokens (i.e., w1, w2, · · · , wN),
+the PPL is defined as
+PPL = exp
+ 
+−1
+N
+N
+X
+k=1
+log PLLM(wk|w1, w2, . . . , wk−1)
+!
+,
+(7)
+where PLLM(wk|w1, w2, . . . , wk−1) denotes the LLM’s pre-
+diction probability from the previous k −1 tokens. A lower
+PPL signifies superior model performance, demonstrating the
+model’s proficiency in accurately predicting the subsequent
+word in a sequence. Hence, in this context, PPL can serve as
+a unified metric to assess the impact of channel impairments
+on the LLM’s ability.
+B. Problem Formulation
+Beforehand, we investigate the impact of splitting points on
+the inference performance under different channel conditions
+and present the corresponding simulation results regarding
+several mainstream open-source LLMs, including LLaMA2-
+7B, LLaMA2-13B [5], Mistral-7B [58], Aya-23-8B [59],
+Openchat-8B [60], and Prem-1B [61], in Fig. 3. Consistent
+with our intuition, it can be observed from Fig. 3 that for
+the same settings, a lower SNR or larger packet loss rate
+generally yields inferior performance (i.e., larger PPL). More
+interestingly, an earlier model splitting (i.e., a smaller p)
+could worsen the inference performance while the channel
+conditions significantly affect the performance of a given
+splitting point. Such an observation is also consistent with
+the widely recognized fact that earlier layers in LLM are
+responsible for learning the general or basic features of the
+training dataset [62]. These findings underscore the impor-
+tance of strategically selecting the splitting point in the LLM
+architecture to maintain desired performance.
+On the other hand, high computational load on UEs would
+lead to increased latency and energy consumption, further
+undermining the benefits of deploying LLMs in edge envi-
+ronments. As indicated in (2), the computational load on the
+UE is approximately proportional to the number of layers
+processed locally. This proportionality yields a contradicting
+phenomenon that an earlier model splitting worsens the in-
+ference performance but ameliorates the computational cost
+at the computation-limited UE. In other words, in order to
+5
+LLaMA2-7B
+Aya-23-8B
+Openchat-8B
+LLaMA2-13B
+Prem-1B
+(a)
+(b)
+(c)
+(d)
+Mistral-7B
+Fig. 3: Illustrations of the impact on PPL across different layers for various LLMs under (a) high SNR and (b) low SNR in
+AWGN; (c) low packet loss probability and (d) high packet loss probability under Nakagami-m fading.
+6
+minimize the overall system PPL while effectively balancing
+the computational load on the UE, the problem turns to
+identifying the optimal splitting point p under volatile channel
+conditions, that is,
+p∗= arg min
+p [PPL(p; σ, m) + λ · CUE(p)] ,
+(8)
+where PPL(p; σ, m) quantifies the LLM’p inference perfor-
+mance, taking into account the splitting point p, the noise
+intensity σ, and the Nakagami-m fading shape parameter m,
+which directly affects the packet loss probability. Besides,
+the weight λ balances the trade-off between the inference
+performance and computational load.
+Considering the variability of network conditions and the
+complexities of real-time decision-making in distributed sys-
+tems, we reformulate this optimization problem as a sequential
+decision-making task. In that regard, RL is particularly well-
+suited for this scenario, due to its capability to adapt to the
+evolving environment and optimize decisions accordingly.
+IV. REINFORCEMENT LEARNING FOR SPLITTING POINT
+OPTIMIZATION
+In this section, we investigate the application of RL to
+dynamically optimize the splitting point of LLMs across UE
+and edge computing resources, thus adaptively responding to
+channel variations.
+A. The Markov Decision Process
+The splitting point adjustment under volatile channels can
+be formalized as a Markov Decision Process (MDP), consist-
+ing of a tuple ⟨S, A, P, R⟩. In particular, as illustrated in Fig. 4,
+the state space S encompasses the key factors such as the noise
+intensity σ, the Nakagami-m fading shape m and the current
+splitting point p, namely, s = {σ, m, p} ∈S. The action space
+A is designed to accommodate a range of possible adjustments
+to the splitting point, allowing for both fine-grained and more
+substantial modifications. Specifically, A includes actions such
+as moving the splitting point upward or downward by u
+layers, where u can take values such as 1, 2, 3, and so
+forth, or maintaining the current position. Mathematically, this
+can be expressed as a ∈A = {−u, . . . , −1, 0, +1, . . . , +u}.
+This generalized action space provides the RL agent with the
+flexibility to optimize the splitting strategy dynamically in
+response to varying channel environments. For a time-step t,
+given an action at under state st, the environment state will
+transit to the next state st+1 following the transition probability
+P, which is contingent on the selected action and real-time
+channel conditions. Meanwhile, a reward can be obtained as
+rt = R(st, at) = −
+ PPL(st+1) + λ · CUE(st+1)
+
+.
+(9)
+Finally, the long-term overall objective can be formalized
+as
+J(θ) = Eπθ
+h
+T
+X
+t=1
+γt · rt
+i
+= Eπθ
+h
+T
+X
+t=1
+γt · R(st, at)
+i
+= Eπθ
+h
+−
+T
+X
+t=1
+γt ·
+ PPL(st+1) + λ · CUE(st+1)
+i
+,
+(10)
+where the discount factor γ involves the significance of future
+rewards. Correspondingly, it requires learning a policy πθ
+parameterized by θ to attain the maximum of (10).
+B. Proximal Policy Optimization
+For dynamically adjusting the splitting point of LLMs
+within cloud-edge-UE networks, we employ the PPO algo-
+rithm [42] to iteratively learn the policy πθ. Specifically,
+PPO utilizes two neural networks, namely, the policy network
+πθ(a|s) and the value function network Vϕ(s), which are
+parameterized by θ and ϕ respectively, to dictate the action
+a given the state s and estimate the expected discounted
+return from state s. Notably, PPO leverages a clipped surro-
+gate objective function LCLIP(θ), which approximates the true
+objective J(θ) but introduces a clipping mechanism to limit
+the magnitude of policy updates. Mathematically, the clipped
+objective can be written as
+LCLIP(θ) = Et
+"
+min
+ πθ(at|st)
+πθold(at|st)
+ˆAt,
+(11)
+clip
+ πθ(at|st)
+πθold(at|st), 1 −ϵ, 1 + ϵ
+
+ˆAt
+ #
+,
+where θold represents the policy parameters for sampling. The
+clipping mechanism clip(·) ensures that the policy ratio
+πθ(at|st)
+πθold(at|st) does not deviate significantly from 1, thus prevent-
+ing large, destabilizing updates. This mechanism is critical in
+RL scenarios where stability and reliability are paramount,
+especially in dynamically changing environments like cloud-
+edge-UE networks. The advantage estimate ˆAt, which can be
+computed using generalized advantage estimation (GAE), is
+formulated as
+ˆAt =
+∞
+X
+l=0
+(γξ)lδt+l,
+(12)
+where δt = rt + γVϕ(st+1) −Vϕ(st) denotes the temporal
+difference error, γ is the discount factor, and ξ is the GAE
+parameter controlling the bias-variance tradeoff.
+The update to the policy parameters θ is performed using a
+gradient ascent step on the clipped objective function LCLIP(θ).
+Mathematically,
+θ ←θ + α∇θLCLIP(θ).
+(13)
+This gradient ascent step ensures that the policy is updated
+iteratively to maximize the expected reward while maintaining
+stability through the clipping mechanism.
+During the training process, we employ an experience replay
+mechanism specifically adapted to the dynamic nature of the
+channel conditions in our scenario. Notably, state-action pairs,
+including the current splitting point p, noise intensity σ, and
+channel fading characteristics m, are stored in a replay buffer.
+At each training step, a mini-batch of these pairs is sampled
+from the replay buffer to update the policy network, ensuring
+that the model learns from a diverse set of past experiences
+under varying network conditions. This technique helps to
+break the temporal correlations inherent in sequential channel
+variations, leading to more stable learning.
+7
+Channel 
+noise
+···
+RL agent
+Evaluate 
+Dataset 
+LLM
+State Space
+· Noise Intensity (   )
+· Nakagami-m fading shape (   )
+· Split Point (p)
+State Input
+Reward Function
+Action Space
+Move Up   |   Move Down   |   Maintain Current Split Point
+Reward
+Policy Network
+  
+Receives state inputs and 
+computes action 
+probabilities.
+ 
+Updates policy based on 
+rewards.
+Action Selection
+State
+Action
+Reward
+Split point
+m
+
+1
+UE
+1
+( ,
+)
+PPL(
+)
+(
+)
+(
+)
+t
+t
+t
+t
+R s a
+s
+C
+s
+
+
+
+
+
+
+Fig. 4: Illustrations of the RL setup, including the LLM, RL agent, and channel noise modules. The RL agent optimizes the
+splitting point of the LLM by receiving state inputs (noise intensity, Nakagami-m fading shape and splitting point), computing
+action probabilities via the policy network, and updating the policy based on the reward function.
+C. The Reward Surrogate Model for Faster RL
+The integration of MBRL into our LLM split optimization
+scenario significantly enhances the efficiency and effectiveness
+of our RL approach. Nevertheless, the slow reasoning capa-
+bility of LLM makes the learning process sluggish. Therefore,
+inspired by the classical MBRL, which uses a predictive model
+to simulate the environment, we adopt a surrogate model to
+approximate the reward function, thereby boosting the learning
+efficiency. Specifically, we approximate the PPL(p; σ, m) that
+needs to be computed by running LLM, and computes a DNN-
+based surrogate model g
+PPL(p; σ, m, θsurr) parameterized by
+θsurr to minimize the mean squared error (MSE) as
+MSE = E
+h PPL(p; σ, m) −g
+PPL(p; σ, m, θsurr)
+2i
+.
+(14)
+Notably, we use cross-validation [63] to prevent overfitting and
+ensure the generalizability of the surrogate model.
+Incorporating the surrogate model directly into the reward
+calculation, the reward at time step t can be redefined as:
+˜R(st, at) = −
+
+g
+PPL(pt; σt, mt, θsurr) + λ · CUE(pt)
+
+,
+(15)
+where g
+PPL(pt; σt, mt, θsurr) represents the estimated PPL pro-
+vided by the surrogate model. This reformulation significantly
+reduces the training burden by replacing the direct LLM
+inference with an efficient approximation, enabling more rapid
+policy evaluation and iteration of an RL policy. From a
+theoretical standpoint [64], the surrogate model effectively
+reduces the variance in reward estimation by providing a
+smoothed approximation of the true reward landscape. This
+smoothing is particularly advantageous in high-dimensional
+action spaces, where small perturbations in actions could lead
+to large fluctuations in PPL if calculated directly.
+Correspondingly, during the training process of RL, ˆAt in
+(12) can be re-written as
+ˆAt =
+∞
+X
+l=0
+(γξ)lh g
+PPL(st+1+l) + λ · CUE(st+1+l)
+
++ γV (st+2+l) −V (st+1+l)
+i
+.
+(16)
+On this basis, we can compute LCLIP(θ), which consequently
+facilitates the update of θ.
+By incorporating this model-based approach, as shown
+in Table IV, we achieve substantial gains in computational
+efficiency, enabling the RL agent to flexibly accommodate
+changing deployment environments.
+Finally, we summarize the algorithm in Algorithm 1.
+V. SIMULATION SETTINGS AND EXPERIMENTAL RESULTS
+A. Experimental Setup
+To validate the effectiveness of RL-based adaptive LLM
+splitting point determination, we use the LLaMA2-7B model
+[5], a 32-layer LLM, as well as the WikiText-2 dataset [65],
+which contains 4, 355 sentences with an average length of
+20 words, to evaluate the PPL under varied network condi-
+tions. Particularly, we simulate a changing, fading-induced
+packet loss probability in the range between 0 and 0.3.
+Moreover, we primarily consider three representative cases:
+• Case L: A low packet loss probability 0 ∼0.1 and an
+initial splitting point pinitL near the input (layers 1-5).
+• Case H: A high packet loss probability 0.1 ∼0.3 and
+an initial splitting point pinitH far from the input (layers
+6-10).
+• Case A: Complete range of packet loss probability 0 ∼
+0.3 and initial splitting points pinitA (layers 1-10).
+Besides, the default hyperparameters for the PPO [42] algo-
+rithm and the channels are given in Table III.
+To reduce the computational cost of evaluating the LLM’s
+performance at each step, by collecting 9, 718 pieces of
+practical records, we derive a reward surrogate model as in
+Section IV-C. Our result shows that an MLP (Multi-Layer
+8
+(a) Case L
+(b) Case H
+(c) Case A
+Fig. 5: Comparison of training performances for different RL approaches under Case L, Case H, and Case A.
+TABLE III: PPO Algorithm Hyperparameters
+Hyperparameter
+Value
+Learning rate (α)
+0.0003
+Discount factor (γ)
+0.99
+Clipping parameter (ϵ)
+0.2
+Update frequency (nstep)
+400
+Batch size
+100
+Steps per episode
+5
+GAE (ξ)
+0.95
+Perceptron) yields a test loss of 0.00548 in MSE and 0.050 in
+mean absolute error (MAE), thus providing sufficient accuracy.
+Therefore, we use this MLP-based reward surrogate model to
+accelerate the evaluation process.
+B. Experiment Results
+We first present the performance of PPO with and without
+the reward surrogate model and compare them with baseline
+RL schemes (i.e., A2C [66] and DQN [33]). Fig. 5 presents
+the corresponding results. It can be observed from Fig. 5 that
+for Case H and Case A, PPO yields significantly superior
+performance than A2C and DQN; while for Case L, all RL
+approaches lead to similar performance. Besides, PPO trained
+with reward surrogate models closely resemble that with actual
+rewards. Furthermore, Table IV compares PPO with and with-
+out reward surrogate model under Case A in terms of reward,
+training duration, and computational resource consumption.
+The results indicate that the reward surrogate model signif-
+icantly reduces the training time and computational resource
+consumption while achieving comparable rewards.
+Fig. 6 presents a violin plot comparing the reward distribu-
+tions of four different strategies: the trained PPO agent with
+true reward training, the trained PPO agent using the reward
+surrogate model, a random policy, and an untrained PPO agent.
+The plot shows that the trained agents, both standard and
+MBRL-enhanced, lead to higher average rewards and tighter
+Fig. 6: This violin plot compares the reward distributions
+across four different strategies. The width of each violin
+represents the density of rewards at different values, with wider
+sections indicating a higher probability of observing rewards
+in that range. The central white dot represents the median
+reward, while the thick black bar in the center denotes the
+interquartile range (IQR).
+Fig. 7: splitting points determined by the trained PPO agent
+across different noise intensities, along with a LOESS trend
+line.
+9
+TABLE IV: Performance comparison of PPO with and without reward surrogate model under Case A.
+Metric
+w.o. surrogate w. surrogate
+Reward at 24, 000 Steps
+2.9736
+2.9663
+Training Duration
+> 24 days
+7.7 minutes
+Computational Resource Consumption
+16.3 GB
+< 1 GB
+Algorithm 1 PPO with Reward Surrogate Model for Adaptive
+Splitting Point Determination in Wireless LLM Inference.
+1: Initialize policy network parameters θ, value function
+network parameters ϕ.
+2: Initialize learning rate α, discount factor γ, GAE param-
+eter ξ, clipping threshold ϵ.
+3: Initialize surrogate model parameters θsurr.
+4: Initialize replay buffer D.
+5: Initialize flag USE SURROGATE ←False.
+6: Initialize EPOCH COUNTER ←0.
+7: Set threshold T for starting surrogate model training.
+8: for each training epoch do
+9:
+EPOCH COUNTER ←EPOCH COUNTER + 1
+10:
+for each interaction step t do
+11:
+Observe state st.
+12:
+Select action at according to πθ(·|st).
+13:
+Execute action at and obtain reward rt. The environ-
+ment transits to state st+1.
+14:
+if USE SURROGATE then
+15:
+Store transition (st, at, st+1) in replay buffer D.
+16:
+else
+17:
+Store transition (st, at, rt, st+1) in replay buffer D.
+18:
+end if
+19:
+end for
+20:
+Sample a mini-batch of transitions Φ ∼D.
+21:
+for each transition in mini-batch do
+22:
+if USE SURROGATE then
+23:
+Compute surrogate reward g
+PPL(st+1).
+24:
+Update advantage estimate ˆAt using surrogate re-
+ward with (16).
+25:
+else
+26:
+Compute advantage estimate ˆAt using GAE from
+(12).
+27:
+end if
+28:
+Compute clipped surrogate objective LCLIP(θ) with
+(11).
+29:
+Perform gradient ascent on LCLIP(θ) with (13).
+30:
+end for
+31:
+if not USE SURROGATE and
+EPOCH COUNTER ≥T then
+32:
+Train surrogate model g
+PPL(p; σ, m, θsurr) to minimize
+MSE with (14).
+33:
+Set USE SURROGATE ←True.
+34:
+end if
+35: end for
+Fig. 8: Comparison of training performances across different
+action spaces (Action Space = 3, 5, 7) for varying movement
+ranges.
+reward distribution, indicating more consistent and superior
+performance compared to the random and untrained agents.
+Fig. 7 illustrates 500 splitting points determined by the
+trained PPO agent under Case A, and complements a lo-
+cally estimated scatterplot smoothing (LOESS) [67] trend
+line, whose slope and R-squared value provide quantitative
+insights into the relationship between channel conditions and
+splitting point decisions. It can be observed from Fig. 7 that
+as noise intensity σ increases, the agent prefers to place the
+splitting point further from the input layers. This strategic
+adjustment helps mitigate the adverse effects of noise on model
+performance by leveraging the cloud’s more robust processing
+capabilities.
+In addition to the baseline experiment where the action
+space is limited to single-layer adjustments, we conduct further
+experiments with enlarged action space to evaluate the impact
+of larger adjustments on the training process and final rewards.
+As shown in Fig. 8, allowing larger adjustments (e.g., moving
+by 2, 3 layers) leads to slower convergence but ultimately
+achieves higher rewards. This trade-off suggests that while the
+larger action space can explore a wider range of configurations,
+they may require more training steps to stabilize. However,
+in both experimental and practical scenarios, single-layer ad-
+justments offer notable advantages. They provide fine-grained
+control over the splitting point, allowing the model to quickly
+adapt to changes in channel conditions. This is particularly
+beneficial in dynamic environments where frequent and subtle
+adjustments are necessary to maintain optimal performance.
+The impact of various hyperparameter settings on PPO
+10
+Fig. 9: Impact of various hyperparameters with respect to training steps in the PPO algorithm, including comparisons of learning
+rate α, batch size B, clip range ϵ, and GAE parameter ξ.
+training performance is analyzed in Fig. 9. Fig. 9(a) indicates
+that higher learning rates (α = 0.0005 and α = 0.0007) lead
+to faster initial learning but may introduce higher variance
+in the rewards. Fig. 9(b) demonstrates that larger batch sizes
+(B = 150 and B = 200) generally result in smoother and
+more stable reward curves, yielding better gradient estimates.
+Fig. 9(c) reveals that moderate clip ranges (ϵ=0.2 and ϵ=0.3)
+strike a balance between stability and performance, whereas
+too small or too large clip ranges can degrade performance.
+Fig. 9(d) presents that a larger GAE parameter (ξ=0.99)
+produces more impressive long-term reward accumulation,
+emphasizing the importance of temporal smoothing in advan-
+tage estimation.
+VI. CONCLUSION AND FUTURE WORKS
+In this paper, we have presented an MBRL framework for
+dynamically optimizing the splitting point of LLMs deployed
+across UE and the edge, so as to enhance the efficiency
+and performance of LLMs under wireless network conditions.
+In particular, we have formulated the problem as an MDP,
+and introduced a reward surrogate model to significantly
+shorten overall training time. The experimental results have
+demonstrated the framework’s efficacy in managing the trade-
+off between inference performance and computational load at
+the UE. Meanwhile, comprehensive validations in mainstream
+open-source LLMs have clearly demonstrated that an earlier
+model splitting could worsen the point inference performance,
+which might provide an independent interest to the community.
+Our proposed framework offers a structured approach to
+dynamically deploying LLMs across heterogeneous devices.
+In practical applications, such as in smart cities and industrial
+IoT, this framework can enhance the flexibility of LLM
+deployment while alleviating the computational constraints
+associated with running LLMs on edge devices.
+Despite these achievements, several limitations and chal-
+lenges remain. Though the validation of the impact of splitting
+points on the performance of some widely adopted LLMs,
+given the versatility of LLMs, the generality issue still awakens
+further attention. The lack of a more accurate channel model
+and the absence of communication-efficient distribution learn-
+ing approaches (e.g., quantization) in data transmission also
+demands future research. Also, future research could explore
+adaptive mechanisms that dynamically adjust the action space
+based on the current learning phase or environmental condi-
+tions, thereby balancing the need for quick convergence and
+high reward attainment. Additionally, further investigation is
+required into the scalability of our framework in larger, more
+complex network environments and its generalization across
+11
+different LLM architectures. We will explore these important
+directions in the future.
+REFERENCES
+[1] OpenAI, “GPT-4 technical report,” OpenAI, 2024. [Online]. Available:
+https://cdn.openai.com/papers/gpt-4.pdf
+[2] G. Team, R. Anil, S. Borgeaud, Y. Wu, J.-B. Alayrac, J. Yu, R. Soricut,
+J. Schalkwyk, A. M. Dai, A. Hauth et al., “Gemini: a family of highly
+capable multimodal models,” 2023.
+[3] T. Brown, B. Mann, N. Ryder, M. Subbiah, J. D. Kaplan, P. Dhariwal,
+A. Neelakantan, P. Shyam, G. Sastry, A. Askell et al., “Language models
+are few-shot learners,” Advances in Neural Information Processing
+Systems, vol. 33, no. 1, pp. 1877–1901, 2020.
+[4] Y. Bai, A. Jones, K. Ndousse, A. Askell, A. Chen, N. DasSarma,
+D. Drain, S. Fort, D. Ganguli, T. Henighan et al., “Training a helpful and
+harmless assistant with reinforcement learning from human feedback,”
+2022.
+[5] H. Touvron, L. Martin, K. Stone, P. Albert, A. Almahairi, Y. Babaei,
+N. Bashlykov, S. Batra, P. Bhargava, S. Bhosale et al., “LLaMA 2: Open
+foundation and fine-tuned chat models,” 2023.
+[6] J. Wei, M. Bosma, V. Y. Zhao, K. Guu, A. W. Yu, B. Lester, N. Du,
+A. M. Dai, and Q. V. Le, “Finetuned language models are zero-shot
+learners,” 2021.
+[7] T. Le Scao, A. Fan, C. Akiki, E. Pavlick, S. Ili´c, D. Hesslow,
+R. Castagn´e, A. S. Luccioni, F. Yvon, M. Gall´e et al., “Bloomloom:
+A 176b-pb-parameter open-access multilingual language model,” 2022.
+[8] E. Nijkamp, B. Pang, H. Hayashi, L. Tu, H. Wang, Y. Zhou, S. Savarese,
+and C. Xiong, “Codegen: An open large language model for code with
+multi-turn program synthesis,” 2022.
+[9] T. Webb, K. J. Holyoak, and H. Lu, “Emergent analogical reasoning
+in large language models,” Nature Human Behaviour, vol. 7, no. 9, pp.
+1526–1541, 2023.
+[10] M. Jin, Q. Yu, C. Zhang, D. Shu, S. Zhu, M. Du, Y. Zhang, and
+Y. Meng, “Health-LLM: Personalized retrieval-augmented disease pre-
+diction model,” 2024.
+[11] B. Roziere, J. Gehring, F. Gloeckle, S. Sootla, I. Gat, X. E. Tan, Y. Adi,
+J. Liu, T. Remez, J. Rapin et al., “Code llama: Open foundation models
+for code,” 2023.
+[12] A. J. Thirunavukarasu, D. S. J. Ting, K. Elangovan, L. Gutierrez, T. F.
+Tan, and D. S. W. Ting, “Large language models in medicine,” Nature
+Medicine, vol. 29, no. 8, pp. 1930–1940, 2023.
+[13] S. Wu, O. Irsoy, S. Lu, V. Dabravolski, M. Dredze, S. Gehrmann,
+P. Kambadur, D. Rosenberg, and G. Mann, “BloombergGPT: A large
+language model for finance,” 2023.
+[14] J. Kaddour, J. Harris, M. Mozes, H. Bradley, R. Raileanu, and
+R. McHardy, “Challenges and applications of large language models,”
+2023.
+[15] Y. Mao, C. You, J. Zhang, K. Huang, and K. B. Letaief, “A survey
+on mobile edge computing: The communication perspective,” IEEE
+Communications Surveys & Tutorials, vol. 19, no. 4, pp. 2322–2358,
+2017.
+[16] P. Mach and Z. Becvar, “Mobile edge computing: A survey on archi-
+tecture and computation offloading,” IEEE Communications Surveys &
+Tutorials, vol. 19, no. 3, pp. 1628–1656, 2017.
+[17] E. Li, L. Zeng, Z. Zhou, and X. Chen, “Edge AI: On-demand ac-
+celerating deep neural network inference via edge computing,” IEEE
+Transactions on Wireless Communications, vol. 19, no. 1, pp. 447–457,
+2019.
+[18] K. B. Letaief, Y. Shi, J. Lu, and J. Lu, “Edge artificial intelligence for
+6G: Vision, enabling technologies, and applications,” IEEE Journal on
+Selected Areas in Communications, vol. 40, no. 1, pp. 5–36, 2021.
+[19] N. Abbas, Y. Zhang, A. Taherkordi, and T. Skeie, “Mobile edge
+computing: A survey,” IEEE Internet of Things Journal, vol. 5, no. 1,
+pp. 450–465, 2018.
+[20] Q.-V. Pham, F. Fang, V. N. Ha, M. J. Piran, M. Le, L. B. Le, W.-J.
+Hwang, and Z. Ding, “A survey of multi-access edge computing in 5G
+and beyond: Fundamentals, technology integration, and state-of-the-art,”
+IEEE Access, vol. 8, no. 1, pp. 116 974–117 017, 2020.
+[21] Y. Chen, R. Li, Z. Zhao, C. Peng, J. Wu, E. Hossain, and H. Zhang,
+“NetGPT: An AI-native network architecture for provisioning beyond
+personalized generative services,” IEEE Network, March 2024, early
+Access.
+[22] Z. Lin, G. Qu, Q. Chen, X. Chen, Z. Chen, and K. Huang, “Pushing large
+language models to the 6G edge: Vision, challenges, and opportunities,”
+2024.
+[23] R. Patil and V. Gudivada, “A review of current trends, techniques, and
+challenges in large language models (llms),” Applied Sciences, vol. 14,
+no. 5, p. 2074, 2024.
+[24] M. U. Hadi, q. a. tashi, R. Qureshi, A. Shah, a. muneer, M. Irfan,
+A. Zafar, M. B. Shaikh, N. Akhtar, J. Wu, and S. Mirjalili, “A survey
+on large language models: applications, challenges, limitations, and
+practical usage,” 2023.
+[25] Z. Lin, G. Qu, X. Chen, and K. Huang, “Split learning in 6G edge
+networks,” 2024.
+[26] J. Lee, H. Lee, and W. Choi, “Wireless channel adaptive DNN split
+inference for resource-constrained edge devices,” IEEE Communications
+Letters, vol. 27, no. 6, pp. 1520–1524, 2023.
+[27] L. Qiao and Y. Zhou, “Timely split inference in wireless networks: An
+accuracy-freshness tradeoff,” IEEE Transactions on Vehicular Technol-
+ogy, vol. 72, no. 12, pp. 16 817–16 822, 2023.
+[28] M. Chen, D. G¨und¨uz, K. Huang, W. Saad, M. Bennis, A. V. Feljan,
+and H. V. Poor, “Distributed learning in wireless networks: Recent
+progress and future challenges,” IEEE Journal on Selected Areas in
+Communications, vol. 39, no. 12, pp. 3579–3605, 2021.
+[29] J. Ryu, D. Won, and Y. Lee, “A study of split learning model.” in
+IMCOM, 2022, pp. 1–4.
+[30] Q. Lan, Q. Zeng, P. Popovski, D. G¨und¨uz, and K. Huang, “Progressive
+feature transmission for split inference at the wireless edge,” 2021.
+[31] J. Karjee, P. Naik, K. Anand, and V. N. Bhargav, “Split computing: DNN
+inference partition with load balancing in IoT-edge platform for beyond
+5G,” Measurement: Sensors, vol. 23, no. 1, p. 100409, 2022.
+[32] Y. Wang, K. Guo, W. Hong, Q. Mu, and Z. Zhao, “Split learning in
+wireless networks: A communication and computation adaptive scheme,”
+in 2023 IEEE/CIC International Conference on Communications in
+China (ICCC).
+IEEE, 2023, pp. 1–6.
+[33] V. Mnih, K. Kavukcuoglu, D. Silver, A. A. Rusu, J. Veness, M. G.
+Bellemare, A. Graves, M. Riedmiller, A. K. Fidjeland, G. Ostrovski
+et al., “Human-level control through deep reinforcement learning,”
+Nature, vol. 518, no. 7540, pp. 529–533, 2015.
+[34] Y. Li, “Deep reinforcement learning: An overview,” 2017.
+[35] N. C. Luong, D. T. Hoang, S. Gong, D. Niyato, P. Wang, Y.-C.
+Liang, and D. I. Kim, “Applications of deep reinforcement learning
+in communications and networking: A survey,” IEEE Communications
+Surveys & Tutorials, vol. 21, no. 4, pp. 3133–3174, 2019.
+[36] Y. Qian, J. Wu, R. Wang, F. Zhu, and W. Zhang, “Survey on rein-
+forcement learning applications in communication networks,” Journal
+of Communications and Information Networks, vol. 4, no. 2, pp. 30–39,
+2019.
+[37] M. Deisenroth and C. E. Rasmussen, “Pilco: A model-based and
+data-efficient approach to policy search,” in Proceedings of the 28th
+International Conference on Machine Learning (ICML-11), 2011, pp.
+465–472.
+[38] L. Kaiser, M. Babaeizadeh, P. Milos, B. Osinski, R. H. Campbell,
+K. Czechowski, D. Erhan, C. Finn, P. Kozakowski, S. Levine et al.,
+“Model-based reinforcement learning for Atari,” 2019.
+[39] N. Shlezinger, N. Farsad, Y. C. Eldar, and A. J. Goldsmith, “Model-
+based machine learning for communications,” 2021.
+[40] T. M. Moerland, J. Broekens, A. Plaat, C. M. Jonker et al., “Model-
+based reinforcement learning: A survey,” Foundations and Trends® in
+Machine Learning, vol. 16, no. 1, pp. 1–118, 2023.
+[41] O. Gupta and R. Raskar, “Distributed learning of deep neural network
+over multiple agents,” Journal of Network and Computer Applications,
+vol. 116, no. 1, pp. 1–8, 2018.
+[42] J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and O. Klimov,
+“Proximal policy optimization algorithms,” 2017.
+[43] B. Lin, T. Peng, C. Zhang, M. Sun, L. Li, H. Zhao, W. Xiao, Q. Xu,
+X. Qiu, S. Li et al., “Infinite-LLM: Efficient LLM service for long
+context with distattention and distributed kvcache,” 2024.
+[44] L. Chen, N. K. Ahmed, A. Dutta, A. Bhattacharjee, S. Yu, Q. I. Mahmud,
+W. Abebe, H. Phan, A. Sarkar, B. Butler et al., “Position paper: The
+landscape and challenges of HPC research and LLMs,” 2024.
+[45] M. Satyanarayanan, P. Bahl, R. Caceres, and N. Davies, “The case for
+vm-based cloudlets in mobile computing,” IEEE Pervasive Computing,
+vol. 8, no. 4, pp. 14–23, 2009.
+[46] Q. Dong, X. Chen, and M. Satyanarayanan, “Creating edge AI from
+cloud-based LLMs,” in Proceedings of the 25th International Workshop
+on Mobile Computing Systems and Applications, 2024, pp. 8–13, early
+Access.
+[47] M. Zhang, J. Cao, X. Shen, and Z. Cui, “Edgeshard: Efficient llm
+inference via collaborative edge computing,” 2024.
+12
+[48] I.
+Ong,
+“Efficient
+distributed
+LLM
+inference
+with
+dynamic
+partitioning,”
+California,
+Berkeley,
+Technical
+Report
+UCB/EECS-
+2024-108, May 2024. [Online]. Available: http://www2.eecs.berkeley.
+edu/Pubs/TechRpts/2024/EECS-2024-108.html
+[49] L. Zhu, G. Takami, M. Kawahara, H. Kanokogi, and T. Matsubara, “Al-
+leviating parameter-tuning burden in reinforcement learning for large-
+scale process control,” Computers & Chemical Engineering, vol. 158,
+no. 1, p. 107658, 2022.
+[50] R. T. Icarte, T. Q. Klassen, R. Valenzano, M. P. Castro, E. Waldie,
+and S. A. McIlraith, “Learning reward machines: A study in partially
+observable reinforcement learning,” Artificial Intelligence, vol. 323,
+no. 1, p. 103989, 2023.
+[51] K. Yang, C. Shen, J. Yang, S.-p. Yeh, and J. Sydir, “Offline reinforcement
+learning for wireless network optimization with mixture datasets,” 2023.
+[52] C.-H. Ke and L. Astuti, “Applying multi-agent deep reinforcement learn-
+ing for contention window optimization to enhance wireless network
+performance,” ICT Express, vol. 9, no. 5, pp. 776–782, 2023.
+[53] D. Liu, C. Sun, C. Yang, and L. Hanzo, “Optimizing wireless systems
+using unsupervised and reinforced-unsupervised deep learning,” IEEE
+Network, vol. 34, no. 4, pp. 270–277, 2020.
+[54] X. Li, L. Lu, W. Ni, A. Jamalipour, D. Zhang, and H. Du, “Feder-
+ated multi-agent deep reinforcement learning for resource allocation
+of vehicle-to-vehicle communications,” IEEE Transactions on Vehicular
+Technology, vol. 71, no. 8, pp. 8810–8824, 2022.
+[55] V. Egorov and A. Shpilman, “Scalable multi-agent model-based rein-
+forcement learning,” 2022.
+[56] M. Nakagami, The m-Distribution—A General Formula of Intensity
+Distribution of Rapid Fading.
+Oxford: Pergamon, 1960, pp. 3–36.
+[Online]. Available: https://www.sciencedirect.com/science/article/pii/
+B9780080093062500054
+[57] N. Beaulieu and C. Cheng, “Efficient Nakagami-m fading channel
+simulation,” IEEE Transactions on Vehicular Technology, vol. 54, no. 2,
+pp. 413–424, 2005.
+[58] A. Q. Jiang, A. Sablayrolles, A. Mensch, C. Bamford, D. S. Chaplot,
+D. d. l. Casas, F. Bressand, G. Lengyel, G. Lample, L. Saulnier et al.,
+“Mistral 7B,” 2023.
+[59] A. ¨Ust¨un, V. Aryabumi, Z.-X. Yong, W.-Y. Ko, D. D’souza, G. Onilude,
+N. Bhandari, S. Singh, H.-L. Ooi, A. Kayid et al., “Aya model: An
+instruction finetuned open-access multilingual language model,” 2024.
+[60] G. Wang, S. Cheng, X. Zhan, X. Li, S. Song, and Y. Liu, “Openchat:
+Advancing open-source language models with mixed-quality data,”
+2023.
+[61] R. Gupta and N. Sosio, “Introducing Prem-1B,” PremAI, 2024.
+[Online]. Available: https://blog.premai.io/introducing-prem-1b/
+[62] X. Zhang, B. Yu, H. Yu, Y. Lv, T. Liu, F. Huang, H. Xu, and Y. Li,
+“Wider and deeper LLM networks are fairer LLM evaluators,” 2023.
+[63] M. Stone, “Cross-validatory choice and assessment of statistical predic-
+tions,” Journal of the Royal Statistical Society: Series B (Methodologi-
+cal), vol. 36, no. 2, pp. 111–133, 1974.
+[64] J. Romoff, P. Henderson, A. Pich´e, V. Francois-Lavet, and J. Pineau,
+“Reward estimation for variance reduction in deep reinforcement learn-
+ing,” 2018.
+[65] S. Merity, C. Xiong, J. Bradbury, and R. Socher, “Pointer sentinel
+mixture models,” 2016.
+[66] V. Mnih, A. P. Badia, M. Mirza, A. Graves, T. P. Lillicrap,
+T. Harley, D. Silver, and K. Kavukcuoglu, “Asynchronous methods for
+deep reinforcement learning,” Proceedings of the 33rd International
+Conference on Machine Learning (ICML), vol. 48, no. 1, pp. 1928–1937,
+2016. [Online]. Available: http://proceedings.mlr.press/v48/mnih16.html
+[67] W. S. Cleveland, “Robust locally weighted regression and smoothing
+scatterplots,” Journal of the American Statistical Association, vol. 74,
+no. 368, pp. 829–836, 1979.

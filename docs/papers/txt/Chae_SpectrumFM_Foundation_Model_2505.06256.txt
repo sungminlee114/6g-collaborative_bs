@@ -1,0 +1,4303 @@
+1
+SpectrumFM: A Foundation Model for Intelligent
+Spectrum Management
+Fuhui Zhou, Senior Member, IEEE, Chunyu Liu, Graduate Student Member, IEEE,
+Hao Zhang, Member, IEEE, Wei Wu, Member, IEEE, Qihui Wu, Fellow, IEEE,
+Tony Q. S. Quek, Fellow, IEEE, and Chan-Byoung Chae, Fellow, IEEE
+Abstract—Intelligent spectrum management is crucial for
+improving spectrum eﬀiciency and achieving secure utilization
+of spectrum resources. However, existing intelligent spectrum
+management methods, typically based on small-scale mod-
+els, suffer from notable limitations in recognition accuracy,
+convergence speed, and generalization, particularly in the
+complex and dynamic spectrum environments. To address these
+challenges, this paper proposes a novel spectrum foundation
+model, termed SpectrumFM, establishing a new paradigm for
+spectrum management. SpectrumFM features an innovative
+encoder architecture that synergistically exploits the convolu-
+tional neural networks and the multi-head self-attention mech-
+anisms to enhance feature extraction and enable robust repre-
+sentation learning. The model is pre-trained via two novel self-
+supervised learning tasks, namely masked reconstruction and
+This work was supported in part by the National Natural Sci-
+ence Foundation of China under Grant 62222107, in part by the
+National Key Research and Development Project under Grant
+2023YFB2904500, in part by the Yangtze River Delta Science and
+Technology Innovation Community Joint Research (Basic Research)
+Project under Grant 2024CSJZN00300, in part by the Major Achieve-
+ments Cultivation Project under Grant NC2025010, in part by the
+407th Shuangqing Forum of the National Natural Science Foundation
+of China under Grant NQ2025005, and in part by the Postgraduate
+Research & Practice Innovation Program of Jiangsu Province under
+Grant SJCX25_0151. The work of W. Wu was supported in part by
+the Open Fund of Anhui Province Key Laboratory of Cyberspace
+Security Situation Awareness and Evaluation under Grant CSSAE-
+2023-008. The work of T. Q. S. Quek was supported in part by
+the National Research Foundation, Singapore and Infocomm Media
+Development Authority under its Communications and Connectivity
+Bridging Funding Initiative. Any opinions, findings and conclusions
+or recommendations expressed in this material are those of the au-
+thor(s) and do not reflect the views of National Research Foundation,
+Singapore. The work of C.-B. Chae was supported in part by the
+Korea government under IITP/NRF Grants RS-2024-00428780 and
+2022R1A5A1027646. (Corresponding author: Chunyu Liu).
+F. Zhou and H. Zhang are with the College of Artificial Intelligence
+and the Key Laboratory of Dynamic Cognitive System of Electro-
+magnetic Spectrum Space, Nanjing University of Aeronautics and
+Astronautics, Nanjing 211106, China. (E-mail: zhoufuhui@ieee.org,
+haozhangcn@nuaa.edu.cn)
+C. Liu and Q. Wu are with the College of Electronic and Informa-
+tion Engineering, and with the Key Laboratory of Dynamic Cognitive
+System of Electromagnetic Spectrum Space, Nanjing University
+of Aeronautics and Astronautics, Nanjing 211106, China. (E-mail:
+chunyu.liu@nuaa.edu.cn, wuqihui2014@sina.com)
+W. Wu is with the College of Communication and Information
+Engineering, Nanjing University of Posts and Telecommunications,
+Nanjing 210003, China, and with the Anhui Province Key Laboratory
+of Cyberspace Security Situation Awareness and Evaluation, Hefei
+230037, China. (E-mail: weiwu@njupt.edu.cn)
+T. Q. S. Quek is with the Singapore University of Technology
+and Design, Singapore 487372, and also with the Department of
+Electronic Engineering, Kyung Hee University, Yongin 17104, South
+Korea. (E-mail: tonyquek@sutd.edu.sg)
+C.-B. Chae is with the School of Integrated Technology, Yonsei
+University, Seoul 03722, South Korea. (E-mail: cbchae@yonsei.ac.kr)
+next-slot signal prediction, which leverage large-scale in-phase
+and quadrature (IQ) data to achieve comprehensive and trans-
+ferable spectrum representations. Furthermore, a parameter-
+eﬀicient fine-tuning strategy is proposed to enable SpectrumFM
+to adapt to various downstream spectrum management tasks,
+including automatic modulation classification (AMC), wireless
+technology classification (WTC), spectrum sensing (SS), and
+anomaly detection (AD). Extensive experiments demonstrate
+that SpectrumFM achieves superior performance in terms
+of accuracy, robustness, adaptability, few-shot learning ef-
+ficiency, and convergence speed, consistently outperforming
+conventional methods across multiple benchmarks. Specifically,
+SpectrumFM improves AMC accuracy by up to 12.1% and
+WTC accuracy by 9.3%, achieves an area under the curve
+(AUC) of 0.97 in SS at -4 dB signal-to-noise ratio (SNR), and
+enhances AD performance by over 10%. 1
+Index Terms—Spectrum foundation model, automatic mod-
+ulation classification, wireless technology classification, spec-
+trum sensing, anomaly detection.
+I. Introduction
+T
+HE radio frequency (RF) spectrum is a fundamental
+yet increasingly scarce resource in modern wireless
+communication networks [1]. As the demand for ubiqui-
+tous connectivity continues to rise, driven by the prolifer-
+ation of Internet-of-Things (IoT) devices, non-terrestrial
+networks (NTNs), and the sixth-generation (6G) wireless
+paradigms, spectrum management is of crucial importance
+for improving spectrum eﬀiciency, mitigating interference,
+detecting the illegal spectrum utilization, achieving reli-
+able and secure spectrum operation [2], [3].
+Spectrum management includes many tasks, such as
+spectrum sensing [4], spectrum analysis [5], spectrum
+resource decision-making [6], [7], etc. Intelligent spectrum
+management aims to exploit machine learning to achieve
+those tasks. The current intelligent spectrum management
+methods are mainly oriented for the specific task and
+only adapt to one task. Although those methods have
+achieved considerable success, they often exhibit limited
+generalization to unseen environments and require sub-
+stantial amounts of labeled data for training. Moreover,
+their performance deteriorates in low signal-to-noise ratio
+(SNR) settings or under non-stationary signal conditions,
+which are prevalent in practical wireless environments.
+Inspired by the transformative success of foundation
+models in natural language processing (e.g., BERT, GPT)
+1The
+source
+code
+is
+available
+at
+https://github.com/
+ChunyuLiu188/SpectrumFM.git
+arXiv:2505.06256v2  [eess.SP]  15 Dec 2025
+2
+and computer vision (e.g., ViT, Segment Anything),
+there is growing interest in developing foundation mod-
+els for wireless communications [8], [9]. Those models
+are trained on large-scale heterogeneous data to learn
+universal representations that can be adapted to diverse
+downstream tasks with minimal supervision. Recent ef-
+forts, such as SpectralGPT [10] and WirelessGPT [11],
+have demonstrated the potential of this paradigm in
+remote sensing and integrated sensing and communication
+(ISAC), respectively. However, the spectrum environment
+is inherently dynamic, with interference, signal fading, and
+noise introducing significant variability. This variability
+complicates the model ability to generalize across different
+environmental conditions and spectrum usage patterns.
+Moreover, the spectrum encompasses a broad range of
+frequency bands, from licensed to unlicensed, and the
+unpredictable nature of cognitive radio systems further
+amplifies the challenges. As a result, the application
+of foundation models to spectrum management remains
+largely unexplored.
+To address this gap, we propose a novel spectrum
+foundation model, termed SpectrumFM, a foundation
+model tailored for generalizable spectrum management
+across a wide range of tasks and environments. At its
+core, SpectrumFM employs a hybrid encoder architecture
+that exploits convolutional neural networks (CNNs) for
+localized feature extraction and multi-head self-attention
+(MHSA) modules for capturing long-range dependen-
+cies, enabling robust feature extraction and representa-
+tion learning from large-scale in-phase and quadrature
+(IQ) data. Pre-training is conducted via two novel self-
+supervised learning tasks, namely masked reconstruction
+and next-slot signal prediction. The masked reconstruction
+task encourages the model to infer missing spectrum com-
+ponents, enhancing its ability to learn latent structures
+and intrinsic correlations while simultaneously improving
+its robustness to signal impairments such as noise and
+interference.
+In contrast, the next-slot signal prediction task focuses
+on temporal continuity by training the model to anticipate
+future spectrum behavior, thereby improving its predictive
+capabilities and adaptability to the dynamic nature of the
+spectrum environment. Furthermore, eﬀicient parameter
+fine-tuning allows SpectrumFM to generalize effectively
+across a wide range of downstream tasks, including au-
+tomatic modulation classification (AMC), wireless tech-
+nology classification (WTC), spectrum sensing (SS), and
+anomaly detection (AD). The main contributions of our
+work are summarized as follows.
+• To the best of our knowledge, SpectrumFM is the
+first foundation model specifically designed for spectrum
+management, representing a promising new paradigm
+in this domain. In contrast to conventional methods
+that rely on hand-crafted features or task-specific ar-
+chitectures, SpectrumFM establishes an adaptable and
+highly generalizable framework capable of effectively
+addressing a wide range of spectrum-related tasks,
+including AMC, WTC, SS, and AD. Furthermore, it
+demonstrates strong robustness and adaptability across
+diverse environmental conditions and data distributions,
+effectively operating in real-world scenarios character-
+ized by complex and dynamic spectrum data.
+• SpectrumFM introduces a novel architectural and learn-
+ing framework that significantly advances spectrum
+management by seamlessly exploiting CNNs and MHSA
+mechanisms to achieve an enhanced feature extraction
+from IQ signals. The CNN component excels at iden-
+tifying fine-grained, localized spectral patterns, while
+the MHSA module models long-range dependencies,
+enabling the model to capture comprehensive, high-
+level representations of spectrum signals. To facilitate
+eﬀicient pre-training without requiring extensive labeled
+data, we introduce two innovative self-supervised tasks,
+namely masked reconstruction and next-slot signal pre-
+diction. The masked reconstruction task enables the
+model to learn the underlying structure of the spectrum
+signals by predicting missing parts of the input, while
+the next-slot signal prediction task enhances the model
+temporal awareness by training it to predict future
+spectrum values based on historical data. As a result,
+these two tasks allow SpectrumFM to develop rich
+and transferable representations that can generalize well
+across complex and dynamic spectrum environments.
+• We conduct comprehensive experiments across four
+key downstream tasks, including AMC, WTC, SS,
+and AD, to rigorously evaluate the performance of
+our proposed model in comparison with state-of-the-
+art methods. The results highlight its effectiveness in
+diverse spectrum scenarios. Specifically, in the AMC
+task, SpectrumFM achieves notable accuracy improve-
+ments over existing methods, demonstrating enhanced
+robustness across datasets with varying complexities. In
+particular, it outperforms previous methods by 7.5% on
+the RML2016.10A dataset, 1.9% on the RML2016.10B
+dataset, and 12.1% on the RML2016.04C dataset. In
+the WTC task, our model exhibits a substantial clas-
+sification accuracy gain, surpassing the best-performing
+baseline by 9.3%, highlighting its strong generalization
+ability in wireless technology identification. In the SS
+task, SpectrumFM achieves an area under the curve
+(AUC) of 0.97 even at a challenging SNR level of -4
+dB, demonstrating exceptional robustness in low SNR
+environments. In the AD task, our model significantly
+enhances anomaly detection performance, achieving an
+AUC improvement of over 10%, underscoring its abil-
+ity to identify complex spectrum anomalies with high
+precision. Overall, these results strongly validate the
+effectiveness, adaptability, and superior generalization
+ability of SpectrumFM across a wide range of spectrum
+management tasks.
+The remainder of this paper is organized as follows. In
+Section II, we provide a comprehensive review of related
+works, focusing on task-specific spectrum management
+methods and recent advanced foundation models. Sec-
+tion III presents an in-depth description of our proposed
+3
+SpectrumFM, detailing its architecture, design principles,
+and two novel pre-training tasks, namely mask reconstruc-
+tion and next-slot signal prediction. Section IV outlines
+the experimental results obtained from evaluating our
+model on various downstream tasks. Finally, we conclude
+the paper in Section V, summarizing the key findings and
+discussing potential directions for future research.
+II. Related Work
+A. Task-Specific Spectrum Management Methods
+Spectrum
+management
+has
+traditionally
+been
+ap-
+proached through task-specific methods, where models
+are designed and optimized for individual tasks such as
+AMC, WTC, SS, and AD. AMC, in particular, is a
+challenging task that requires accurate classification of the
+modulation scheme from a given IQ signal. Traditional
+methods have primarily relied on hand-crafted features,
+such as cyclic-moment-based features extracted through
+expert domain knowledge [12]. A significant milestone was
+achieved in [13], where CNNs were introduced to learn
+features automatically, eliminating the dependence on
+expert-designed representations. This marked the advent
+of deep learning techniques in AMC.
+While CNNs demonstrated strong performance in ex-
+tracting spatial features from IQ signals, they are in-
+herently limited in modeling temporal dependencies. To
+address this, GrrNet [14] first employed a CNN-based
+module to extract representative features, followed by a
+gated recurrent unit (GRU) to capture temporal informa-
+tion. This hybrid design allowed GrrNet to balance spatial
+and temporal modeling, achieving notable improvements
+in AMC performance. However, GRUs still struggle with
+long-range dependencies and high-dimensional input data.
+To overcome these challenges, the authors in [15] proposed
+an attention-based AMC model. After initial feature
+extraction via a complex-valued CNN (CCNN), a modified
+multi-head attention mechanism was introduced, yielding
+a 1-10% accuracy improvement over GRU-based models.
+Deep learning-based AMC methods often suffer from
+reliance on large amounts of labeled data. To mitigate
+this, SSwsrNet [16] introduced a semi-supervised learning
+framework based on MixMatch, effectively leveraging both
+labeled and unlabeled data. This method significantly en-
+hanced performance in few-shot learning scenarios. In low
+SNR environments, AMC accuracy typically degrades due
+to noise interference. AMC_Net [17] addressed this issue
+by applying signal denoising in the frequency domain,
+combined with multi-scale feature extraction. This ap-
+proach significantly improved classification accuracy under
+low SNR conditions. However, denoising-based methods
+often rely on paired training data (i.e., clean and noisy
+signal pairs). To relax this constraint, [18] proposed a
+contrastive learning objective that eliminates the need for
+paired inputs. This method enhances generalization by
+enabling the model to learn from a broader distribution
+of signal variations across diverse noise conditions.
+WTC is another challenging task that requires the
+model to accurately classify the type of wireless transmis-
+sion based on the input IQ signal. Numerous studies have
+demonstrated significant progress in this area. For exam-
+ple, the authors in [19] employed CNNs to automatically
+extract features from the input signal and used a feedfor-
+ward neural network to classify the wireless technology.
+Data augmentation techniques were also incorporated,
+enabling the model to generalize well to unseen scenarios
+while maintaining high accuracy. In [20], a multiscale
+module was introduced to capture features at various
+resolutions. Additionally, a global average pooling layer
+was utilized to aggregate the extracted features, which
+reduced the number of parameters and accelerated the
+training process. Despite its simplified architecture, the
+model achieved strong classification performance and fast
+convergence.
+The authors in [21] proposed a comprehensive WTC
+system designed to identify and analyze a wide range
+of wireless technologies coexisting within the 5.9 GHz
+band. The system specifically focused on LTE, Wi-Fi,
+5G NR, C-V2X PC5, and ITS-G5. To ensure accurate
+identification, the study adopted a short time resolution
+window based on the minimum frame duration of the tar-
+get technologies. Unlike most IQ-based approaches, MF-
+BLN [22] leveraged alternative features such as received
+signal strength indicator (RSSI), fast fourier transform
+(FFT), and spectrogram representations to extract multi-
+dimensional signal characteristics. This allowed the model
+to capture richer information from the input, thereby
+enhancing classification accuracy and robustness across
+diverse wireless environments.
+SS is a fundamental task in cognitive radio networks,
+referring to the process of monitoring and analyzing the
+RF spectrum to determine its occupancy status [23]. The
+primary goal of SS is to identify spectrum holes, which are
+unused or underutilized frequency bands in a specific geo-
+graphical area. By detecting these holes, cognitive radios
+can dynamically access the available spectrum without
+interfering with primary users (PUs). SS is generally
+categorized into two types, namely narrowband SS and
+wideband SS. Narrowband SS analyzes one frequency band
+at a time, while wideband SS simultaneously evaluates
+multiple bands to identify vacant channels suitable for
+transmission [24]. Common narrowband SS techniques
+include energy detection, cyclostationary detection, and
+matched filter detection [25]. Among these, energy detec-
+tion is widely used due to its simplicity. It determines
+spectrum occupancy by comparing the measured signal
+energy against a predefined threshold.
+However, energy detection suffers from the well-known
+SNR wall issue caused by noise uncertainty, which sig-
+nificantly degrades its performance in low SNR environ-
+ments. To address this limitation, the authors in [26]
+proposed a deep learning-based signal detector. Unlike
+conventional energy detection, the proposed method does
+not require prior knowledge of channel state information
+or background noise, resulting in greater robustness and
+4
+adaptability under varying conditions. For wideband SS,
+the authors in [27] introduced a Transformer-based ar-
+chitecture that effectively learns both intra-band spectral
+features and inter-band occupancy correlations in the
+wideband regime. To further address the challenges of
+wideband SS under few-shot or cross-domain few-shot
+scenarios, the authors in [28] proposed a pre-training and
+fine-tuning approach leveraging transfer learning. This
+method improves performance when labeled data is scarce,
+making it well-suited for real-world applications where
+large annotated datasets are unavailable.
+AD plays a critical role in enhancing spectrum sharing
+security, particularly in cognitive radio networks (CRNs)
+[29]. After spectrum sensing determines that the PU
+band is occupied, AD is employed to further assess
+whether the detected signal exhibits normal behavior or
+anomalous characteristics. The authors in [30] proposed
+an improved deep support vector data description (Deep
+SVDD) method for extracting low-dimensional features of
+the samples represented in the time-frequency domain.
+The method achieved excellent detection performance
+while maintaining real-time capability. To enable effective
+monitoring over a wide spectrum, a spectrum abnormal
+detection scheme was introduced in [31], which employed
+an adversarial autoencoder (AAE) to recover signals from
+sub-Nyquist samples. This design allowed for eﬀicient
+processing of undersampled data while preserving the
+ability to detect spectral anomalies.
+To address the challenge of implementing spectrum
+sensing and abnormal detection as separate modules,
+which increases system complexity and compromises real-
+time performance, the authors in [32] proposed a unified
+deep learning framework that performs spectrum sensing
+and abnormal detection simultaneously. This integrated
+approach delivers high detection accuracy while ensuring
+low-latency operation, offering a more eﬀicient and prac-
+tical solution for cognitive radio systems.
+B. Foundation Models
+Foundation models are large-scale machine learning
+models that are pre-trained on vast amounts of data to
+learn general-purpose representations. The models serve
+as a foundational basis for a wide range of downstream
+tasks, making them highly versatile and adaptable across
+various domains. Foundation models are typically devel-
+oped using deep learning techniques and are characterized
+by their massive scale, extensive training data, and strong
+transferability [33], [34]. The authors in [35] introduced the
+attention mechanism and the Transformer architecture,
+which serve as the cornerstone of foundation models.
+BERT [36] pioneered the era of foundation models. By
+introducing a bidirectional Transformer-based architec-
+ture and innovative pre-training strategies such as masked
+language modeling (MLM) and next sentence prediction
+(NSP), BERT achieved state-of-the-art performance on a
+wide range of nature language processing (NLP) tasks.
+The BERT-like prediction loss is employed in HuBERT
+[37] for self-supervised speech representation learning,
+leading to the development of a speech foundation model.
+The authors in [38] present a foundational model that
+reformulates and unifies four core vision tasks, namely
+object detection, instance segmentation, keypoint pre-
+diction, and image captioning, into a single pixel-to-
+sequence framework. By framing multiple vision tasks
+within a shared pixel-to-sequence paradigm, this work
+demonstrated the potential of foundation models to gener-
+alize across tasks, reducing the need for specialized archi-
+tectures and promoting greater flexibility in multimodal
+applications. SpectralGPT [10] represents a pioneering
+effort in creating a universal foundation model tailored
+for remote sensing (RS) applications. Trained on a large-
+scale dataset comprising one million spectral RS images,
+SpectralGPT achieved a parameter size exceeding 600
+million. Evaluations across four downstream tasks reveal
+substantial performance improvements, highlighting the
+potential of foundation models to tackle a wide range of
+RS tasks.
+WirelessGPT [11], a pioneering foundation model tai-
+lored for multi-task learning in ISAC, features an ini-
+tial parameter size of approximately 80 million. Pre-
+trained on a large-scale wireless channel dataset, it de-
+livers significant advancements in critical wireless tasks
+such as channel estimation, channel prediction, human
+activity recognition, and wireless reconstruction. Wireless-
+GPT demonstrates that foundation models can achieve
+impressive performance improvements over conventional
+methods and smaller artificial intelligence (AI) models
+while requiring fewer labeled data, thereby enhancing
+eﬀiciency and scalability in ISAC applications.
+III. Our Proposed Model
+In this section, we present our proposed foundational
+model for spectrum management. The overall framework
+of SpectrumFM is illustrated in Fig. 1, comprising three
+main stages, namely, data collection and processing, pre-
+training, and fine-tuning. In the data collection and
+processing stage, we aggregate a comprehensive dataset
+from diverse sources, including publicly available open-
+source datasets and signals collected in real-world practice
+scenarios. A crucial aspect of this stage is data prepro-
+cessing, where normalization techniques are exploited to
+ensure seamless integration of heterogeneous data into
+a unified training framework. Furthermore, during the
+pre-training stage, SpectrumFM undergoes self-supervised
+learning on the integrated dataset exploiting two de-
+signed tasks, namely masked reconstruction and next-
+slot signal prediction. The two tasks enable the model
+to learn fundamental representations of spectrum data,
+capturing both generalizable patterns and environment-
+specific variations. Finally, in the fine-tuning stage, the
+pre-trained model is adapted to specific downstream tasks,
+including AMC, WTC, SS, and AD. The step ensures
+that SpectrumFM effectively captures task-specific spec-
+trum features, enhancing its adaptability across diverse
+spectrum management applications. The variables used
+throughout this paper are summarized in TABLE I.
+5
+M
+Linear
+Linear
+FeedForw
+ard
+Add&Norm
+Linea
+r
+Linea
+r
+Linea
+r
+Linea
+r
+Linea
+r
+Linea
+r
+Linea
+r
+Linea
+r
+Linea
+r
+Scaled Self Attention 
+Scaled Self Attention 
+Scaled Self Attention 
+Scaled Self Attention 
+Concatenation
+Linear
+PointwiseConv
+GLU
+1Depthwise
+BatchNorm
+Swish
+PointwiseConv
+Mulit-head Self Attention
+Convolution Module
+Add&Norm
+Add&Norm
+Linear
+Linear
+FeedForw
+ard
+Linear
+Linear
+FeedForw
+ard
+Add&Norm
+Linea
+r
+Linea
+r
+Linea
+r
+Linea
+r
+Linea
+r
+Linea
+r
+Linea
+r
+Linea
+r
+Linea
+r
+Scaled Self Attention 
+Scaled Self Attention 
+Scaled Self Attention 
+Scaled Self Attention 
+Concatenation
+Linear
+PointwiseConv
+GLU
+1Depthwise
+BatchNorm
+Swish
+PointwiseConv
+Mulit-head Self Attention
+Convolution Module
+Add&Norm
+Add&Norm
+Linear
+Linear
+FeedForw
+ard
+Linear
+Linear
+FeedForw
+ard
+Add&Norm
+Linea
+r
+Linea
+r
+Linea
+r
+Linea
+r
+Linea
+r
+Linea
+r
+Linea
+r
+Linea
+r
+Linea
+r
+Scaled Self Attention 
+Scaled Self Attention 
+Scaled Self Attention 
+Scaled Self Attention 
+Concatenation
+Linear
+PointwiseConv
+GLU
+1Depthwise
+BatchNorm
+Swish
+PointwiseConv
+Mulit-head Self Attention
+Convolution Module
+Add&Norm
+Add&Norm
+Linear
+Linear
+FeedForw
+ard
+Linear
+Linear
+FeedForward 
+Module
+Add&Norm
+Linea
+Linea
+Pro.
+Linea
+Linea
+Pro.
+Linea
+Linea
+Pro.
+Scaled Self Attention 
+Scaled Self Attention 
+Scaled Self Attention 
+Scaled Self Attention 
+Concatenation
+Linear
+PointwiseConv
+GLU
+1DepthwiseConv
+BatchNorm
+Swish
+PointwiseConv
+Multi-head Self-Attention Module
+Convolution Module
+Add&Norm
+Add&Norm
+Linear
+Linear
+…
+SpectrumFM Encoder
+DecoderBlock
+Pretrain Dncoder
+DecoderBlock
+DecoderBlock
+…
+Loss
+Masked Reconstruction
+Next-slot Signal Prediction
+Loss
+Dataset Collection 
+and Processing
+Pretraining 
+SpectrumFM
+Fine-tuning 
+SpectrumFM
+RML2018.10A Dataset
+TechRec Dataset
+ (Merelbeke, iGent, and Rabot)
+Real-world  Dataset
+LTE
+WiFi
+DVB-T
+Wireless Technology Classification
+BPSK
+QPSK
+8-PSK
+16-QAM
+64-QAM
+GFSK
+CPFSK
+4-PAM
+…
+Automtic Modulation 
+Classification
+Spectrum Sensing
+Anomaly Detection
+Occupied
+Free
+Normal
+Abnormal
+FeedForward 
+Module
+Key components of SpectrumFM
+Fig. 1: The SpectrumFM framework comprises three key stages. First, in the data collection and processing stage,
+diverse spectrum data from multiple sources are gathered and preprocessed to ensure consistency and compatibility
+across datasets. Second, during the pre-training stage, the model learns fundamental spectrum representations through
+self-supervised learning tasks, namely, masked reconstruction and next-slot signal prediction. Finally, in the fine-tuning
+stage, the pre-trained model is adapted to specific downstream tasks, including AMC, WTC, SS, and AD.
+A. Data Collection And Processing Stage
+In the data collection and processing stage, a di-
+verse set of spectrum data is gathered from multiple
+sources, including publicly available open-source datasets
+and signals collected in real-world for this study, to
+facilitate comprehensive training of SpectrumFM. The
+open-source datasets utilized in this study include the
+RML2018.01A dataset [39] and the technology recognition
+(TechRec) dataset2. The RML2018.01A dataset comprises
+24 distinct modulation types, including OOK, 4-ASK, 8-
+ASK, BPSK, QPSK, 8-PSK, 16-PSK, 32-PSK, 16-APSK,
+32-APSK, 64-APSK, 128-APSK, 16-QAM, 32-QAM, 64-
+QAM, 128-QAM, 256-QAM, AM-SSB-WC, AM-SSB-SC,
+AM-DSB-WC, AM-DSB-SC, FM, GMSK, and OQPSK.
+This dataset spans a broad range of SNRs, ranging from
+-20 dB to 30 dB in increments of 2 dB, providing a
+comprehensive representation of diverse signal conditions.
+This dataset mainly reflects typical wireless communica-
+tion scenarios across different modulation schemes under
+various channel impairments, such as fading, frequency
+offsets, and noise. The TechRec dataset consists of over-
+the-air IQ samples collected from six distinct locations in
+Gent, Belgium, including UZ, Reep, Rabot, Merelbeke,
+2https://ieee-dataport.org/documents/
+iq-signals-captured-lte-wifi-and-dvb-t
+iGent, and Gentbrugge. Each location exhibits unique
+signal characteristics due to variations in signal strength,
+noise levels, and physical propagation conditions. The
+SNR in the dataset ranges from -6 dB to 12 dB, with
+increments of 2 dB. Specifically, IQ samples collected
+from Merelbeke, iGent, and Rabot are leveraged for pre-
+training, while data from UZ, Reep, and Gentbrugge are
+exploited for fine-tuning and testing. This dataset reflects
+real-world urban communication scenarios, capturing the
+effects of multipath propagation, background interference,
+and heterogeneous spectrum occupancy across different
+city environments. In addition to the publicly available
+datasets, signals are also collected by using a Ceyear
+1435B-V RF signal generator for transmission and a
+SAM 60 MK2 receiver for reception. This self-collected
+dataset covers both indoor scenarios, such as oﬀice-like
+multipath-rich environments, and outdoor scenarios, such
+as open-space propagation conditions, thereby comple-
+menting the public datasets with more diverse real-world
+signal characteristics. The total size of the pre-training
+dataset amounts to approximately 25 GB. A detailed
+breakdown of the datasets is shown in TABLE II. The
+received signal H is formulated as
+H : x (n) = f (s (n) , F) + ω (n) , n = 1, 2, 3, ...N,
+(1)
+6
+TABLE I: Key Notations Used in the Paper.
+Notation
+Description
+xap
+The AP signal.
+xnorm
+ap
+The normalized AP signal.
+F
+The channel fading coeﬀicient.
+abs(x)
+The amplitude function.
+angle(x)
+The phase function.
+ℜ(x)
+The real part of the signal.
+ℑ(x)
+The imaginary part of the signal.
+A
+The amplitude component.
+Θ
+The phase component.
+RN
+The residual connection and normalization operation.
+concat(·)
+The concatenation operation.
+p
+The position index.
+d
+The latent dimension.
+dfeed
+The feedforward dimension.
+i
+The index of the dimension.
+N
+The number of signal symbols.
+k
+The kernel size of the convolution layer.
+H
+The number of attention heads.
+h
+The attention head index.
+g
+The number of groups in the convolution layer.
+L
+The number of SpectrumFM encoder layers.
+ℓ
+The SpectrumFM encoder layer index.
+r
+The mask ratio of signal symbols.
+m
+The binary mask vector.
+M
+The mask of attention scores.
+Θ
+All the parameters of the SpectrumFM.
+Ep
+The number of epochs for pre-training.
+Ef
+The number of epochs for fine-tuning.
+η
+The learning rate.
+TABLE II: Overview of The Pretraining Datasets Used in
+This Study.
+Dataset
+# Samples
+Sample Shape
+Approx. Contribution
+RML2018.01A
+2,555,904
+1024 × 2
+52.1%
+TechRec
+9,747,800
+128 × 2
+24.9%
+Self-collected
+∼9,000,000
+128 × 2
+23.0%
+where x (n) and s (n) are the received signal and the
+transmitted signal, respectively, F represents the channel
+fading coeﬀicient, N is the number of signal symbols, and
+ω (n) is the additive white Gaussian noise with zero mean
+and variance σ2. The IQ signal samples can be represented
+as a vector by transforming the received signal x (n) into
+the vector x, given as
+x = I + Q,
+(2a)
+= ℜ(x) + jℑ(x) ,
+(2b)
+where I and Q represent the in-phase and quadrature
+components of the received signal, respectively, and j =
+√−1, and ℜ(x) and ℑ(x) correspond to the real and
+imaginary parts of the signal, respectively. The raw data
+x can be explicitly represented in matrix form, given as
+x =
+ ℜ[x (1) , x (2) , · · · , x (N)]
+ℑ[x (1) , x (2) , · · · , x (N)]
+
+.
+(3)
+To facilitate normalization, we first convert the IQ signals
+into amplitude-phase (AP) signals, since the value ranges
+of amplitude and phase components are better suited
+for standardization, specifically [−π, π] for the phase
+component and [0, +∞] for the amplitude component.
+Mathematically, this transformation for the IQ signals to
+AP signals can be expressed as
+xap = A exp(jΘ),
+(4)
+where A is the amplitude component and Θ is the phase
+component, respectively. It can be further expressed as
+xap =
+ abs [x (1) , x (2) , · · · , x (N)]
+angle [x (1) , x (2) , · · · , x (N)]
+
+,
+(5)
+where abs [·] and angle [·] are the amplitude and phase
+functions, respectively, given as
+abs(x) =
+p
+ℜ2(x) + ℑ2(x),
+(6a)
+angle(x) = arctan
+ℑ(x)
+ℜ(x)
+
+.
+(6b)
+To ensure that the distribution of each sample in dif-
+ferent dataset is consistent while preserving the intrinsic
+characteristics of the data, we propose a sample-level
+normalization method, where each sample is normalized
+independently based on its own maximum and minimum
+values by using min-max normalization, given as
+xnorm
+ap
+=
+xap −min(xap)
+max(xap) −min(xap),
+(7)
+where min(·) and max(·) are the functions to obtain
+the minimum and maximum values of the sample xap,
+respectively.
+B. SpectrumFM Encoder
+After obtaining the processed signal xnorm
+ap
+, a 1D convo-
+lution projection layer with a kernel size k = 1 is leveraged
+to project the input signal into a higher-dimensional space,
+given as
+xproj[p, :] =
+1
+X
+c=0
+xnorm
+ap
+[p, c] · Wproj[0, c, :],
+(8)
+where xproj ∈RN×d is the projected signal, Wproj ∈
+Rd×2×1 is the convolution kernel, d is the latent dimension,
+and p represents the position index, ranging from 0 to
+N−1. To capture the sequential order in a signal sequence,
+positional encoding is added to xproj. The positional
+encoding is given as
+PEp,2i = sin
+
+p
+100002i/d
+
+,
+(9a)
+PEp,2i+1 = cos
+
+p
+100002i/d
+
+,
+(9b)
+where i is the index of the dimension, ranging from 0 to
+d −1. The signal with the positional encoding is given as
+xposition[p, :] = xproj[p, :] + PE[p, :].
+(10)
+Subsequently, the position-encoded signal xposition is
+fed into the proposed SpectrumFM encoder to facilitate
+feature extraction. The SpectrumFM encoder follows a
+structured pipeline comprising an initial feedforward mod-
+ule, followed by a multi-head self-attention module, then
+a convolution module, and finally another feedforward
+7
+module. Each module is connected with residual connec-
+tions followed by normalization to stabilize the training
+process. This design is particularly well-suited for wireless
+communication applications, where spectrum management
+requires eﬀicient feature extraction, robust signal rep-
+resentation, and adaptive processing. The feedforward
+module captures low-level signal characteristics, while
+multi-head self-attention models spectral dependencies,
+enhancing feature discernment in dynamic environments.
+Convolutions refine local spectral details, improving re-
+silience to distortions, and the final feedforward module
+consolidates learned representations. Residual connections
+and normalization stabilize training, ensuring effective
+feature propagation.
+Initially, the input sequence undergoes preliminary
+processing through an initial feedforward module, which
+enriches the feature representation by applying non-linear
+transformations. Specifically, the feedforward module con-
+sists of two linear transformations separated by a non-
+linear activation function. The output of the module can
+be expressed as
+xffn = RN (GELU(xpositionW1 + b1)W2 + b2) ,
+(11)
+where W1
+∈
+Rd×dfeed
+and W2
+∈
+Rdfeed×d are the
+weight matrices, b1 ∈Rdfeed and b2 ∈Rd are the bias
+vectors, dfeed is the feedforward dimension, GELU is the
+Gaussian error linear unit (GELU) activation function and
+RN represents the residual connection and normalization
+operation.
+The enriched representation xffn is then subjected
+to global dependency analysis via the multi-head self-
+attention mechanism, thereby enabling the model to cap-
+ture long-range dependencies across the entire sequence.
+For each attention head h, the input xffn ∈RN×d is
+transformed into query (Q), key (K), and value (V)
+matrices by using learnable weight matrices, given as
+Qh = xffnWh
+Q,
+(12a)
+Kh = xffnWh
+K,
+(12b)
+Vh = xffnWh
+V ,
+(12c)
+where Wh
+Q ∈Rd×dh, Wh
+K ∈Rd×dh, and Wh
+V ∈Rd×dh are
+the learnable weight matrices, dh = d
+H denoting dimension
+of each head, and H is the number of heads. The output
+of each head h is computed by using a scaled dot-product
+attention, given as
+xh = softmax
+QhKT
+h
+√dh
+
+Vh,
+(13)
+where softmax(·) applies the softmax function row-wise.
+The outputs from all heads are concatenated and linearly
+transformed to produce the final output of the multi-head
+self-attention module, given as
+xattention = RN (concat(x1, · · · , xH)Wo) ,
+(14)
+where concat(·) is the concatenation operator, and Wo ∈
+Rd×d is the weight matrix.
+Following the multi-head self attention module, the con-
+volution module identifies and extracts local dependencies
+within localized regions of the sequence, enhancing the
+model ability to detect fine-grained patterns. Specifically,
+a 1D convolution layer with a kernel size k = 1 and a
+gated linear unit (GLU) activation function is applied to
+the output of the multi-head self-attention module, given
+as
+xinconv[p, :] = GLU
+ 1
+X
+c=0
+xattention[p, c] · Wk1[0, c, :]
+!
+,
+(15)
+where Wk1 ∈R2d×d×1 is the convolution kernel. And
+then, a 1D convolution layer with a kernel size k = 3,
+groups g = d and a swish activation function is leveraged
+to extract local dependencies, given as
+xlocalconv[p, :] = swish
+ d−1
+X
+c=0
+
+xinconv [p −1 : p + 1,
+|
+{z
+}
+kernel size=3
+c] ∗Wk2[c, :]
+
++ bk2
+
+,
+(16)
+where swish(·) represents the swish activation function,
+Wk2 ∈Rd×1×3 is the convolution kernel, and bk2 ∈Rd
+is the bias. Another 1D convolution layer with kernel size
+k = 1 is leveraged to further refine the extracted local
+features, given as
+xoutconv[p, :] = RN
+ 1
+X
+c=0
+xlocalconv [p, c] · Wk3[0, c, :]
+!
+,
+(17)
+where Wk3 ∈Rd×d×1 is the convolution kernel.
+Finally, a subsequent feedforward module integrates the
+insights obtained from both the attention and convolution
+modules, given as
+xlatent = (GELU(xoutconvW3 + b3))W4 + b4,
+(18)
+where W3 ∈Rd×dfeed and W4 ∈Rdfeed×d are the weight
+matrices, b3 ∈Rdfeed and b4 ∈Rd are the bias vectors.
+To enhance the model representational capacity and
+capture more complex patterns within the input data, a
+multi-layer encoder architecture is exploited. Specifically,
+each layer of the encoder progressively transforms the
+latent representation from the previous layer until the
+L-th layer. The process can be expressed as
+x(ℓ)
+latent = encoder(x(ℓ−1)
+latent),
+(19)
+where encoder(·) is the SpectrumFM encoder, x(ℓ)
+latent is
+the latent representation of the ℓ-th layer, and x(ℓ−1)
+latent is
+the latent representation of the previous layer. And the
+final output after L layers of the encoder is denoted as
+x(L)
+latent.
+C. Pre-training Stage
+To pre-train SpectrumFM without labeled data, two
+self-supervised pre-training tasks, namely mask recon-
+struction and next-slot signal prediction are proposed.
+8
+These tasks are well-suited for spectrum data due to
+the dynamic and noisy nature of spectrum environments.
+Mask reconstruction helps the model learn robust signal
+representations by reconstructing missing or degraded
+signal segments, simulating real-world scenarios where sig-
+nals are often impaired by noise and interference. Next-slot
+signal prediction is crucial for understanding the dynamic
+nature of spectrum usage. As the spectrum environment
+continuously evolves, predicting future spectrum behavior
+enables the model to adapt to these changes, ensuring
+effective management of the constantly shifting spectrum.
+As a result, these tasks enable SpectrumFM to learn the
+key characteristics of spectrum data, preparing it for real-
+world spectrum management challenges.
+1) The Masked Reconstruction Task: In the masked
+reconstruction task, the objective is to mask a portion
+of the original AP sequence xnorm
+ap
+and train the model to
+reconstruct the masked parts. The task facilitates learning
+general representations in an unsupervised manner by
+training the model to infer and reconstruct masked por-
+tions of the input data, thereby enhancing its robustness
+and generalization capabilities. Specifically, given the
+sequence xnorm
+ap
+, we first randomly mask a subset of the
+sequence according to a predefined masking ratio r. The
+binary mask vector m is defined as m ∼Bernoulli(1 −r),
+which consists of elements {m1, m2, · · · , mN}. Here mp =
+0 if the p-th symbol is masked out, and mp = 1 otherwise.
+The masked sequence is then given as
+xmask
+ap
+= xnorm
+ap
+⊙m,
+(20)
+where ⊙represents the element-wise multiplication. The
+masked AP sequence is then fed into the SpectrumFM
+encoders to obtain x(L)
+latent. It is important to note that an
+attention mask M is also applied during the computation
+of attention weights in the SpectrumFM encoders. Specif-
+ically, in the pre-training phase, equation (13) is updated
+as
+xh = softmax
+QhKT
+h
+√dh
++ M
+
+Vh,
+(21)
+where M assigns extremely small values (e.g., −∞) to
+the positions that are masked out, thereby ensuring that
+the positions do not contribute to the computed attention
+weights. After obtaining x(L)
+latent, a lightweight decoder is
+applied to the latent representation to reconstruct the
+original input sequence, given as
+xrecon = x(L)
+latentWrecon + brecon,
+(22)
+where Wrecon ∈Rd×2 and brecon ∈R2 are the learnable
+weights and biases of the decoder, respectively. Finally,
+the mean squared error (MSE) loss is calculated by
+comparing the reconstructed sequence with the original
+input sequence in the masked region, given as
+Lrecon =
+1
+PN
+p=1(1 −mp)
+N
+X
+i=p
+(1 −mp)
+ xnorm
+ap
+−xrecon
+2 .
+(23)
+2) Next-slot Signal Prediction Task: The next-slot sig-
+nal prediction task aims to predict the signal symbol at
+the N-th time slot based on the historical signal observa-
+tions from the previous N −1 slots. The task facilitates
+SpectrumFM to understand the temporal characteristics
+of signals. Specifically, xnorm
+ap
+[: N −1] is input to the
+SpectrumFM encoders to obtain the latent representation
+x(L)
+latent, and then an long short-term memory (LSTM) layer
+is leveraged to aggregate the latent representation, and
+finally a linear layer is exploited to predict the N-th signal
+symbol. Mathematically, the predicted signal symbol is
+given as
+ˆxnorm
+ap
+[N] = σ
+
+LSTM
+
+x(L)
+latent
+
+Wpre + bpre
+
+,
+(24)
+where σ(·) is the sigmoid function, Wpre ∈Rd×2 and
+bpre ∈R2 are the weights and biases of the linear layer,
+respectively. The MSE loss is adopted to train the task,
+given as
+Lpre = 1
+2
+ ˆxnorm
+ap
+[N] −xnorm
+ap
+[N]
+2 .
+(25)
+The Pre-training algorithm is summarized in Algorithm
+1.
+D. Fine-tuning Stage
+After completing the pre-training stage, which enables
+the model to acquire generalizable representations from
+large volumes of unlabeled data, the next critical step is
+the fine-tuning stage. During this phase, the pre-trained
+model is further refined for a specific downstream task
+exploiting a small but task-relevant labeled dataset. The
+primary goal of fine-tuning is to adjust a limited set
+of model parameters, enabling the model to effectively
+capture task-specific characteristics while preserving the
+general knowledge acquired during pre-training. The fine-
+tune framework for AMC, WTC, and SS tasks is shown
+in Fig. 2a. In particular, the input sequence is first
+processed through the SpectrumFM encoders to generate
+a sequence of hidden states as described in equations (8)
+to (19). These hidden states are subsequently aggregated
+leveraging an LSTM network. Finally, the aggregated
+hidden state is passed through a linear layer, followed
+by a softmax function, to perform the classification task,
+given as
+ˆy = softmax
+
+LSTM
+
+x(L)
+latent
+
+Wf + bf
+
+,
+(26)
+where Wf ∈Rd×C and bf ∈RC are the weights and
+biases of the linear layer, respectively, and C is the number
+of classes. The cross-entropy loss is leveraged to fine-tune
+for the AMC, WTC, and SS tasks, given as
+Lclassification = −
+C
+X
+a=1
+ya log(ˆya).
+(27)
+The fine-tune framework for AD task is shown in
+Fig. 2b. The input sequence is first processed through
+the SpectrumFM encoders to obtain a series of hidden
+9
+Algorithm 1: Pre-training Algorithm For Spec-
+trumFM
+Input: Pre-training dataset
+Output: All the parameters Θ of SpectrumFM
+1 Initialize all the parameters Θ of SpectrumFM;
+2 Set best_val_loss ←∞;
+3 Set no_improvement_count ←0;
+4 for epoch = 1 to Ep do
+5
+for batch data in the pretraining dataset do
+6
+Preprocess the batch data according to
+equations (1) to (7);
+7
+Feed processed data into SpectrumFM
+encoders and obtain the latent
+representation x(L)
+latent according to
+equations (8) to (19);
+8
+Obtain reconstructed signal symbols
+according to equations (20) to (22);
+9
+Compute reconstruction loss Lrecon
+according to equation (23);
+10
+Predict next-slot signal symbols according
+to equation (24);
+11
+Compute predicted loss Lpre according to
+equation (25);
+12
+Obtain pre-training loss according to
+L ←αLrecon + βLpre;
+13
+Update Θ using the pre-training loss
+according to Θ ←Θ −η∇ΘL;
+14
+end
+15
+Evaluate the model on the validation set and
+compute val_loss;
+16
+if val_loss < best_val_loss then
+17
+best_val_loss ←val_loss;
+18
+no_improvement_count ←0;
+19
+end
+20
+else
+21
+no_improvement_count ←no_improvement
+_count + 1;
+22
+end
+23
+if no_improvement_count ≥2 then
+24
+break ;
+25
+end
+26 end
+27 Return the pretrained parameters Θ;
+states (as described in equations (8) to (19)). Contrary to
+the methodology employed in classification tasks, wherein
+hidden states undergo aggregation via an LSTM network,
+the proposed framework directly feeds the hidden states
+into a decoder layer to generate a reconstructed signal,
+given as
+ˆx = tanh
+
+x(L)
+latentWa + ba
+
+,
+(28)
+where Wa ∈Rd×2 and ba ∈R2 are the weights and
+biases of the decoder layer, respectively, and tanh(·) is
+the tanh activation function. The reconstructed signal is
+then compared with the original input signal to compute
+Algorithm 2: Fine-tuning Algorithm For Spec-
+trumFM
+Input: Fine-tuning dataset, pre-trained parameters
+Θ
+Output: All the fine-tuned parameters Θ of
+SpectrumFM
+1 for epoch = 1 to Ef do
+2
+for batch data in the fine-tuning dataset do
+3
+Preprocess the batch data according to
+equations (1) to (7);
+4
+Feed processed data into the SpectrumFM
+encoder to obtain the latent representation
+x(L)
+latent according to equations (8) to (19);
+5
+Compute the classification loss for AMC,
+WTC, and SS tasks according to equations
+(26) to (27) or the AD task loss according
+to equation (28);
+6
+Update Θ by using the classification loss or
+the AD task loss according to
+Θ ←Θ −η∇ΘL;
+7
+end
+8 end
+9 Return finetuned parameters Θ;
+Input
+N*2
+SpectrumFM Encoders
+SpectrumFM Encoder
+SpectrumFM Encoder
+…
+SpectrumFM Encoder
+…
+LSTM
+Linear
+Softmax
+N*d
+1*d
+(a) The fine-tune framework for AMC, WTC, and
+SS tasks.
+Input
+N*2
+…
+Linear
+Linear
+Linear
+N*d
+SpectrumFM 
+Encoders
+N*2
+Output
+Mean square error
+Parameters are frozen during fine-tuning  
+Parameters are updated during fine-tuning
+(b) The fine-tune framework for AD task.
+Fig. 2: The fine-tune framework for AMC, WTC, SS, and
+AD tasks.
+the MSE reconstruction loss. The MSE loss serves as
+the criterion for distinguishing normal from anomalous
+signals. A low reconstruction loss indicates that the signal
+is normal, whereas a high loss suggests the presence of an
+anomaly, given as
+LAD = 1
+N
+N
+X
+p=1
+(ˆxp −xp)2 .
+(29)
+The fine-tuning algorithm is summarized in Algorithm 2.
+10
+E. Theoretical Computational Complexity
+To further clarify the computational footprint of Spec-
+trumFM, we provide a theoretical analysis of the per-layer
+complexity. Each encoder layer consists of a multi-head
+self-attention (MHSA) module, two feed-forward (FFN)
+modules, and a convolution (Conv) module. Let N denote
+the input sequence length, d be the latent dimension, h be
+the number of attention heads, dh = d/h be the dimension
+per head, dfeed be the feed-forward hidden dimension, k
+be the kernel size of the depthwise convolution, and L
+be the number of layers. The complexity of the MHSA
+module can be expressed as OMHSA = 4Nd2 + 2hN 2dh,
+where the first term accounts for the linear projections
+of queries, keys, and values, and the second term corre-
+sponds to the scaled dot-product attention. Each feed-
+forward module contributes OFFN = 2Nddfeed, and the
+convolution module contributes OConv = Ndk. Therefore,
+the total complexity per layer is approximately Olayer =
+OMHSA + 2 OFF + OConv, and for a L-layer encoder, the
+overall forward pass complexity is Oencoder = LOlayer.
+Substituting our model parameters (N = 128, d = 256,
+h = 4, dfeed = 512, k = 3, L = 16) yields a theoretical
+per-sample FLOPs estimate of approximately 2.03 × 109
+FLOPs. This analysis provides a clear understanding of
+the computational demands associated with SpectrumFM,
+facilitating informed decisions regarding its deployment in
+various applications.
+IV. Experiments
+In this section, we first present the experimental set-
+tings, followed by the experiments on four downstream
+spectrum management tasks, including AMC, WTC, SS,
+and AD.
+A. Experimental Settings
+The SpectrumFM is pre-trained on a setup comprising
+four NVIDIA RTX 4090 GPUs, utilizing PyTorch and
+DeepSpeed for eﬀicient training. The hyperparameters
+for SpectrumFM are as follows. The number of signal
+symbols is set to 128, the number of attention heads
+H is set to 4, the latent dimension d is set to 256, the
+feedforward dimension dfeed is set to 512, and the number
+of SpectrumFM encoder layers L is set to 16 [40]. The
+mask ratio r is set to 15%, the pre-training phase consists
+of 10 epochs with a batch size of 256 and a learning
+rate of 0.001 [36]. The AdamW optimizer is employed
+for optimization, and early stopping is utilized to prevent
+overfitting. During the fine-tuning stage, the same learning
+rate of 0.001 and the AdamW optimizer are used to further
+adapt the model to specific downstream tasks.
+As shown in Fig. 3, the pre-training loss decreases
+smoothly without oscillations across different objectives,
+indicating stable convergence of the training process.
+B. Automatic Modulation Classification Task
+1) Dataset:
+We leverage the RML2016 datasets
+3
+for
+AMC
+task.
+The
+RML2016
+datasets,
+including
+RML2016.10A, RML2016.10B, and RML2016.04C, are
+benchmark datasets widely used for AMC task in wireless
+communications. RML2016.10A contains 11 modulation
+types under various SNR conditions, providing a founda-
+tional testbed for evaluating AMC task. RML2016.10B
+emphasizes real-world RF signals captured in complex
+propagation environments, offering a more challenging
+scenario. RML2016.04C further extends the challenges by
+incorporating effects such as multipath fading and Doppler
+shifts, rigorously testing the robustness of classifiers in
+dynamic channel conditions.
+2) Baselines: We leverage 10 state-of-the-art baseline
+models for the AMC task. The outlines of the models are
+as follows.
+• AMC_Net [17] employs a frequency-domain denoising
+module and a multi-scale feature extraction mechanism,
+leveraging attention operations to enhance modulation
+classification accuracy.
+• Transformer [35] leverages the self-attention mechanism
+to extract features from the input signal.
+• MSNet [41] leverages a multi-scale feature extrac-
+tion and fusion mechanism to classify the modulation
+schemes.
+• CGDNN [42] composes of a shallow convolutional net-
+work, a gated recurrent unit, and a deep neural network,
+for robust automatic modulation recognition.
+• DAE [43] is an LSTM denoising auto-encoder framework
+that eﬀiciently extracts robust features from noisy radio
+signals for the classification of communication technolo-
+gies and modulation schemes.
+• MCNet [44] employs specialized convolutional blocks
+with asymmetric kernels to concurrently capture spatio-
+temporal signal correlations, enhancing classification
+accuracy and eﬀiciency.
+• ResNet [45] is a residual network, a widely used deep
+learning model.
+• VGG [39] is a 1D CNN network that adapt the VGG
+architecture principles.
+• CNN2 [39] is a CNN classifier model for classifying
+modulation schemes according to their families.
+• GRU2 [46] is a two layers of the GRU classifier model.
+3) Overall Performance: To evaluate the overall per-
+formance of our proposed method for the AMC task, we
+conduct extensive experiments on three datasets, namely
+RML2016.10A, RML2016.10B, and RML2016.04C. The
+results are summarized in TABLE III, which presents the
+precision, recall, and F1-score for various models. The
+results underscore the superior capability of our model
+in the AMC task, achieving notable improvements in
+precision, recall, and F1-score over other baseline models.
+Specifically, our model attains F1-scores of 66.20% on
+3https://www.deepsig.ai/datasets/
+11
+TABLE III: The Overall Performance in the AMC Task.
+Dataset
+RML2016.10A
+RML2016.10B
+RML2016.04C
+Model
+Precision (%)
+Recall (%)
+F1 (%)
+Precision (%)
+Recall (%)
+F1 (%)
+Precision (%)
+Recall (%)
+F1 (%)
+ResNet
+54.27
+50.04
+48.94
+57.16
+54.88
+52.80
+64.43
+55.97
+57.04
+MCNet
+60.19
+53.52
+54.79
+60.78
+59.22
+59.61
+65.97
+59.57
+61.11
+VGG
+67.99
+54.72
+54.06
+71.04
+58.65
+59.31
+74.80
+61.88
+63.85
+CNN2
+68.67
+53.25
+55.32
+64.61
+57.14
+57.27
+74.69
+59.45
+62.33
+GRU2
+68.19
+58.80
+60.22
+66.15
+64.11
+63.97
+71.46
+63.13
+64.81
+DAE
+69.96
+58.97
+60.72
+64.88
+61.46
+61.17
+53.61
+55.91
+53.85
+CGDNN
+73.03
+56.57
+59.36
+64.23
+58.26
+59.53
+75.21
+60.34
+63.37
+Transformer
+68.26
+59.27
+61.08
+68.75
+63.10
+63.28
+71.31
+65.41
+66.70
+MSNet
+69.41
+58.33
+60.60
+65.29
+63.49
+63.50
+71.02
+63.66
+65.36
+AMC_Net
+71.41
+59.10
+61.11
+69.25
+63.38
+64.05
+68.03
+63.01
+64.35
+Our
+75.29
+63.72
+66.20
+70.07
+65.35
+65.93
+73.93
+73.37
+73.46
+0
+10000
+20000
+30000
+40000
+Steps
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+1.2
+1.4
+Loss
+Both
+Only masked reconstruction
+Only next-step prediction
+Fig. 3: Loss curves during
+the pre-training stage.
+−20
+−16
+−12
+−8
+−4
+0
+4
+8
+12
+16
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Accuracy
+SNR (dB)
+ Our
+ Transformer
+ AMC_Net
+ DAE
+ GRU2
+ MSNet
+ CGDNN
+ VGG
+ MCNet
+ CNN2
+ ResNet
+5
+10
+15
+0.8
+1.0
+Fig.
+4:
+The
+accuracy
+of
+models
+on
+different
+SNR
+conditions
+on
+RML2016.10A dataset.
+−20
+−16
+−12
+−8
+−4
+0
+4
+8
+12
+16
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Accuracy
+SNR (dB)
+ Our
+ MSNet
+ AMC_Net
+ MCNet
+ Transformer
+ DAE
+ CGDNN
+ ResNet
+ VGG
+ CNN2
+ GRU2
+Fig.
+5:
+The
+accuracy
+of
+models
+on
+different
+SNR
+conditions
+on
+RML2016.10B dataset.
+−20
+−16
+−12
+−8
+−4
+0
+4
+8
+12
+16
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Accuracy
+SNR (dB)
+ Our
+ AMC_Net
+ Transformer
+ MSNet
+ DAE
+ CGDNN
+ MCNet
+ ResNet
+ VGG
+ CNN2
+ GRU2
+0
+5
+10
+15
+20
+0.8
+Fig.
+6:
+The
+accuracy
+of
+models
+on
+different
+SNR
+conditions
+on
+RML2016.04C dataset.
+RML2016.10A, 65.93% on RML2016.10B, and 73.46% on
+RML2016.04C, outperforming baselines like Transformer
+and AMC_Net by 2.65-9.61 percentage points. Notably, it
+demonstrates robust precision (75.29% on RML2016.10A)
+and recall (73.37% on RML2016.04C), addressing chal-
+lenges in class imbalance.
+4) The Performance on Various SNR Conditions: To
+evaluate the robustness of our proposed method, its per-
+formance is assessed and contrasted with several baseline
+models across different SNR values, as illustrated in Fig.
+4-6. The findings highlight the exceptional capability
+of our method across varying SNR conditions on three
+distinct datasets, namely, RML2016.10A, RML2016.10B,
+and RML2016.04C. Particularly, on the RML2016.10A
+dataset (Fig. 4), our method showcases a marked im-
+provement in accuracy at low SNR levels (-10 to 0
+dB), significantly outperforming all other models. The
+trend continues on the RML2016.10B dataset (Fig. 5),
+where our method maintains its superior performance
+across the entire SNR range, demonstrating enhanced
+reliability. Furthermore, the robustness of our method is
+particularly evident on the RML2016.04C dataset (Fig.
+6), our method not only consistently outperforms other
+models but also shows a particularly significant advantage
+under challenging low SNR conditions (-10 to -5 dB).
+These results collectively emphasize the eﬀicacy of our
+proposed method in achieving high accuracy across diverse
+SNR conditions, underscoring its superior performance
+and resilience in various communication environments.
+The confusion matrices for our proposed model and the
+two most competitive baseline models, namely AMC_Net
+and Transformer under SNR conditions of -4 dB, 0 dB,
+and 4 dB are shown in Fig. 7, revealing interesting insights
+into their classification performance. At low SNR (-4 dB),
+all three models exhibit relatively poor classification per-
+formance, with significant confusion between modulation
+types such as AM-DSB, 16-QAM, and QPSK. However,
+it is clear that the proposed method achieves better
+diagonal clarity and fewer off-diagonal errors compared
+to AMC_Net and Transformer, indicating stronger noise
+robustness. As the SNR increases to 0 dB, the classification
+performance of all methods improves significantly. No-
+tably, the confusion matrices of the Transformer and the
+proposed method show a clear diagonal trend with reduced
+misclassification. The proposed method consistently out-
+performs the other two, with higher correct classification
+counts and fewer false predictions, especially for easily
+confused categories such as QPSK and 64-QAM. At high
+SNR (4 dB), the performance gap becomes more evident.
+The proposed method achieves near-perfect classification
+accuracy, with almost all samples correctly classified and
+the confusion matrix showing a clean diagonal structure.
+In comparison, AMC_Net and Transformer still exhibit
+sporadic misclassification, particularly in closely related
+classes such as 64-QAM and 8-PSK.
+The t-SNE visualizations of the RML2016.10A dataset
+under 0 dB SNR condition for our proposed model,
+AMC_Net and Transformer is presented in Fig. 8. The
+t-SNE visualizations reveal notable clustering overlaps for
+the AMC_Net model, specifically between 8-PSK and
+12
+25
+0
+0
+0
+0
+2
+31
+1
+0
+6
+6
+2 190 0
+1
+0
+2
+1
+0
+0
+0
+50
+1
+1 193 8
+0
+4
+0
+0 157 1
+1
+6
+0
+1 140 0
+1
+5
+1
+17 16
+2
+9
+1
+0
+0 159 0
+10 65
+0
+0
+2
+2
+0
+0
+0
+2 186 5
+3
+0
+0
+1
+53
+0
+0
+1
+0
+2
+45 12
+0
+10
+3
+44
+0
+0
+0
+39
+0
+30 117 0
+5
+1
+0
+0
+6
+20
+0
+0
+2
+0
+25
+4
+0
+56
+0
+0
+29
+0
+2
+68
+1
+1 158 14
+2
+8
+0
+1
+0
+1
+3
+0
+0
+0 120
+QPSK
+PAM4
+AM-DSB
+GFSK
+QAM64
+AM-SSB
+QAM16
+8PSK
+WBFM
+BPSK
+CPFSK
+QPSK
+PAM4
+AM-DSB
+GFSK
+QAM64
+AM-SSB
+QAM16
+8PSK
+WBFM
+BPSK
+CPFSK
+Predicted  Labels
+True Labels
+0.000
+38.60
+77.20
+115.8
+154.4
+193.0
+(a) AMC_Net confusion matrix at -4
+dB SNR.
+73
+0
+0
+1
+0
+4
+59
+1
+0
+16
+5
+2 191 0
+0
+0
+1
+1
+0
+0
+0
+30
+0
+0 134 6
+0
+4
+0
+0 102 0
+0
+1
+0
+0 172 0
+3
+2
+0
+18 12
+0
+10
+0
+0
+1 143 0
+15 74
+0
+7
+1
+1
+1
+0
+0
+2 173 4
+2
+0
+0
+1
+49
+0
+0
+0
+1
+1
+42 16
+0
+8
+2
+42
+0
+0
+1
+54
+2
+55 107 0
+15
+7
+0
+0
+66 12
+0
+1
+1
+0
+80
+1
+0
+19
+0
+0
+7
+0
+4
+20
+0
+0 140 3
+3
+8
+0
+0
+0
+7
+1
+0
+0
+1 151
+QPSK
+PAM4
+AM-DSB
+GFSK
+QAM64
+AM-SSB
+QAM16
+8PSK
+WBFM
+BPSK
+CPFSK
+QPSK
+PAM4
+AM-DSB
+GFSK
+QAM64
+AM-SSB
+QAM16
+8PSK
+WBFM
+BPSK
+CPFSK
+Predicted  Labels
+True Labels
+0.000
+38.20
+76.40
+114.6
+152.8
+191.0
+(b) Transformer confusion matrix at -4
+dB SNR.
+51
+0
+0
+0
+0
+1
+28
+0
+0
+5
+2
+1 199 0
+0
+0
+0
+2
+0
+0
+0
+27
+0
+0 183 0
+0
+0
+0
+0 134 0
+0
+0
+0
+1 178 0
+1
+1
+0
+12
+7
+0
+12
+0
+0
+0 180 0
+15 67
+0
+5
+1
+1
+1
+0
+0
+2 185 5
+3
+0
+0
+1
+108 0
+0
+1
+0
+2 125 2
+0
+10
+4
+13
+0
+0
+0
+18
+0
+11 128 0
+3
+0
+0
+0
+16 17
+0
+1
+0
+0
+54
+0
+0
+9
+0
+0
+2
+0
+1
+9
+0
+0 168 0
+5
+0
+0
+2
+0
+9
+4
+0
+0
+2 165
+QPSK
+PAM4
+AM-DSB
+GFSK
+QAM64
+AM-SSB
+QAM16
+8PSK
+WBFM
+BPSK
+CPFSK
+QPSK
+PAM4
+AM-DSB
+GFSK
+QAM64
+AM-SSB
+QAM16
+8PSK
+WBFM
+BPSK
+CPFSK
+Predicted  Labels
+True Labels
+0.000
+39.80
+79.60
+119.4
+159.2
+199.0
+(c) SpectrumFM confusion matrix at
+-4 dB SNR.
+100 0
+0
+0
+0
+1
+15
+0
+0
+0
+1
+0 199 0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0 199 0
+1
+4
+0
+0 132 0
+0
+0
+0
+0 184 0
+5
+0
+0
+18
+4
+1
+2
+0
+0
+0 169 0
+3
+38
+0
+0
+0
+3
+1
+0
+0
+0 184 1
+2
+0
+0
+3
+81
+0
+0
+0
+0
+2 168 0
+0
+0
+0
+4
+0
+0
+0
+30
+2
+7 160 0
+0
+0
+0
+0
+1
+15
+0
+0
+0
+0
+50
+0
+0
+9
+0
+0
+1
+0
+1
+6
+0
+0 196 0
+1
+0
+0
+0
+0
+1
+0
+0
+0
+0 195
+QPSK
+PAM4
+AM-DSB
+GFSK
+QAM64
+AM-SSB
+QAM16
+8PSK
+WBFM
+BPSK
+CPFSK
+QPSK
+PAM4
+AM-DSB
+GFSK
+QAM64
+AM-SSB
+QAM16
+8PSK
+WBFM
+BPSK
+CPFSK
+Predicted  Labels
+True Labels
+0.000
+39.80
+79.60
+119.4
+159.2
+199.0
+(d) AMC_Net confusion matrix at 0
+dB SNR.
+150 0
+0
+0
+1
+3
+45
+0
+0
+0
+1
+0 199 0
+0
+0
+1
+0
+0
+0
+0
+2
+1
+0 163 0
+0
+7
+0
+0 106 0
+0
+0
+0
+0 192 0
+8
+0
+0
+13
+2
+0
+3
+0
+0
+0 167 0
+3
+62
+0
+0
+0
+2
+1
+0
+0
+1 168 1
+2
+0
+0
+1
+35
+0
+0
+0
+1
+3 142 2
+0
+0
+0
+9
+0
+0
+0
+30
+2
+8 133 0
+0
+0
+0
+0
+37
+8
+0
+2
+0
+0
+81
+0
+0
+0
+0
+0
+0
+0
+4
+1
+1
+0 198 0
+0
+0
+0
+0
+0
+2
+0
+0
+0
+0 196
+QPSK
+PAM4
+AM-DSB
+GFSK
+QAM64
+AM-SSB
+QAM16
+8PSK
+WBFM
+BPSK
+CPFSK
+QPSK
+PAM4
+AM-DSB
+GFSK
+QAM64
+AM-SSB
+QAM16
+8PSK
+WBFM
+BPSK
+CPFSK
+Predicted  Labels
+True Labels
+0.000
+39.80
+79.60
+119.4
+159.2
+199.0
+(e) Transformer confusion matrix at 0
+dB SNR.
+187 0
+0
+0
+0
+0
+9
+0
+0
+0
+0
+0 199 0
+0
+1
+3
+0
+0
+0
+0
+2
+0
+0 187 0
+0
+1
+0
+0 120 0
+0
+0
+0
+0 196 0
+3
+0
+0
+6
+2
+0
+0
+0
+0
+0 195 0
+1
+4
+0
+0
+0
+3
+1
+0
+0
+1 186 1
+2
+0
+0
+1
+10
+0
+0
+0
+0
+1 188 0
+0
+0
+0
+0
+0
+0
+0
+3
+0
+1 194 0
+0
+0
+0
+0
+13
+4
+0
+0
+0
+0
+74
+0
+0
+0
+0
+0
+0
+0
+1
+0
+0
+0 198 0
+0
+0
+0
+0
+0
+5
+0
+0
+0
+0 197
+QPSK
+PAM4
+AM-DSB
+GFSK
+QAM64
+AM-SSB
+QAM16
+8PSK
+WBFM
+BPSK
+CPFSK
+QPSK
+PAM4
+AM-DSB
+GFSK
+QAM64
+AM-SSB
+QAM16
+8PSK
+WBFM
+BPSK
+CPFSK
+Predicted  Labels
+True Labels
+0.000
+39.80
+79.60
+119.4
+159.2
+199.0
+(f) SpectrumFM confusion matrix at 0
+dB SNR.
+186 1
+0
+0
+0
+2
+5
+0
+0
+0
+0
+0 194 0
+0
+0
+1
+0
+0
+0
+0
+1
+0
+1 195 0
+0
+5
+0
+0 106 0
+1
+0
+0
+0 193 0
+2
+0
+0
+8
+1
+0
+0
+0
+0
+0 169 0
+0
+36
+0
+0
+1
+1
+4
+0
+0
+1 182 2
+1
+0
+0
+0
+13
+0
+0
+0
+1
+2 191 1
+0
+0
+0
+0
+0
+0
+0
+29
+0
+1 162 0
+0
+0
+0
+0
+5
+5
+0
+1
+0
+0
+86
+0
+0
+0
+0
+0
+2
+0
+4
+1
+0
+0 199 0
+0
+0
+0
+0
+0
+1
+0
+0
+0
+0 197
+QPSK
+PAM4
+AM-DSB
+GFSK
+QAM64
+AM-SSB
+QAM16
+8PSK
+WBFM
+BPSK
+CPFSK
+QPSK
+PAM4
+AM-DSB
+GFSK
+QAM64
+AM-SSB
+QAM16
+8PSK
+WBFM
+BPSK
+CPFSK
+Predicted  Labels
+True Labels
+0.000
+39.80
+79.60
+119.4
+159.2
+199.0
+(g) AMC_Net confusion matrix at 4
+dB SNR.
+182 0
+0
+0
+0
+2
+11
+0
+0
+0
+0
+0 193 0
+0
+0
+0
+0
+0
+0
+0
+1
+0
+0 184 0
+0
+7
+0
+0
+96
+0
+0
+0
+0
+1 195 0
+2
+0
+0
+4
+1
+0
+0
+0
+0
+0 170 2
+1
+42
+0
+0
+0
+1
+4
+0
+0
+1 172 2
+1
+0
+0
+0
+17
+1
+0
+0
+0
+0 180 1
+0
+0
+0
+0
+0
+0
+0
+29
+3
+6 156 1
+0
+0
+0
+0
+15
+4
+0
+3
+0
+0
+99
+0
+0
+0
+0
+0
+1
+0
+5
+0
+0
+0 199 0
+0
+2
+0
+0
+0
+4
+0
+0
+0
+0 199
+QPSK
+PAM4
+AM-DSB
+GFSK
+QAM64
+AM-SSB
+QAM16
+8PSK
+WBFM
+BPSK
+CPFSK
+QPSK
+PAM4
+AM-DSB
+GFSK
+QAM64
+AM-SSB
+QAM16
+8PSK
+WBFM
+BPSK
+CPFSK
+Predicted  Labels
+True Labels
+0.000
+39.80
+79.60
+119.4
+159.2
+199.0
+(h) Transformer confusion matrix at 4
+dB SNR.
+199 0
+0
+0
+0
+2
+0
+0
+0
+0
+0
+0 194 0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0 193 0
+0
+2
+0
+0
+96
+0
+0
+0
+0
+1 200 0
+4
+0
+0
+1
+3
+0
+0
+0
+0
+0 196 1
+0
+0
+0
+0
+0
+1
+4
+0
+0
+1 180 2
+1
+0
+0
+0
+0
+1
+0
+0
+0
+5 198 0
+0
+0
+0
+0
+0
+0
+0
+3
+0
+0 199 0
+0
+0
+0
+0
+6
+0
+0
+2
+0
+0 103 0
+0
+0
+0
+0
+0
+0
+1
+0
+0
+0 197 0
+0
+1
+0
+0
+0
+3
+0
+0
+0
+0 200
+QPSK
+PAM4
+AM-DSB
+GFSK
+QAM64
+AM-SSB
+QAM16
+8PSK
+WBFM
+BPSK
+CPFSK
+QPSK
+PAM4
+AM-DSB
+GFSK
+QAM64
+AM-SSB
+QAM16
+8PSK
+WBFM
+BPSK
+CPFSK
+Predicted  Labels
+True Labels
+0.000
+40.00
+80.00
+120.0
+160.0
+200.0
+(i) SpectrumFM confusion matrix at 4
+dB SNR.
+Fig. 7: The confusion matrices for the AMC_Net, Transformer, and our proposed model under SNR conditions of -4
+dB, 0 dB, and 4 dB.
+40
+20
+20
+40
+0
+40
+20
+0
+20
+40
+60
+t-SNE Dimension 2
+QPSK
+PAM4
+AM-DSB
+GFSK
+QAM64
+AM-SSB
+QAM16
+8PSK
+WBFM
+BPSK
+CPFSK
+t-SNE Dimension 1
+(a) The t-SNE visualizations of the
+RML2016.10A dataset for AMC_Net.
+60
+40
+20
+20
+40
+60
+0
+40
+20
+0
+20
+40
+t-SNE Dimension 2
+QPSK
+PAM4
+AM-DSB
+GFSK
+QAM64
+AM-SSB
+QAM16
+8PSK
+WBFM
+BPSK
+CPFSK
+t-SNE Dimension 1
+(b)
+The
+t-SNE
+visualizations
+of
+the RML2016.10A dataset for Trans-
+former.
+60
+40
+20
+20
+40
+0
+40
+20
+0
+20
+40
+60
+t-SNE Dimension 2
+QPSK
+PAM4
+AM-DSB
+GFSK
+QAM64
+AM-SSB
+QAM16
+8PSK
+WBFM
+BPSK
+CPFSK
+t-SNE Dimension 1
+(c) The t-SNE visualizations of the
+RML2016.10A dataset for our model.
+Fig. 8: The t-SNE visualizations of the RML2016.10A dataset under 0 dB SNR condition for our proposed model and
+two most competitive baseline models.
+13
+64-QAM, 16-QAM and QPSK, WBFM and AM-DSB,
+as well as WBFM and GFSK. The overlaps indicate
+diﬀiculties in distinguishing the modulation types using
+AMC_Net. Similarly, the Transformer model exhibits
+significant overlap between 16-QAM and QPSK, 8-PSK
+and 64-QAM, as well as WBFM and AM-DSB, suggesting
+similar challenges in classification accuracy for these pairs.
+In contrast, our proposed method demonstrates clear
+boundaries between most modulation classes, with the ex-
+ception of some overlap between WBFM and AM-DSB. It
+indicates a higher discriminative capability for our model
+across various modulation types, thereby showcasing its
+superior performance compared to the baseline models.
+5) Performance in Few-shot Conditions: The bar chart
+in Fig. 9a illustrates the classification accuracy of our
+method, MSNet, and AMC_Net under different training
+set ratios (10%, 20%, 30%, and 100%). The vertical axis
+represents accuracy, while the horizontal axis denotes the
+proportion of the training set used for model training.
+From the results, it is evident that our proposed method
+consistently outperforms MSNet and AMC_Net across all
+training set ratios. Notably, a key observation from the
+results is that as the training data ratio decreases, the
+accuracy of MSNet and AMC_Net drops significantly,
+whereas our proposed method remains remarkably stable.
+Even when trained with only 10% of the dataset, our
+model achieves an accuracy comparable to MSNet and
+AMC_Net trained on 100% of the data. The results high-
+light the strong few-shot learning capability of our method.
+Fig. 10a illustrates the few-shot fine-tuning performance
+with 100 samples per class on the AMC task using the
+RML2016.10A dataset under varying SNR conditions. The
+results show that our method achieves consistently better
+accuracy than MSNet, Transformer, and AMC_Net across
+all SNR levels, demonstrating its robustness and good
+transferability in low-data regimes.
+6) Learning Eﬀiciency: To evaluate the learning eﬀi-
+ciency of our method, the stacked percentage area chart
+in Fig. 11a illustrates the accuracy trends of three models,
+including our method, MSNet, and AMC_Net, over ten
+training epochs. The vertical axis represents accuracy in
+percentage terms, while the horizontal axis denotes the
+number of epochs. A key observation from the figure is
+that our proposed method consistently occupies the largest
+area in the chart, indicating superior accuracy across all
+epochs. Furthermore, our method reaches a high accuracy
+level within the first few epochs, whereas MSNet and
+AMC_Net require more epochs to stabilize. The results
+highlight the exceptional learning eﬀiciency of our model.
+C. Wireless Technology Classification Task
+1) Dataset: As detailed in Section III-A, the TechRec
+dataset comprises data captured from various locations
+including Merelbeke, iGent, and Rabot, which are utilized
+for pre-training our model. Meanwhile, data collected from
+the remaining sites, including UZ, Reep, and Gentbrugge,
+10
+20
+30
+100
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+Accuracy
+Training set ratio (%)
+ Our        
+ MSNet        
+ AMC_Net
+(a)
+Performance
+in
+few-shot
+conditions
+on
+RML2016.10A dataset.
+10
+20
+30
+100
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+Accuracy
+Training set ratio (%)
+ Our       
+ MSNet       
+ Transformer
+(b) Performance in few-
+shot conditions on TechRec
+dataset.
+Fig. 9: Performance in few-shot conditions.
+−20
+−16
+−12
+−8
+−4
+0
+4
+8
+12
+16
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+Accuracy
+SNR (dB)
+ Our
+ Transformer
+ MSNet
+ AMC_Net
+(a) AMC.
+−15
+−10
+−5
+0
+5
+10
+15
+20
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+Accuracy
+SNR (dB)
+ Our
+ Transformer
+ MSNet
+ AMC_Net
+(b) WTC.
+Fig. 10: Few-shot fine-tuning with 100 samples per class
+on AMC and WTC tasks in different SNR conditions.
+are reserved for fine-tuning and testing, ensuring a robust
+evaluation of our model performance across different
+environments.
+2) Baselines:
+We leverage AMC_Net, Transformer,
+MSNet, CGDNN, DAE, MCNet, ResNet, VGG, CNN2
+and GRU2 described in Section IV-B2 as baseline models.
+TABLE IV: Comparison of Precision, Recall and F1-score
+in the WTC Task.
+Models
+Precision
+Recall
+F1 Score
+ResNet
+0.6723
+0.6950
+0.6764
+VGG
+0.7542
+0.7404
+0.7356
+CNN2
+0.7851
+0.7509
+0.7407
+AMC_Net
+0.6492
+0.6472
+0.6405
+DAE
+0.6826
+0.6735
+0.6487
+CGDNN
+0.7815
+0.7488
+0.7397
+MCNet
+0.7210
+0.7320
+0.7116
+GRU2
+0.7286
+0.7429
+0.7225
+MSNet
+0.7696
+0.7546
+0.7481
+Transformer
+0.7617
+0.7463
+0.7415
+Our
+0.8270
+0.8253
+0.8226
+3) Performance Comparison: The experimental results
+presented in TABLE IV demonstrate the superior per-
+formance of our proposed model compared to existing
+methods in the WTC task. Specifically, our model achieves
+the highest precision (0.8270), recall (0.8253), and F1-
+score (0.8226), significantly outperforming the baseline
+methods. Notably, compared to well-established archi-
+tectures such as ResNet and VGG, our model exhibits
+substantial improvements, particularly in Recall and F1-
+score, indicating its enhanced ability to correctly classify
+instances while maintaining robustness against misclassi-
+fication.
+14
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+0
+20
+40
+60
+80
+100
+Percentage(%)
+Epoch
+ Our
+ AMC_Net
+ MSNet
+(a) The accuracy curve on
+RML2016.10A dataset.
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+0
+20
+40
+60
+80
+100
+Percentage/(%)
+Epoch
+ Our
+ MSNet
+ AMC_Net
+(b) The accuracy curve on
+TechRec dataset.
+Fig. 11: The accuracy curve over epochs.
+The accuracy of various models under different SNR
+conditions is illustrated in Fig. 12. The figure demonstrates
+that our proposed method achieves superior performance
+across a wide range of SNR levels. Specifically, our method
+consistently outperforms other methods. At SNR levels
+from -15 dB to 0 dB, our method exhibits a higher
+accuracy rate compared to the other models. As the
+SNR increases beyond 0 dB, all methods show improved
+accuracy, but our method maintains a notable lead. The
+robust performance underscores the effectiveness of our
+method in both challenging and favorable SNR conditions.
+As shown in Fig. 9b, our proposed method consistently
+outperforms MSNet and AMC_Net across all training
+set ratios (10%, 20%, 30%, and 100%). Notably, the
+model exhibits strong stability as the training data ratio
+decreases, maintaining high accuracy even under limited
+data conditions. Furthermore, Fig. 10b demonstrates that
+the model generalizes well to unseen data with 100 samples
+per class, highlighting the effective few-shot learning
+capability and reliable generalization of our model.
+As evidenced in the percentage area stacked plot in
+Fig. 11b, our proposed model not only converges more
+rapidly but also achieves a higher accuracy rate across
+all epochs, demonstrating its superior learning eﬀiciency
+compared to AMC_Net and MSNet.
+D. Spectrum Sensing Task
+1) Dataset: The RML2018.01A dataset is a widely used
+benchmark for AMC. It consists of IQ signal samples rep-
+resenting various digital and analog modulation schemes
+under different SNR conditions. In this study, pure noise
+is added to the dataset to enhance its applicability for
+spectrum sensing task.
+2) Baselines: We leverage energy detection (ED), along
+with the ResNet and LSTM models mentioned in Sec-
+tion IV-B2, as baseline methods. Energy detection is a
+fundamental spectrum sensing method that determines
+the presence or absence of a signal by comparing the
+received signal energy to a predefined threshold. Due
+to its low computational complexity and independence
+from prior signal knowledge, it serves as a widely used
+benchmark in spectrum sensing research.
+3) Performance Comparison: Fig. 13 illustrates the per-
+formance of different spectrum sensing methods at various
+SNR levels. All methodologies exhibit poor performance
+when the SNR is between -10 dB and -4 dB. However,
+within the range of SNR from -10 dB to 0 dB, our
+proposed method demonstrates a higher accuracy rate.
+Beyond 0 dB, all methodologies achieve nearly perfect
+sensing accuracy.
+Fig. 14 shows the receiver operating characteristic
+(ROC) curve of various spectrum sensing method at -4 dB
+SNR level. It highlights that our method achieves an AUC
+of 0.97 at -4 dB SNR, surpassing both LSTM and ResNet,
+demonstrating its superior accuracy in signal detection.
+At the same false alarm rate, our method also exhibits
+better detection performance, further underscoring its
+effectiveness in the SS task.
+E. Anomaly Detection Task
+1) Datasets: The dataset used for AD task is collected
+over a two-day period using an over-the-air (OTA) plat-
+form, shown in Fig. 15, which is designed to simulate
+real-world wireless communication environments. A ceyear
+1435B-V RF signal generator is employed to transmit
+the PU signal, which is modulated using QPSK with
+a carrier frequency of 2.9 GHz and a bandwidth of 20
+MHz. To introduce interference, a ceyear 1465B-V RF
+signal generator is positioned approximately two meters
+away, generating abnormal signals intended to disrupt the
+normal transmission. A SAM 60 MK2 receiver, placed
+ten meters from both transmitters, is used to capture
+the received signals. To replicate realistic interference
+scenarios, three types of anomalies are introduced. The
+single-tone interference consisted of a sinusoidal signal
+sweeping across 2.89 GHz to 2.91 GHz, while the multi-
+tone interference involved multiple sinusoids sweeping
+within the same frequency range. The aliased-signal in-
+terference is created by generating random signals with
+bandwidths of 10 MHz and 30 MHz, appearing at 2.885
+GHz to 2.915 GHz, thereby causing aliasing effects with
+the normal QPSK-modulated signal. To further increase
+the complexity of the aliased interference, these random
+signals are also QPSK-modulated, making them more
+challenging to distinguish from the normal transmission.
+2) Baseline:
+We
+leverage
+adversarial
+autoencoder
+(AAE) [47] as the baseline model for AD task. The AAE
+is a generative model that integrates an autoencoder with
+a discriminator to enforce a specific feature distribution in
+the latent space. In AAE, the autoencoder consists of an
+encoder-decoder pair, where the encoder maps input data
+to a latent representation, and the decoder reconstructs
+the original input from this representation. Furthermore, a
+discriminator is employed to guide the encoder in shaping
+the latent space to follow a predefined distribution, such
+as a Gaussian or other structured priors.
+3) Performance Comparison: Fig. 16 presents the ROC
+curves
+for
+four
+types
+of
+interference
+under
+varying
+interference-to-signal ratios (ISR), comparing the perfor-
+mance of our proposed method with the AAE. Across all
+scenarios, our method consistently achieves an AUC of
+15
+−15
+−10
+−5
+0
+5
+10
+15
+20
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+Accuracy
+SNR (dB)
+ Our
+ Transformer
+ MSNet
+ AMC_Net
+ DAE
+ CGDNN
+ MCNet
+ ResNet
+ VGG
+ CNN2
+ GRU2
+Fig. 12: The accuracy of
+models on different SNR
+conditions on the TechRec
+dataset.
+−20
+−16
+−12
+−8
+−4
+0
+4
+8
+12
+16
+20
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+Accuracy
+SNR (dB)
+ Our
+ ED
+ ResNet
+ LSTM
+Fig. 13: Sensing accuracy
+of our model and base-
+line models at various SNR
+level.
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Probability of False Alarm
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Probability of Detection
+Our (AUC = 0.97)
+LSTM (AUC = 0.95)
+ResNet (AUC = 0.93)
+Fig.
+14:
+ROC
+curve
+of
+various
+spectrum
+sensing
+method at -4 dB SNR level.
+SAM 60 
+MK2 
+Receiver
+Ceyear 1435B-V RF
+Signal Generator
+SpectrumFM 
+Service Center
+Frontend Core
+Fig. 15: The data acquisi-
+tion and SpectrumFM de-
+ployment platform.
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Probability of False Alarm
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Probability of Detection
+Our, ISR=-10dB
+AAE, ISR=-10dB
+Our, ISR=-20dB
+AAE, ISR=-20dB
+Our, ISR=0dB
+AAE, ISR=0dB
+(a) ROC curve for single-tone
+interference.
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Probability of False Alarm
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Probability of Detection
+Our, ISR=-10dB
+AAE, ISR=-10dB
+Our, ISR=-20dB
+AAE, ISR=-20dB
+Our, ISR=0dB
+AAE, ISR=0dB
+(b) ROC curve for multi-tone
+interference.
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Probability of False Alarm
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Probability of Detection
+Our, ISR=-10dB
+AAE, ISR=-10dB
+Our, ISR=-20dB
+AAE, ISR=-20dB
+Our, ISR=0dB
+AAE, ISR=0dB
+(c) ROC curve for 10M aliased-
+signal interference.
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Probability of False Alarm
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Probability of Detection
+Our, ISR=-10dB
+AAE, ISR=-10dB
+Our, ISR=-20dB
+AAE, ISR=-20dB
+Our, ISR=0dB
+AAE, ISR=0dB
+(d)
+ROC
+curve
+for
+30M
+aliased-signal interference.
+Fig. 16: Comparison of anomaly detection performance among various types of interference.
+1.0 at -20 dB and -10 dB ISR, showcasing an excellent
+balance between detection probability and false alarm
+rate. Even at 0 dB ISR, our method maintains near-
+optimal performance, with AUC values significantly out-
+performing those of AAE, indicating superior robustness
+and detection capability. Moreover, in the case of aliased-
+signal interference, the baseline AAE method exhibits
+a significant decline in performance. The aliased-signal
+interference is particularly challenging to detect due to
+its close resemblance to normal signals. Specifically, for
+30 MHz aliased-signal interference at 0 dB ISR, the
+AAE AUC decreases to 0.84, markedly lower than its
+performance on other less complex interference types. In
+contrast, our proposed method consistently achieves an
+AUC of 1.0 across all ISR for both 10 MHz and 30 MHz
+aliased-signal interferences. All the findings underscore the
+robustness, high detection rate, and strong generalization
+ability of our model.
+F. Joint Spectrum Sensing and Automatic Modulation
+Classification Task
+SpectrumFM is further evaluated in a unified clas-
+sification setting that combines spectrum sensing and
+automatic modulation classification [48]. The joint task
+is formulated by augmenting the modulation label space
+with an additional class representing the idle state, so
+that the model directly predicts either “idle” or one
+of the active modulation types. This formulation allows
+spectrum occupancy and modulation type to be inferred
+simultaneously with a single classifier. As shown in Fig. 17,
+SpectrumFM achieves a competitive performance across
+various SNR levels, outperforming baseline methods in
+most regimes, particularly at moderate to high SNRs.
+The confusion matrix at 0 dB (Fig. 18) shows that
+SpectrumFM effectively distinguishes between the idle
+state and active modulation types, including OOK, 4ASK,
+and 8ASK, with low misclassification rates. These results
+demonstrate the feasibility and effectiveness of the unified
+classification framework for simultaneous spectrum sens-
+ing and modulation recognition.
+G. Ablation Study
+To better understand the contribution of each pretrain-
+ing objective, we conduct an ablation study by separately
+evaluating the masked reconstruction loss and the next-
+slot signal prediction loss, in comparison with their joint
+optimization. The results are shown in Fig. 19.
+When trained with only masked reconstruction loss,
+the model achieves a reasonable performance, reaching
+0.6355 on AMC and 0.7961 on WTC, demonstrating the
+ability to capture local structural patterns and to enhance
+robustness against corrupted inputs. Training with only
+next-slot signal prediction loss yields 0.6274 on AMC and
+0.8076 on WTC, showing that this objective effectively
+models sequential dependencies but does not consistently
+outperform masked reconstruction across different tasks.
+Most importantly, the combination of both objectives
+consistently provides the best results, indicating a clear
+complementary effect. Specifically, the masked reconstruc-
+tion loss encourages the model to learn robust feature
+16
+−20
+−16
+−12
+−8
+−4
+0
+4
+8
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+Accuracy
+SNR (dB)
+ Ours
+ MSNet
+ Transformer
+ AMC_Net
+Fig. 17: Accuracy of the
+joint spectrum sensing and
+automatic modulation clas-
+sification task.
+1
+0
+0
+0
+0.016 0.8216 0.112 0.0497
+0
+0.0488 0.6159 0.3354
+0.014 0.0281 0.3756 0.5822
+Noise
+OOK
+4ASk
+8ASk
+Noise
+OOK
+4ASK
+8ASK
+0.000
+0.2000
+0.4000
+0.6000
+0.8000
+1.000
+Fig. 18: Confusion matrix
+of
+SpectrumFM
+for
+the
+joint task at 0 dB SNR.
+0.6372
+0.8253
+0.6355
+0.7961
+0.6274
+0.8076
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+Accuracy
+ Both   
+ Only masked reconstruction   
+ Only next-step prediction
+AMC
+WTC
+Fig. 19: Ablation study on
+the joint optimization of
+the masked reconstruction
+loss and the next-slot signal
+prediction loss.
+0.7671
+0.6285
+0.8253
+0.6372
+0.0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+Accuracy
+ Both                                                
+ Without conv
+WTC
+AMC
+Fig. 20: Ablation study on
+the convolution module.
+representations, while the next-slot signal prediction loss
+enforces the temporal consistency, and their synergy leads
+to stronger generalization and overall performance gains.
+To further evaluate the architectural design, we also con-
+duct an ablation experiment on the convolution module.
+As shown in Fig. 20, when this component is removed,
+the performance on downstream tasks drops notably,
+with AMC decreasing from 0.6372 to 0.6285 and WTC
+decreasing from 0.8253 to 0.7671. These results highlight
+the crucial role of convolutional layers in capturing fine-
+grained local spectral features, which complement the
+global dependencies modeled by MHSA and jointly con-
+tribute to the superior performance of SpectrumFM.
+H. Discussion
+In summary, the superior performance of our model
+across AMC, WTC, SS, and AD tasks can be attributed
+to its capacity to effectively learn and generalize spectral
+features through large-scale pre-training. By exploiting
+MHSA and convolutional modules, the model captures
+fine-grained signal characteristics and learns universal
+spectral patterns, enabling it to perform effectively in
+diverse, unseen environments. Large-scale pre-training
+facilitates the development of transferable representations,
+which enhances the model generalization ability and makes
+it highly effective even under low SNR or noisy conditions.
+Additionally, the leveraging of masked reconstruction
+tasks during pre-training bolsters the model robustness
+to signal distortions and interference, fostering enhanced
+resilience in challenging real-world conditions. The next-
+slot signal prediction task, in particular, improves the
+model capacity to anticipate future signal behaviors based
+on both current and past information, thereby enabling it
+to navigate dynamic spectrum environments with greater
+accuracy. These tasks, collectively, significantly augment
+the model predictive power and robustness, making it
+particularly well-suited for complex and unpredictable
+spectrum scenarios.
+These advancements offer substantial benefits for wire-
+less communication systems. The improved modulation
+recognition ensures eﬀicient signal classification, which is
+critical for adaptive transmission strategies. Technology
+classification, in turn, enhances interoperability in com-
+plex spectrum environments. Furthermore, spectrum sens-
+ing facilitates dynamic spectrum access, while anomaly
+detection strengthens security by mitigating interference
+and detecting unauthorized transmissions.
+I. Limitations
+Despite its strong performance, SpectrumFM has sev-
+eral limitations that need further investigation. First,
+the current pre-training dataset and model size, while
+suﬀicient for the demonstrated tasks, remain relatively
+limited, which constrains the model generalization ability
+and limits its performance in zero-shot scenarios. Sec-
+ond, although SpectrumFM has been evaluated on key
+downstream tasks such as AMC, WTC, SS, and AD, the
+range of supported tasks remains limited, and expanding
+the diversity of downstream applications could further
+validate its versatility. Third, the current model primarily
+operates on single-modality spectrum data. Extending
+SpectrumFM to support multi-modal inputs would en-
+hance its applicability in more complex and heterogeneous
+wireless environments.
+V. Conclusion
+In this paper, we introduced SpectrumFM, a foundation
+model designed for spectrum management, representing
+a novel paradigm in this field. To support its training,
+a diverse spectrum dataset was collected and processed
+from multiple sources, including publicly available open-
+source datasets and self-collected real-world data. To pre-
+train SpectrumFM, an encoder architecture exploiting
+CNNs with MHSA mechanisms was designed to enhance
+both high-level and fine-grained feature extraction as
+well as representation learning. Additionally, two novel
+self-supervised tasks, namely masked reconstruction and
+next-slot signal prediction, were proposed to enable the
+model to learn generalizable and foundational spectrum
+representations. Furthermore, a parameter-eﬀicient fine-
+tuning strategy was proposed to enable SpectrumFM to
+effectively adapt to diverse downstream tasks. Extensive
+experiments conducted across four key spectrum manage-
+ment tasks, including AMC, WTC, SS, and AD, highlight
+17
+its remarkable eﬀiciency and performance gains over state-
+of-the-art methods. Specifically, SpectrumFM achieves up
+to 12.1% accuracy improvement in AMC, 9.3% in WTC,
+an AUC of 0.97 in SS at -4 dB SNR, and an AUC gain
+exceeding 10% in AD, underscoring its superior capability
+in spectrum management. For future research, we will
+focus on expanding the data scale and model size to
+improve performance and generalization. Additionally, we
+believe SpectrumFM can also facilitate dynamic spectrum
+access, spectrum resource allocation, and secure spectrum
+sharing.
+References
+[1] J. Sun, J. Chen, G. Ding, F. Lin, and Y. Song, “Spectrum
+recommendation in cognitive Internet of Things: A knowledge-
+graph-based framework,” IEEE Trans. Cognit. Commun. Netw.,
+vol. 10, no. 1, pp. 21–34, 2024.
+[2] A. Gao, Q. Wang, Y. Wang, C. Du, Y. Hu, W. Liang, and S. X.
+Ng, “Attention enhanced multi-agent reinforcement learning
+for cooperative spectrum sensing in cognitive radio networks,”
+IEEE Trans. Veh. Technol., vol. 73, no. 7, pp. 10 464–10 477,
+2024.
+[3] J. Li, L. Yang, Q. Wu, X. Lei, F. Zhou, F. Shu, X. Mu, Y. Liu,
+and P. Fan, “Active RIS-aided noma-enabled space-air-ground
+integrated networks with cognitive radio,” IEEE J. Sel. Areas
+Commun., vol. 43, no. 1, pp. 314–333, 2025.
+[4] Y. Xu, Y. Li, and T. Q. S. Quek, “RIS-enhanced cognitive
+integrated sensing and communication: Joint beamforming and
+spectrum sensing,” IEEE J. Sel. Areas Commun., vol. 43, no. 3,
+pp. 795–810, 2025.
+[5] H. Ji, T. Zhang, X. Qiao, H. Wu, and G. Gui, “TFAM-AAE-UK:
+A dual-metric spectrum anomaly detection algorithm,” IEEE
+Commun. Lett., vol. 28, no. 11, pp. 2638–2642, 2024.
+[6] Y. Qu, H. Dai, H. Wang, C. Dong, F. Wu, S. Guo, and Q. Wu,
+“Service provisioning for UAV-enabled mobile edge computing,”
+IEEE J. Sel. Areas Commun., vol. 39, no. 11, pp. 3287–3305,
+2021.
+[7] J. Chamberlain, D. Starobinski, and J. T. Johnson, “Facilitating
+spectrum sharing with passive satellite incumbents,” IEEE J.
+Sel. Areas Commun., vol. 42, no. 12, pp. 3719–3733, 2024.
+[8] Z. Huang, S. Zhong, P. Zhou, S. Gao, M. Zitnik, and L. Lin,
+“A causality-aware paradigm for evaluating creativity of mul-
+timodal large language models,” IEEE Trans. Pattern Anal.
+Mach. Intell., vol. 47, no. 5, pp. 3830–3846, 2025.
+[9] S. Song, X. Li, S. Li, S. Zhao, J. Yu, J. Ma, X. Mao, W. Zhang,
+and M. Wang, “How to bridge the gap between modalities:
+Survey on multimodal large language model,” IEEE Trans.
+Knowl. Data Eng., 2025, to be published.
+[10] D. Hong, B. Zhang, X. Li, Y. Li, C. Li, J. Yao, N. Yokoya, H. Li,
+P. Ghamisi, X. Jia, A. Plaza, P. Gamba, J. A. Benediktsson,
+and J. Chanussot, “SpectralGPT: Spectral remote sensing foun-
+dation model,” IEEE Trans. Pattern Anal. Mach. Intell., vol. 46,
+no. 8, pp. 5227–5244, 2024.
+[11] T. Yang, P. Zhang, M. Zheng, Y. Shi, L. Jing, J. Huang,
+and N. Li, “WirelessGPT: A generative pre-trained multi-task
+learning framework for wireless communication,” 2025. [Online].
+Available: https://arxiv.org/abs/2502.06877
+[12] H. Xing, X. Zhang, S. Chang, J. Ren, Z. Zhang, J. Xu, and
+S. Cui, “Joint signal detection and automatic modulation clas-
+sification via deep learning,” IEEE Trans. Wireless Commun.,
+vol. 23, no. 11, pp. 17 129–17 142, 2024.
+[13] T. J. O’Shea, J. Corgan, and T. C. Clancy, “Convolutional radio
+modulation recognition networks,” in Int. Conf. Eng. Appl.
+Neural Netw., 2016, pp. 213–226.
+[14] S. Huang, R. Dai, J. Huang, Y. Yao, Y. Gao, F. Ning, and
+Z. Feng, “Automatic modulation classification using gated
+recurrent residual network,” IEEE Internet Things J., vol. 7,
+no. 8, pp. 7795–7807, 2020.
+[15] Z. Liang, M. Tao, J. Xie, X. Yang, and L. Wang, “A radio signal
+recognition approach based on complex-valued CNN and self-
+attention mechanism,” IEEE Trans. Cognit. Commun. Netw.,
+vol. 8, no. 3, pp. 1358–1373, 2022.
+[16] H. Zhang, F. Zhou, Q. Wu, and N. Al-Dhahir, “Sswsrnet: A
+semi-supervised few-shot learning framework for wireless signal
+recognition,” IEEE Trans. Commun., vol. 72, no. 9, pp. 5823–
+5836, 2024.
+[17] J. Zhang, T. Wang, Z. Feng, and S. Yang, “AMC-Net: An
+effective network for automatic modulation classification,” in
+IEEE Int. Conf. Acoust. Speech Signal Process., 2023, pp. 1–5.
+[18] M. Du, J. Pan, and D. Bi, “A contrastive learner for automatic
+modulation classification,” IEEE Trans. Wireless Commun.,
+2025, to be published.
+[19] J. Fontaine, E. Fonseca, A. Shahid, M. Kist, L. A. DaSilva,
+I. Moerman, and E. De Poorter, “Towards low-complexity
+wireless technology classification across multiple environments,”
+Ad Hoc Netw., vol. 91, p. 101881, 2019.
+[20] L. Yuan, H. Zhang, M. Xu, F. Zhou, and Q. Wu, “A multiscale
+CNN framework for wireless technique classification in internet
+of things,” IEEE Internet Things J., vol. 9, no. 12, pp. 10 366–
+10 367, 2022.
+[21] M. Girmay, V. Maglogiannis, D. Naudts, M. Aslam, A. Shahid,
+and I. Moerman, “Technology recognition and traﬀic character-
+ization for wireless technologies in ITS band,” Veh. Commun.,
+vol. 39, pp. 1–15, 2023.
+[22] Y. Peng, Y. Zhang, H. Huang, Y. Wang, P. Liu, Y. Lin, and
+G. Gui, “Low-complexity wireless technique classification with
+multifeature fusion broad learning network,” IEEE Internet
+Things J., vol. 11, no. 21, pp. 34 434–34 442, 2024.
+[23] C. Vlădeanu, O. M. K. Al-Dulaimi, A. Marţian, and D. C.
+Popescu, “Average energy detection with adaptive threshold for
+spectrum sensing in cognitive radio systems,” IEEE Trans. Veh.
+Technol., vol. 73, no. 11, pp. 17 222–17 230, 2024.
+[24] M. U. Muzaffar and R. Sharqi, “A review of spectrum sensing
+in modern cognitive radio networks,” Telecommu. Syst., vol. 85,
+no. 2, pp. 347–363, 2024.
+[25] P. Pawelczak, K. Nolan, L. Doyle, S. W. Oh, and D. Cabric,
+“Cognitive radio: Ten years of experimentation and develop-
+ment,” IEEE Commun. Mag., vol. 49, no. 3, pp. 90–100, 2011.
+[26] J. Gao, X. Yi, C. Zhong, X. Chen, and Z. Zhang, “Deep learning
+for spectrum sensing,” IEEE Wireless Commun. Lett., vol. 8,
+no. 6, pp. 1727–1730, 2019.
+[27] W. Zhang, Y. Wang, X. Chen, Z. Cai, and Z. Tian, “Spectrum
+transformer: An attention-based wideband spectrum detector,”
+IEEE Trans. Wireless Commun., vol. 23, no. 9, pp. 12 343–
+12 353, 2024.
+[28] X. Hao, S. Yang, R. Liu, Z. Feng, T. Peng, and B. Huang,
+“VSLM: Virtual signal large model for few-shot wideband signal
+detection and recognition,” IEEE Trans. Wireless Commun.,
+vol. 24, no. 2, pp. 909–925, 2025.
+[29] P. Qi, T. Jiang, J. Xu, J. He, S. Zheng, and Z. Li, “Unsupervised
+spectrum anomaly detection with distillation and memory en-
+hanced autoencoders,” IEEE Internet Things J., vol. 11, no. 24,
+pp. 39 361–39 374, 2024.
+[30] Y. Kang, H. Wu, Z. Zhao, Y. Li, and J. Meng, “Dl-based
+anomaly detection at the physical-layer of cognitive radio by
+deep support vector data description,” IEEE Trans. Cognit.
+Commun. Netw., vol. 8, no. 4, pp. 1689–1705, 2022.
+[31] H. Zhang, Z. Song, J. Yang, and Y. Gao, “Adversarial autoen-
+coder empowered joint anomaly detection and signal reconstruc-
+tion from sub-Nyquist samples,” IEEE Trans. Cognit. Commun.
+Netw., vol. 9, no. 3, pp. 618–628, 2023.
+[32] M. Fang, R. Ding, F. Zhou, and Q. Wu, “A simultaneous spec-
+trum sensing and anomaly detection deep learning framework
+for dynamic spectrum sharing networks,” in Int. Conf. Commun.
+Image Signal Process., 2024, pp. 107–111.
+[33] M. Awais, M. Naseer, S. Khan, R. M. Anwer, H. Cholakkal,
+M. Shah, M.-H. Yang, and F. S. Khan, “Foundation models
+defining a new era in vision: a survey and outlook,” IEEE Trans.
+Pattern Anal. Mach. Intell., 2025, to be published.
+[34] C. Liu, W. Wu, S. Wu, L. Yuan, R. Ding, F. Zhou, and Q. Wu,
+“Social-enhanced explainable recommendation with knowledge
+graph,” IEEE Trans. Knowl. Data Eng., vol. 36, no. 2, pp. 840–
+853, 2024.
+[35] A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N.
+Gomez, Ł. Kaiser, and I. Polosukhin, “Attention is all you need,”
+Int. Conf. Neural Inf. Process. Syst., vol. 30, 2017.
+[36] J. Devlin, M.-W. Chang, K. Lee, and K. Toutanova, “BERT:
+Pre-training of deep bidirectional transformers for language
+18
+understanding,” in Conf. North Am. Chapter Assoc. Comput.
+Linguistics, 2019, pp. 4171–4186.
+[37] W.-N. Hsu, B. Bolte, Y.-H. H. Tsai, K. Lakhotia, R. Salakhut-
+dinov, and A. Mohamed, “Hubert: Self-supervised speech rep-
+resentation learning by masked prediction of hidden units,”
+IEEE/ACM Trans. Audio, Speech Lang. Process., vol. 29, pp.
+3451–3460, 2021.
+[38] T. Chen, S. Saxena, L. Li, T.-Y. Lin, D. J. Fleet, and G. Hinton,
+“A unified sequence interface for vision tasks,” in Int. Conf.
+Neural Inf. Process. Syst., 2022, pp. 31 333–31 346.
+[39] T. J. O’Shea, T. Roy, and T. C. Clancy, “Over-the-air deep
+learning based radio signal classification,” IEEE J. Sel. Topics
+Signal Process., vol. 12, no. 1, pp. 168–179, 2018.
+[40] A. Gulati, J. Qin, C.-C. Chiu, N. Parmar, Y. Zhang, J. Yu,
+W. Han, S. Wang, Z. Zhang, Y. Wu et al., “Conformer:
+Convolution-augmented transformer for speech recognition,”
+arXiv preprint arXiv:2005.08100, 2020.
+[41] H. Zhang, F. Zhou, Q. Wu, W. Wu, and R. Q. Hu, “A novel
+automatic modulation classification scheme based on multi-scale
+networks,” IEEE Trans. Cognit. Commun. Netw., vol. 8, no. 1,
+pp. 97–110, 2022.
+[42] J.
+N.
+Njoku,
+M.
+E.
+Morocho-Cayamcela,
+and
+W.
+Lim,
+“CGDNET: Eﬀicient hybrid deep learning model for robust
+automatic modulation recognition,” IEEE Netw. Lett., vol. 3,
+no. 2, pp. 47–51, 2021.
+[43] Z. Ke and H. Vikalo, “Real-time radio technology and modu-
+lation classification via an LSTM auto-encoder,” IEEE Trans.
+Wireless Commun., vol. 21, no. 1, pp. 370–382, 2022.
+[44] T. Huynh-The, C.-H. Hua, Q.-V. Pham, and D.-S. Kim,
+“MCNet: An eﬀicient CNN architecture for robust automatic
+modulation classification,” IEEE Commun. Lett., vol. 24, no. 4,
+pp. 811–815, 2020.
+[45] X. Liu, D. Yang, and A. E. Gamal, “Deep neural network
+architectures for modulation classification,” in Asilomar Conf.
+Signals, Syst., Comput., 2017, pp. 915–919.
+[46] D. Hong, Z. Zhang, and X. Xu, “Automatic modulation clas-
+sification using recurrent neural networks,” in IEEE Int. Conf.
+Comput. Commun., 2017, pp. 695–700.
+[47] H. Zhang, Z. Song, J. Yang, and Y. Gao, “Adversarial autoen-
+coder empowered joint anomaly detection and signal reconstruc-
+tion from sub-Nyquist samples,” IEEE Trans. Cognit. Commun.
+Netw., vol. 9, no. 3, pp. 618–628, 2023.
+[48] H. Xing, X. Zhang, S. Chang, J. Ren, Z. Zhang, J. Xu, and
+S. Cui, “Joint signal detection and automatic modulation clas-
+sification via deep learning,” IEEE Trans. Wireless Commun.,
+vol. 23, no. 11, pp. 17 129–17 142, 2024.
+Fuhui Zhou (Senior Member, IEEE) is cur-
+rently a Full Professor with Nanjing Univer-
+sity of Aeronautics and Astronautics, Nan-
+jing, China, where he is also with the Key
+Laboratory of Dynamic Cognitive System of
+Electromagnetic Spectrum Space. His research
+interests include cognitive radio, cognitive
+intelligence, knowledge graph, edge comput-
+ing, and resource allocation. Prof. Zhou has
+published over 200 papers in internationally
+renowned journals and conferences in the field
+of communications. He has been selected for 1 ESI hot paper and
+13 ESI highly cited papers. He has received 4 Best Paper Awards at
+international conferences such as IEEE Globecom and IEEE ICC. He
+was awarded as 2021 Most Cited Chinese Researchers by Elsevier,
+Stanford World’s Top 2% Scientists, IEEE ComSoc Asia-Pacific
+Outstanding Young Researcher and Young Elite Scientist Award of
+China and URSI GASS Young Scientist. He serves as an Editor of
+IEEE Wireless Communication Letters, IEEE Access and Physical
+Communications.
+Chunyu
+Liu
+(Graduate
+Student
+Member,
+IEEE) is currently pursuing the Ph.D degree
+in electronic and information engineering with
+the School of Electronic and Information En-
+gineering, Nanjing University of Aeronautics
+and Astronautics. His research interests in-
+clude spectrum foundation models, knowledge
+graph, and wireless communication.
+Hao Zhang (Member, IEEE) received the B.E.
+and M.Eng. from Nanchang University, China,
+in 2017 and 2020, respectively, and the Ph.D.
+degree from the College of Electronic and
+Information Engineering, Nanjing University
+of Aeronautics and Astronautics, Nanjing,
+China, in 2025. He is now a postdoctoral fellow
+with the College of Artificial Intelligence, Nan-
+jing University of Aeronautics and Astronau-
+tics, Nanjing, China. He was a visiting Ph.D.
+student at the School of Electrical & Elec-
+tronic Engineering, Nanyang Technological University, Singapore,
+in 2024. His research interests focus on deep learning, foundation
+models, wireless communication, wireless signal processing, and
+spectrum cognition.
+Wei Wu (Member, IEEE) is currently an Full
+professor of the Nanjing University of Posts
+and Telecommunications. His research inter-
+ests include spectrum sharing, semantic com-
+munication, knowledge graph, and physical
+layer security. He was the Technical Program
+Committee member for many international
+conferences, such as IEEE GLOBECOM and
+IEEE ICC. He is the editor of Physical Com-
+munications.
+Qihui Wu (Fellow, IEEE) received the B.S.
+degree in communications engineering and
+the M.S. and Ph.D. degrees in communica-
+tions and information systems from the Insti-
+tute of Communications Engineering, Nanjing,
+China, in 1994, 1997, and 2000, respectively.
+Since May 2016, he has been a Full Professor
+with the College of Electronic and Information
+Engineering, Nanjing University of Aeronau-
+tics and Astronautics, Nanjing. From March
+2011 to September 2011, he was an Advanced
+Visiting Scholar with the Stevens Institute of Technology, Hoboken,
+NJ, USA. His current research interests include the areas of wireless
+communications and statistical signal processing, with emphasis on
+system design of softwaredefined radio, cognitive radio, and smart
+radio.
+19
+Tony Q.S. Quek (Fellow, IEEE) received the
+B.E. and M.E. degrees in electrical and elec-
+tronics engineering from the Tokyo Institute
+of Technology in 1998 and 2000, respectively,
+and the Ph.D. degree in electrical engineering
+and computer science from the Massachusetts
+Institute of Technology in 2008. Currently,
+he is the Cheng Tsang Man Chair Professor
+with Singapore University of Technology and
+Design (SUTD) and ST Engineering Distin-
+guished Professor. He also serves as the Di-
+rector of the Future Communications R&D Programme, the Head
+of ISTD Pillar, and the Deputy Director of the SUTD-ZJU IDEA.
+His current research topics include wireless communications and net-
+working, network intelligence, non-terrestrial networks, open radio
+access network, and 6G. Dr. Quek has been actively involved in
+organizing and chairing sessions, and has served as a member of
+the Technical Program Committee as well as symposium chairs in
+a number of international conferences. He is currently serving as
+an Area Editor for the IEEE TRANSACTIONS ON WIRELESS
+COMMUNICATIONS. Dr. Quek was honored with the 2008 Philip
+Yeo Prize for Outstanding Achievement in Research, the 2012 IEEE
+William R. Bennett Prize, the 2015 SUTD Outstanding Education
+Awards - Excellence in Research, the 2020 IEEE Stephen O. Rice
+Prize, the 2020 Nokia Visiting Professor, and the 2022 IEEE Signal
+Processing Society Best Paper Award. He is a Fellow of IEEE and a
+Fellow of the Academy of Engineering Singapore.
+Chan-Byoung Chae (Fellow, IEEE) received
+the Ph.D. degree in electrical and computer
+engineering from The University of Texas at
+Austin (UT), USA in 2008, where he was a
+member of wireless networking and communi-
+cations group (WNCG). Prior to joining UT,
+he was a Research Engineer at the Telecom-
+munications R&D Center, Samsung Electron-
+ics, Suwon, South Korea, from 2001 to 2005.
+He is currently an Underwood Distinguished
+Professor and Lee Youn Jae Fellow (Endowed
+Chair Professor) with the School of Integrated Technology, Yonsei
+University, South Korea. Before joining Yonsei, he was with Bell
+Labs, Alcatel-Lucent, Murray Hill, NJ, USA, from 2009 to 2011, as
+a Member of Technical Staff, and Harvard University, Cambridge,
+MA, USA, from 2008 to 2009, as a Post-Doc., Fellow and Lecturer.
+Dr. Chae was a recipient/co-recipient of the Korean Ministry of
+ICT and Science Award in 2024, the Korean Ministry of Education
+Award in 2024, the KICS Haedong Scholar Award in 2023, the
+CES Innovation Award in 2023, the IEEE ICC Best Demo Award
+in 2022, the IEEE WCNC Best Demo Award in 2020, the Best
+Young Engineer Award from the National Academy of Engineering
+of Korea (NAEK) in 2019, the IEEE DySPAN Best Demo Award
+in 2018, the IEEE/KICS Journal of Communications and Networks
+Best Paper Award in 2018, the IEEE INFOCOM Best Demo Award
+in 2015, the IEIE/IEEE Joint Award for Young IT Engineer of the
+Year in 2014, the KICS Haedong Young Scholar Award in 2013, the
+IEEE Signal Processing Magazine Best Paper Award in 2013, the
+IEEE ComSoc AP Outstanding Young Researcher Award in 2012,
+and the IEEE VTS Dan. E. Noble Fellowship Award in 2008. Dr.
+Chae has held several editorial positions, including Editor-in-Chief
+of the IEEE TRANSACTIONS ON MOLECULAR, BIOLOGICAL,
+AND MULTISCALE COMMUNICATIONS, Senior Editor of the
+IEEE WIRELESS COMMUNICATIONS LETTERS, and Editor of
+the IEEE COMMUNICATIONS MAGAZINE, IEEE TRANSAC-
+TIONS ON WIRELESS COMMUNICATIONS, and IEEE WIRE-
+LESS COMMUNICATIONS LETTERS. He was an IEEE ComSoc
+Distinguished Lecturer from 2020 to 2023 and is an IEEE VTS
+Distinguished Lecturer from 2024 to 2025. He is an elected member
+of the National Academy of Engineering of Korea.

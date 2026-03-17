@@ -27,6 +27,74 @@ class ResBlock2D(nn.Module):
         return self.relu(x + self.block(x))
 
 
+class PACENetBlock2D(nn.Module):
+    """ResBlock + Squeeze-and-Excitation channel attention for channel estimation.
+
+    PACE-Net (Yang et al., Entropy 2025) applies SE attention (Hu et al., CVPR 2018)
+    to wireless channel estimation. Same interface as ResBlock2D — drop-in replacement.
+    """
+
+    def __init__(self, channels: int, kernel_size: int = 3, reduction: int = 4):
+        super().__init__()
+        pad = kernel_size // 2
+        self.block = nn.Sequential(
+            nn.Conv2d(channels, channels, kernel_size, padding=pad),
+            nn.BatchNorm2d(channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(channels, channels, kernel_size, padding=pad),
+            nn.BatchNorm2d(channels),
+        )
+        mid = max(channels // reduction, 4)
+        self.se = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(),
+            nn.Linear(channels, mid),
+            nn.ReLU(inplace=True),
+            nn.Linear(mid, channels),
+            nn.Sigmoid(),
+        )
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, x):
+        out = self.block(x)
+        w = self.se(out).unsqueeze(-1).unsqueeze(-1)
+        return self.relu(x + out * w)
+
+
+class DWSResBlock2D(nn.Module):
+    """Depthwise-separable ResBlock (MobileNet-style, on-device friendly).
+
+    Replaces standard conv with depthwise conv + pointwise conv.
+    ~C/kernel² times fewer params per conv layer. Same interface as ResBlock2D.
+    """
+
+    def __init__(self, channels: int, kernel_size: int = 3):
+        super().__init__()
+        pad = kernel_size // 2
+        self.block = nn.Sequential(
+            # Depthwise + pointwise (1st layer)
+            nn.Conv2d(channels, channels, kernel_size, padding=pad, groups=channels),
+            nn.Conv2d(channels, channels, 1),
+            nn.BatchNorm2d(channels),
+            nn.ReLU(inplace=True),
+            # Depthwise + pointwise (2nd layer)
+            nn.Conv2d(channels, channels, kernel_size, padding=pad, groups=channels),
+            nn.Conv2d(channels, channels, 1),
+            nn.BatchNorm2d(channels),
+        )
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, x):
+        return self.relu(x + self.block(x))
+
+
+BLOCK_REGISTRY = {
+    "resnet": ResBlock2D,
+    "pacenet": PACENetBlock2D,
+    "dws_resnet": DWSResBlock2D,
+}
+
+
 class SharedEncoder(nn.Module):
     """E: Shared encoder — extracts features while preserving spatial dims.
 

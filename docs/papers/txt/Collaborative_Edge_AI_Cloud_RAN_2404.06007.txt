@@ -1,0 +1,2347 @@
+1
+Collaborative Edge AI Inference over Cloud-RAN
+Pengfei Zhang, Dingzhu Wen, Guangxu Zhu, Qimei Chen, Kaifeng Han, Yuanming Shi
+Abstract—In this paper, a cloud radio access network (Cloud-
+RAN) based collaborative edge AI inference architecture is
+proposed. Specifically, geographically distributed devices capture
+real-time noise-corrupted sensory data samples and extract the
+noisy local feature vectors, which are then aggregated at each
+remote radio head (RRH) to suppress sensing noise. To realize
+efficient uplink feature aggregation, we allow each RRH receives
+local feature vectors from all devices over the same resource
+blocks simultaneously by leveraging an over-the-air computation
+(AirComp) technique. Thereafter, these aggregated feature vec-
+tors are quantized and transmitted to a central processor (CP) for
+further aggregation and downstream inference tasks. Our aim in
+this work is to maximize the inference accuracy via a surrogate
+accuracy metric called discriminant gain, which measures the
+discernibility of different classes in the feature space. The key
+challenges lie on simultaneously suppressing the coupled sensing
+noise, AirComp distortion caused by hostile wireless channels,
+and the quantization error resulting from the limited capacity of
+fronthaul links. To address these challenges, this work proposes a
+joint transmit precoding, receive beamforming, and quantization
+error control scheme to enhance the inference accuracy. Exten-
+sive numerical experiments demonstrate the effectiveness and
+superiority of our proposed optimization algorithm compared to
+various baselines.
+I. INTRODUCTION
+A. Overview
+The fundamental purpose of future networks will evolve
+from delivering conventional human-centric communication
+services to enable a transformative era of connected intelli-
+gence [1]–[3]. This paradigm shift will empower an array of
+advanced intelligent services, spanning across diverse domains
+such as autonomous driving, remote healthcare, and smart
+city applications, which will be seamlessly accessible at the
+network edge [4]–[6]. The implementation of these intelligent
+services depends on the deployment of well-trained AI models
+and the utilization of their inference capability for making
+intelligent decisions, which gives rise to the technique of edge
+inference [7]–[12].
+Recently, considerable research efforts have been made
+for the efficient implementation of edge inference [13]–[18].
+Among others, the paradigm of edge-device collaborative
+inference is the most popular one. Specifically, edge-device
+collaborative inference divides an AI model into two parts.
+One part with a small size is deployed at an edge device
+Pengfei Zhang, Dingzhu Wen and Yuanming Shi are with the Network
+Intelligence Center, the School of Information Science and Technology,
+ShanghaiTech University, Shanghai 201210, China (e-mail: {zhangpf2022,
+wendzh, shiym}@shanghaitech.edu.cn), Corresponding author: Dingzhu Wen.
+Guangxu Zhu is with the Shenzhen Research Institute of Big Data,
+Shenzhen 518172, China (e-mail: gxzhu@sribd.cn).
+Qimei Chen is with the School of Electronic Information, Wuhan Univer-
+sity, Wuhan, 430072, China (e-mail: chenqimei@whu.edu.cn).
+Kaifeng Han is with China Academy of Information and Communications
+Technology, Beijing 100191, China. (emails: hankaifeng@caict.ac.cn).
+for feature extraction [12] using a method like principal
+component analysis (PCA). The other computation-intensive
+part is deployed at the edge server and receives the extracted
+feature elements from the edge device to complete the residual
+inference task. It avoids the direct transmission of high-
+dimensional raw data vectors and offloads most part of the AI
+model to the server and therefore enjoys the benefits of low
+communication and computation overhead as well as privacy
+preservation. The existing works on edge-device collaborative
+inference can be divided into two paradigms: single-device and
+multi-device paradigms. The former paradigm incurs narrow
+view observations due to a single device’s inherently limited
+sensing capability [17]–[23]. To tackle this issue, the multi-
+device paradigm has been explored in e.g. [24]–[27], where
+several views of sensory data obtained by multiple devices are
+collected and fused for inference.
+However, the studies on multi-device collaborative inference
+mainly aim at the cooperation mechanism between multiple
+devices and the corresponding transceiver design, while ig-
+noring the potential service capability of a single base station
+(BS). In fact, the devices at the cell edge may fail to access
+BS due to weak channel conditions in certain cases [28].
+The limited service coverage capability of BSs can be further
+amplified especially when device mobility is taken into consid-
+eration, making it challenging for devices to seamlessly par-
+ticipate in inference tasks. Moreover, the traffic produced by a
+massive number of devices may also overwhelm a single BS
+because it exceeds the carrying capacity of BS [29]. To address
+these limitations and guarantee the inference performance, this
+paper proposes a cloud radio access network (Cloud-RAN)
+[30] based inference architecture over a resource-constrained
+wireless network to support the efficient implementation of
+edge inference.
+B. Related Works and Motivations
+One main research focus on edge-device collaborative in-
+ference in the single-device context is to further alleviate
+the computation and communication overhead for enhancing
+certain performances like achieving ultra-low latency (see e.g.,
+[17], [18], [20]). Particularly, a split layer selection strategy
+is proposed for deep neural networks in [17] to balance the
+tradeoff between the communication and computation over-
+head on devices. Early-exist mechanisms are investigated in
+[18], [19]. The different parts of an AI model are progressively
+transmitted to the edge device until the accuracy of the current
+AI sub-model achieves the required performance. Besides,
+authors in [20] develop an efficient and flexible 2-step pruning
+framework, where unimportant convolution filters in deep neu-
+ral networks (DNNs) are removed iteratively, and a series of
+pruned models are generated in the training phase. In addition,
+arXiv:2404.06007v1  [cs.IT]  9 Apr 2024
+2
+other methods, including feature compression techniques (see
+e.g., [21], [22]) and progressive feature transmission [23], are
+also proposed.
+However, the sensing range of a single device is usually
+restricted, resulting in a feature that either focuses on a partial
+view with insufficient information for inference or is extracted
+from raw data prone to severe distortion. To overcome the
+limited sensing capability of individual device, multi-device
+schemes with the target of enhancing the inference perfor-
+mance were proposed in [24]–[26]. In [24], a distributed
+information bottleneck framework was applied to extract and
+encode features observed by multiple devices from different
+views of the same target. The local features of the same target
+that may occur in overlapping areas are captured by multiple
+devices at [25]. A novel multi-view radar sensing scheme was
+proposed in [26], where each device perceives the same wide
+range of the same target and the server receives aggregated
+feature vector by over-the-air computation (AirComp) for
+inference. Similar to the work in [26], [27] also assumes
+homogeneous sensing data and additionally takes the sensing
+process into consideration.
+The above-mentioned works on multi-device paradigm as-
+sume that all devices can access the network and be perfectly
+served by the BS, which is unreasonable especially when han-
+dling scenarios where devices face poor channel conditions or
+mobile traffic surges. As stated in [31], simply replicating BS
+will inevitably result in significant resource waste. Recently,
+there have been some works in related fields proposed that
+apply the Cloud-RAN framework to implement federated edge
+learning (FEEL) to mitigate the above challenges [31], [32].
+[31] models the global aggregation stage as a lossy distributed
+source coding problem. [32] minimizes the equivalent noise
+introduced by the FEEL communication stage through the joint
+design of precoding, quantization, and receive beamforming.
+Moreover, [31] and [32] both use the AirComp technique to
+receive the model update, which greatly improves communi-
+cation efficiency. Nonetheless, the current implementation of
+edge inference systems has not taken into account this flexible
+wireless access network architecture required to support multi-
+device deployment, which forms the main motivation of our
+study.
+In such an architecture, the BSs are replaced by low-cost
+and low-power remote radio heads (RRHs), all of which
+are connected to a centralized processor (CP) located in the
+baseband unit (BBU) pool through capacity-limited fronthaul
+links [30]. The baseband processing is migrated from RRHs to
+the cloud-computing based CP. RRHs are merely considered
+as relays with basic signal transmission functionality. As a
+result, the Cloud-RAN architecture allows the CP to jointly
+encode or decode user messages thus significantly extending
+the coverage area [33] and improving inference performance.
+However, limited fronthaul capacity between RRHs and CP
+also incurs undesirable quantization error [34]. To the best of
+our knowledge, this work makes the first attempt to apply the
+Cloud-RAN architecture to complete edge-device collaborative
+inference.
+On the other hand, as shown by [26], [27], [35], the design
+of edge inference should feature a task-oriented property. The
+Feature dimension 1
+Feature dimension 2
+Class 1
+Class 2
+Tolerant distortion (element 1)
+Tolerant distortion (element 2)
+Classifier
+Figure 1: The varying levels of distortion tolerance among different
+feature elements in classification tasks. The distortion level δ1 can
+cause incorrect inference on element 1 but not on element 2.
+traditional communication objective to achieve high through-
+put and low data distortion lacks the ability of distinguish-
+ing the feature elements with the same loads and distortion
+levels but with various importance levels to the inference
+performance. In reality, taking the classification task as an
+example, inference accuracy should be directly maximized as
+the primary design goal to ensure differential transmission
+of features. However, the instantaneous inference accuracy
+is unknown and lacks of a mathematical model. Recently,
+there have been some works in the edge inference community
+that attempt to tackle this problem using an approximate but
+tractable metric called discriminant gain for classification tasks
+[23], [26], [27]. Discriminant gain is derived based on the
+well-known Kullback-Leibler (KL) divergence and measures
+the discernibility of different classes in the feature space.
+For arbitrary two classes, a larger value of discriminant gain
+represents better separation of the two classes, leading to a
+higher achievable inference accuracy. For example, a simple
+classification task is shown in Fig. 1, where the feature
+vector has two feature dimensions. It can be observed that
+feature dimension 2 is more tolerant to distortion than feature
+dimension 1 in terms of getting correct inference results. In
+reality, inference accuracy should be directly maximized as a
+task goal to ensure the features However, how to apply this
+metric to the Cloud-RAN based edge inference framework
+still requires additional study, which forms the main technical
+contributions of our paper.
+C. Contributions
+In this paper, we propose a Cloud-RAN based edge infer-
+ence framework. The major contributions can be summarized
+as follows:
+• Cloud-RAN based Multi-device Collaborative Infer-
+ence System: We propose a Cloud-RAN architecture
+based multi-cell network to support multi-device collabo-
+rative edge inference system, where a CP serves many ge-
+ographically distributed devices through multiple RRHs
+to provide seamless connectivity service. The devices
+sense a source target from a same wide view to obtain
+noise-corrupted sensory data for extracting local feature
+vectors, which are further aggregated by each RRH using
+the technique of AirComp. Then, all RRHs quantize
+their aggregated signals and transmit the compressed
+3
+signals to the CP, where all received signals are further
+aggregated and input into a powerful AI model to finish
+the downstream inference task.
+• Task-oriented
+Design
+Principle: In the traditional
+Cloud-RAN based communication system design, most of
+the works focus on the goal of maximizing the achiev-
+able rate, ignoring the task behind the communication.
+However, in considered edge inference scenario, commu-
+nication should first serve the inference accuracy, and it
+is obviously not a wise choice to take achievable rate as
+the primary goal. To this end, this paper considers a task-
+oriented design metric, i.e., discriminant gain, which can
+measure the heterogeneous contribution of different fea-
+ture elements on inference accuracy. By employing this
+criterion, limited resources can be adaptively allocated
+to guarantee the most significant feature elements of the
+inference task can be well received at the CP, leading to
+an enhanced inference accuracy.
+• Joint Optimization of Quantization, Transmit Precod-
+ing, and Receive Beamforming: Different from existing
+work where the transmission in different time slots is sep-
+arately designed, the aggregation of all feature elements
+is jointly designed. This allows resource allocation among
+all feature elements, leading to an extra degree of freedom
+for enhancing the inference accuracy. To this end, a
+problem of joint quantization noise, transmit precoding
+and receive beamforming is formulated. To solve this in-
+tractable and non-convex problem, we first convert it into
+an equivalent problem via variable transformation. The
+equivalent problem then is split into two sub-problems,
+where one sub-problem is to jointly optimize the receive
+beamforming and the transmit precoding, and the other
+sub-problem jointly to optimize the quantization noise
+matrix and transmit precoding. An iterative algorithm is
+proposed to solve each sub-problem alternately, where
+successive convex approximation (SCA) techniques are
+applied to both sub-problems dealing with the same
+constraint term.
+• Performance Evaluation: We conduct extensive nu-
+merical experiments on a high-fidelity human motion
+dataset with two inference models, i.e., support vector
+machine (SVM) and multi-layer perception (MLP) neural
+network, respectively. The experiment results demonstrate
+the effectiveness of the proposed system architecture and
+optimization approach and also confirm that maximizing
+discriminant gain indeed improves inference accuracy.
+D. Organization and Notations
+The rest of this paper is organized as follows. Section II de-
+scribes the system model of Cloud-RAN based multi-devices
+collaborative inference. Section III formulates the problems
+with the goal of maximizing inference accuracy based on the
+discriminate gain, and simplifies the subsequent analysis by
+zero-forcing precoding. An alternating optimization approach
+is developed in Section IV to solve the formulated optimiza-
+tion problem. In Section V, extensive numerical experiments
+are presented to evaluate the performance of the proposed
+Table I: List of abbreviations
+Abbreviation
+Description
+Cloud-RAN
+Cloud radio access network
+BBU
+baseband unit pool
+CP
+Central Processor
+RRH
+Remote radio head
+BS
+Base station
+AirComp
+Over-the-air computation
+CSI
+Channel state information
+AWGN
+Additive white Gaussian noise
+FEEL
+federated edge learning
+DNN
+Deep neural network
+SVM
+support vector machine
+MLP
+multi-layer perception
+PCA
+Principal component analysis
+PDF
+probability density function
+SCA
+successive convex approximation
+KL divergence
+Kullback-Leibler divergence
+KKT condition
+Karush-Kuhn-Tucker condition
+methods. Finally, SectionVI concludes this paper. Besides,
+Table I lists some abbreviations used in the paper to facilitate
+subsequent smooth reading.
+The notations used in this paper are as follows. The com-
+plex and real numbers are denoted by C and R. The real
+and imaginary components of complex x are denoted by
+ℜand ℑ, respectively. The boldface upper-case letters and
+boldface lower-case letters represent the matrices and vec-
+tors, respectively. The superscripts (·)T and (·)H denotes the
+transpose and Hermitian operations, respectively. N(x; µ, Σ)
+and CN(x; µ, Σ) denote that the random variable x follows
+Gaussian distribution and complex Gaussian distribution with
+the mean µ and covariance Σ, respectively. E[·] is expectation
+operator. We use I and diag
+ {Qm}M
+m=1
+
+respectively denote
+the identity matrix and diagonal matrix with Qm on the
+diagonal. We let D to indicate the integer set {1, · · · , D}.
+For ease of understanding, some important notations and
+parameters are further summarized in Table II.
+II. SYSTEM MODEL
+A. Network and Sensing Model
+Consider a multi-cell Cloud-RAN to complete edge infer-
+ence tasks, where there is one CP, M multi-antenna RRHs,
+and K single-antenna edge devices. The RRHs lack individ-
+ual encoding/decoding capability and only have basic signal
+transmission and reception functions. Each RRH collects infor-
+mation from edge devices via wireless links and then forwards
+them to CP [34], [36]. The uplink channel gain between device
+k and RRH m is denoted as hk,m. In uplink transmission,
+we assume that each device can acquire perfect channel state
+information (CSI) between itself and all RRHs through uplink
+pilot signaling [32], [34]. Then the CP serves as a central
+coordinator, which is also assumed to have the ability to
+acquire the CSI of all involved links. All RRHs are connected
+to the CP through a noiseless finite-capacity fronthaul link,
+as shown in Fig.2. Let Cm denote the fronthaul capacity of
+the link between RRH m and the CP. The following overall
+capacity constraint should be satisfied [34],
+M
+X
+m=1
+Cm ≤C,
+(1)
+4
+Table II: Important Notations
+Notation
+Definition
+K
+Number of edge devices
+M
+Number of RRHs
+N
+Number of antennas for each RRH
+D
+Number of feature dimensions (time slots)
+L
+Number of Gaussian components (classes)
+µℓ
+Centroid of the ℓ-th class
+Σ
+Covariance of all classes
+Cm
+Fronthaul link capacity between RRH m and CP
+hk,m
+Uplink channel between device k and RRH m
+sk(d)
+Uplink transmit signal for device k in the d-th time slot
+bk(d)
+Uplink precoding scalar for device k in the d-th time slot
+qm(d)
+Uplink quantization noise for RRH m in the d-th time slot
+zm(d)
+Uplink additive white Gaussian noise (AWGN) for RRH m in the d-th time slot
+Qm
+Diagonal covariance matrix of qm(d) for RRH m
+md
+Receive beamforming vector in the d-th time slot
+ˆP
+Maximum uplink transmit power
+E
+Maximum uplink energy consumption
+Fronthaul Links
+RRH
+Device
+Waveform 
+Superposition
+Human Activity 
+Recognition
+Sensing Environment
+Sensing Signal
+Uplink Channels
+Fronthaul Links
+Central Processor
+Feature vector
+AI sub-model
+AI sub-model
+Cloud-RAN 
+Figure 2: AirComp-based Cloud-RAN network for edge inference.
+where C is the total capacity of all fronthaul links.
+To complete the edge inference task, each device observes
+the same source target in the same wide view (see e.g., [26])
+to obtain a distortion-corrupted version of the ground-true
+sensory data. Then, linear methods like PCA are adopted at
+each device to extract a local low-dimensional feature vector,
+which is also noise-corrupted [26], [27], [37]–[39]. Next, each
+RRH aggregates all feature vectors from all devices to form
+an intermediate feature vector, which is further quantized and
+forwarded to the CP via the fronthaul link. At the CP, all
+intermediate feature vectors are further aggregated to form a
+global estimate, which is used for finishing the downstream
+inference task.
+Specifically, the local noise-corrupted sensory data of device
+k is given by
+xk = x + ek,
+(2)
+where x ∈RS is ground-true sensory data, ek is the sensing
+distortion with the same dimension as the ground-true data.
+It is worth noting that wide-view sensing is adopted here,
+which can be achieved by scanning the sensing directions from
+angle to angle or conducting beamforming in a MIMO system
+[40]. According to [41], the sensing distortion vector follows
+Gaussian distributions with mean zero and covariance ε2
+kIk,
+i.e.,
+ek ∼N(0, ε2
+kI),
+(3)
+where ε2
+k is the sensing noise power.
+B. Feature Generation and Distribution
+1) Feature Extraction: In this work, the method of PCA
+is used for feature extraction. The detailed procedure is listed
+below.
+• In the training stage, the training dataset is used to
+calculate a principal eigen-space, which is denoted as U
+and satisfies UTU = I, via the eigen-decomposition of
+the sum co-variance of all data samples. Then, the unitary
+matrix U is broadcast to all RRHs and edge devices.
+• In the inference stage, all local sensory data are projected
+to the principal eigenspace using U for feature extraction.
+Specifically, the feature vector extracted at device K can be
+written as
+˜xk = UTxk = ˜x + ˜ek = UTx + UTek, ∀k ∈K.
+(4)
+5
+Pre-Coding
+Feature
+extractor
+Device 1
+Pre-Coding
+Feature
+extractor
+Device 2
+Pre-Coding
+Feature
+extractor
+Device 𝐾𝐾
+Edge Devices
+Quantization
+Quantization
+Quantization
+Channel
+RRH 
+RRH 1
+RRH M
+RRH 2
+Central
+Processor
+Figure 3: Illustration of Cloud-RAN system with AirComp.
+where ˜x = UTx is the ground-true feature vector, ˜ek = UTek
+is projected noise vector of edge devices k. By leveraging
+the orthogonality of unitary matrix U, it can be easily shown
+that the distribution of the projected noise vector remains
+unchanged, i.e.,
+˜ek ∼N(0, ε2
+kI).
+(5)
+2) Feature Distribution: Consider a classification task with
+L classes. Following the same settings in [23], [26], [27], we
+assume that the ground-true feature vector ˜x follows a mixture
+of Gaussian distributions with L Gaussian components. Its
+probability density function (PDF) is given as
+f(˜x) = 1
+L
+L
+X
+ℓ=1
+N(µℓ, Σ),
+(6)
+where the ℓ-th Gaussian component N(µℓ, Σ) corresponds
+to the ℓ-th class, µℓ∈RD is the centroid of the ℓ-th class,
+D is the dimension of the extracted feature vector, and Σ ∈
+RD×D is a covariance matrix and is same for all classes. In
+practice, the raw data or the intermediate feature maps (e.g.,
+the output of a convolutional layer) may not follow a Gaussian
+mixture model. In this case, a feasible strategy is to fit the
+data or the feature map into the distribution of the Gaussian
+mixture. The effectiveness of this approach has been validated
+through extensive experiments in existing literature [23], [26],
+[27], [37], [42], [43]. Since the method of PCA is applied,
+different elements of the feature vector ˜x are independent,
+i.e., the covariance matrix is diagonal and is denoted as Σ =
+diag{σ2
+1, σ2
+2, ..., σ2
+D}.
+Then, by substituting the distributions of the ground-true
+feature vector ˜x and the sensing distortion ˜ek in (6) and (5)
+into the local feature vector ˜xk in (4), we have the following
+lemma:
+Lemma 1. The distribution of the local feature vector ˜xk can
+be derived as
+f(˜xk) = 1
+L
+L
+X
+ℓ=1
+N(µℓ, Σ + ε2
+kI), ∀k ∈K.
+(7)
+Proof. Please see Appendix A.
+C. Communication Model
+To collect all local feature vectors at the CP, the technique
+of AirComp is adopted to allow all devices transmitting their
+local feature vectors to the RRHs via a shared multiple access
+channel, which can significantly enhance the communication
+efficiency [44]–[46]. In wireless communication, the Aircomp
+technique is especially suitable for such a scenario where
+the receiver only focuses on the fusion computation result of
+massive data from multiple data sources, but does not care
+about the specific value of each individual data source [47].
+Some examples of computable fusion functions via AirComp
+can be found in [48]. As a result, each RRH directly receives
+an intermediate aggregated analog feature vector, which is
+further quantized and transmitted to the CP through the
+assigned fronthaul links, as shown in Fig. 3. The detailed
+procedure is described as follows.
+1) Over-the-Air Aggregation at RRHs: Since all edge de-
+vices are equipped with a single antenna. In each time slot, one
+dimension of the feature vector is transmitted via AirComp.
+The whole feature vector with D dimensions is transmitted
+sequentially over D time slots. Without loss of generality,
+during the overall D time slots, the channel is assumed to be
+static, as the time duration of transmitting one symbol is far
+less than the channel coherence time [45]. Under this setting,
+consider an arbitrary time slot d, the d-th dimension of the
+feature vector is transmitted by all devices via AirComp. Let
+sk(d) = ˜xk(d) denote the transmit signal in the d-th time slot,
+bk(d) ∈C denote the transmit precoding scalar of edge devices
+k at the time slot d for the power control. At an arbitrary RRH
+m, the received signal can be derived as
+ym(d) =
+K
+X
+k=1
+hk,mbk(d)sk(d) + zm(d), ∀d ∈D,
+(8)
+where hk,m ∈CN is the channel coefficient between device
+k and RRH m, N denotes the number of antennas on the
+RRH, and zm(d) ∼CN(0, σ2
+zI) denotes the additive white
+Gaussian noise (AWGN) for RRH m. Herein each device’s
+transmit power should not be beyond its maximum transmit
+6
+power, leading to the following transmit power constraint:
+E
+bk(d)sk(d)2
+= |bk(d)|2 E
+
+sk(d)2
+≤Pk, ∀k ∈K, ∀d ∈D.
+(9)
+Besides, the variance of the transmit signal sk(d), i.e.,
+E
+
+s2
+k(d)
+
+is known by the CP as a prior information (e.g.,
+estimated from the offline data samples). Therefore, the power
+constraint in (9) can be rewritten as
+|bk(d)|2 ≤ˆPk, ∀k ∈K, ∀d ∈D,
+(10)
+where ˆPk = Pk/E
+
+s2
+k(d)
+
+is the maximum transmit precoding
+power. In addition, we also impose a total energy constraint on
+the data transmission process, that is, the energy consumption
+of all edge devices in all time slots should satisfy
+D
+X
+d=1
+K
+X
+k=1
+ E
+bk(d)s2
+k(d)
+
+· T
+
+=
+D
+X
+d=1
+K
+X
+k=1
+
+|bk(d)|2 E
+
+s2
+k(d)
+
+· T
+
+≤E,
+(11)
+where E denote the total energy constraint, T is time duration
+of each AirComp aggregation.
+2) Quantization of Intermediate Feature Vectors: The re-
+ceived aggregated intermediate feature vectors {ym} are quan-
+tized at the RRHs before being forwarded to the CP through
+the capacity-limited fronthaul links. Each RRH performs the
+signal quantization independently. The influence of quantiza-
+tion on the signal can be modeled as a Gaussian test channel
+with the unquantized signals as the input and quantized signals
+as the output [49]. Specifically, the d-the element of the
+quantized intermediate feature vector at RRH m can be written
+as
+ˆym(d) = ym(d) + qm(d), ∀m ∈M, ∀d ∈D,
+(12)
+where qm(d) ∈CN ∼CN (0, Qm) denotes the quantization
+noise and Qm is the diagonal covariance matrix of the
+quantization noise for RRH m due to independent quantization
+scheme. Based on the rate-distortion theory [50], the fronthaul
+rates of M RRHs at the d-th time slot should satisfy
+M
+X
+m=1
+Cm(d) =
+M
+X
+m=1
+I (ym(d); ˆym(d))
+=
+M
+X
+m=1
+log
+PK
+k=1 |bk(d)|2 hk,m(hk,m)H + σ2
+zI + Qm
+
+|Qm|
+≤
+M
+X
+m=1
+log
+ ˆP PK
+k=1 hk,m(hk,m)H + σ2
+zI + Qm
+
+|Qm|
+= log
+ ˆP PK
+k=1 hk(hk)H + σ2
+zI + Q
+
+|Q|
+≤C,
+(13)
+where ˆP is maximum transmit power of all edge devices, hk =
+[hT
+k,1, · · · , hT
+k,M]T is concatenated channel vector and Q =
+diag{Q1, · · · , Qm} is defined as the uplink covariance matrix.
+3) Global Feature Aggregation at the CP: The d-th element
+of the received feature vector at the CP from all RRHs is given
+by
+ˆy(d) =
+ˆyT
+1 (d), · · · , ˆyT
+M(d)
+T
+=
+K
+X
+k=1
+hkbk(d)sk(d) + z(d) + q(d), ∀d ∈D,
+(14)
+where
+z(d)
+=
+[zT
+1 (d), · · · , zT
+M(d)]T,
+q(d)
+=
+[qT
+1 (d), · · · , qT
+M(d)]T.
+To
+derive
+a
+global
+estimate
+of
+the d-th element s(d), receive beamforming like in [32]
+is first performed, followed by taking the real part of the
+processed signal as
+ˆs(d) = R
+ mH
+d ˆy(d)
+
+= R
+ 
+mH
+d
+K
+X
+k=1
+hkbk(d)sk(d)
+!
++ n(d),
+(15)
+where
+ˆs(d)
+is
+the
+global
+estimate,
+md
+=
+[mT
+d,1, · · · , mT
+d,M]T
+∈CMN is the receive beamforming
+vector at time slot d, n(d) = R
+ mH
+d (z(d) + q(d))
+
+is the
+equivalent uplink noise. Given md, the equivalent uplink
+noise is distributed as n(d) ∼N(0, σ2) with the variance
+σ2 = 1
+2mH
+d
+ σ2
+zI + Q
+
+md.
+(16)
+D. Discriminant Gain
+As mentioned before, edge inference features task-oriented
+property as shown in Fig. 1, thereby should directly adopt
+the inference accuracy as the design objective. However, the
+instantaneous inference accuracy is unknown at the design
+stage as the input feature is not available on the server.
+To tackle this problem, an approximate but tractable metric
+proposed in [23], called discriminant gain, is adopted as the
+surrogate for classification tasks. It is derived based on the
+well-known KL divergence [51] and measures the differen-
+tiability of different classes in the feature space. Specifically,
+consider a classification task with L classes, whose ground-
+true feature distribution is defined in (6). For an arbitrary pair
+of classes, say the ℓ-th and ℓ
+′-th classes, the discriminant gain
+is given by
+Gℓ,ℓ′(˜x) =
+DKL[N(µℓ, Σ) ∥N(µℓ′, Σ)]
++ DKL[N(µℓ′, Σ) ∥N(µℓ, Σ)]
+=
+(µℓ−µℓ′)TΣ−1(µℓ−µℓ′)
+=
+D
+X
+d=1
+Gℓ,ℓ′(˜x(d)),
+∀(ℓ, ℓ′),
+(17)
+where x(d) is the d-th element of ˜x and Gℓ,ℓ′(x(d)) is given
+as
+Gℓ,ℓ′ (˜x(d)) = (µℓ(d) −µℓ′(d))2
+σ2
+d
+, ∀d ∈D.
+(18)
+The pair-wise discriminant gain in (17) measures the distance
+between the class ℓand class ℓ
+′ normalized by their covari-
+ance. It characterizes the ability of feature vector ˜x to dis-
+tinguish the two classes. In other words, a larger discriminant
+gain means that the classes are well separated, and thus leading
+to a higher achievable inference accuracy. Besides, from
+(18), it is observed different feature elements have different
+discriminant gains, and thus have heterogeneous contributions
+on the inference accuracy. To this end, it’s desirable to allocate
+7
+more resources (e.g., power) to make the elements with greater
+discriminant gains accurately received, which is one of the
+work’s motivations.
+Then, following [23], the overall discriminant gain is de-
+fined as the average of all pair-wise discriminant gains, given
+as
+G(˜x) =
+2
+L(L −1)
+L
+X
+ℓ=1
+X
+ℓ<ℓ′
+Gℓ,ℓ′ (x)
+=
+2
+L(L −1)
+L
+X
+ℓ=1
+X
+ℓ<ℓ′
+D
+X
+d=1
+Gℓ,ℓ′(x(d))
+=
+D
+X
+d=1
+G(˜x(d)),
+(19)
+where G(˜x(d)) is the discriminant gain of the d-th feature
+elements, given as
+G(˜x(d)) =
+2
+L(L −1)
+L
+X
+ℓ=1
+X
+ℓ<ℓ′
+(µℓ(d) −µℓ′(d))2
+σ2
+d
+, ∀d ∈D.
+(20)
+III. PROBLEM FORMULATION AND SIMPLIFICATION
+In this section, we formulated the problem of maximizing
+discriminant gain under the transmission power and energy
+constraints of edge devices, as well as the capacity constraint
+of the fronthaul link between RRH and CP. Subsequently, the
+transmit side employed a well-known zero-forcing precoding
+design to derive the distribution of the received features,
+thereby obtaining a closed-form expression for the discrim-
+inant gain in the classification task. This closed-form expres-
+sion enables the formulated problem to be solved efficiently.
+A. Problem Formulation
+For notation simplification, we first define the overall beam-
+forming matrix and scaling matrix as
+M = {md, ∀d ∈D}, B = {bk(d), ∀k ∈K, ∀d ∈D}.
+(21)
+Following the task-oriented principle, we aim at maximizing
+the inference accuracy measured by the overall discriminant
+gain of the received feature vector at the CP by jointly
+designing transmit precoding B, on-RRH quantization Q, and
+on-server beamforming M, as
+max
+B,Q,M G =
+D
+X
+d=1
+G (ˆsk(d)) ,
+(22)
+where ˆsk(d) is the d-th element of the estimated global feature
+vector received at the CP defined in (15). There are three
+kinds of constraints, i.e., the transmit power constraints of each
+device as shown in (10), the total transmit energy constraint of
+each device over all times slots as shown in (11), and the total
+fronthaul capacity constraint over all RRHs as shown in (13).
+Although at first glance the objective function has nothing to
+do with the optimization variables B, Q, M, the optimization
+variables influence the objective function by determining the
+statistical parameters of the estimated global features. In
+summary, the overall discriminant gain maximization problem
+is formulated as
+P: max
+B,Q,M G =
+D
+X
+d=1
+G (ˆsk(d))
+s.t. |bk(d)|2 ≤ˆPk, ∀k ∈K, ∀d ∈D,
+(23a)
+D
+X
+d=1
+K
+X
+k=1
+
+|bk(d)|2 E
+
+s2
+k(d)
+
+· T
+
+≤E,
+(23b)
+log
+ ˆP PK
+k=1 hk(hk)H + σ2
+zI + Q
+
+|Q|
+≤C.(23c)
+The difficulty in solving the above problem arises from
+the intractability of the objective function. The derivation of
+the objective function relies on the distribution of feature
+elements, which is non-trivial to deal with since it involves
+the coupling process of precoding, channel, quantization and
+receive beamforming. To tackle the challenge, in the following,
+we will first apply the widely adopted zero-forcing precoding
+(see, e.g., [52]) design to simplify the problem and thus
+facilitate the design of subsequent algorithms.
+B. Problem Simplification via Zero-Forcing Precoding
+Without loss of generality, the zero-forcing precoding is
+adopted to simplify P. Specifically, for each feature dimen-
+sion d, it is given by
+mH
+d hkbk(d) = ck(d), ∀k ∈K, ∀d ∈D,
+(24)
+where we define C = {ck(d), ∀k ∈K, ∀d ∈D} with real-
+valued element ck(d) ≥0 representing the receive signal
+strength from device k. Accordingly, the transmit scalar at
+device k can be derived as
+bk(d) = ck(d)(mH
+d hk)H
+mH
+d hk
+2
+, ∀k ∈K, ∀d ∈D.
+(25)
+By substituting the feature vector in (4), the transmission scalar
+above into ˆs(d) in (15), it can be derived as
+ˆs(d) =
+K
+X
+k=1
+ck(d)sk(d) + n(d)
+=
+K
+X
+k=1
+ck(d)˜x(d) +
+K
+X
+k=1
+ck(d)˜ek(d) + n(d).
+(26)
+From (26), one can observe that the received feature vector
+is simplified by using the zero-forcing precoding scheme to
+cancel the interference among different feature elements. This
+scheme is shown to be effective and is near-optimal when the
+overall distortion level is low, and is widely adopted in existing
+designs [52]–[54]. Furthermore, as shown in (26), the zero-
+forcing precoding scheme allows heterogeneous receive power
+levels of different feature elements and from different devices.
+This adaptive power allocation property can provide an extra
+degree of freedom for enhancing the inference accuracy.
+Based on the simplified form of the received feature vector
+in (26), its distribution can be derived as shown in the
+following lemma.
+8
+Lemma 2. The distribution of the aggregation signal ˆs(d) is
+given by
+ˆs(d) ∼1
+L
+L
+X
+ℓ=1
+N
+ ˆµℓ(d), ˆσ2
+d
+
+, ∀d ∈D,
+(27)
+where the means {ˆµℓ(d)} and the variance {ˆσ2
+d} are
+
+
+
+
+
+
+
+
+
+
+
+
+
+ˆµℓ(d) =
+K
+X
+k=1
+ck(d)µℓ(d),
+ˆσ2
+d =
+ K
+X
+k=1
+ck(d)
+!2
+σ2
+d +
+K
+X
+k=1
+c2
+k(d)ε2
+k + σ2.
+(28)
+Proof. Please see Appendix B.
+It follows that the discriminant gain of the received feature
+can be derived as
+G =
+D
+X
+d=1
+G (ˆsk(d)) =
+2
+L(L −1)
+D
+X
+d=1
+L
+X
+ℓ=1
+X
+ℓ<ℓ′
+(ˆµℓ(d) −ˆµℓ′(d))2
+ˆσ2
+d
+.
+(29)
+Moreover, the zero-forcing precoding also simplifies the trans-
+mit power constraint of each device in the following form.
+c2
+k(d)
+ˆPk
+≤
+mH
+d hk
+2 , ∀k ∈K, ∀d ∈D.
+(30)
+Likewise, by substituting the transmission scalar in (25) into
+the energy constraints of all devices, they can be derived as
+D
+X
+d=1
+K
+X
+k=1
+c2
+k(d)
+mH
+d hk
+2 · E
+
+s2
+k(d)
+
+≤E
+T .
+(31)
+In summary, by applying the zero-forcing precoding, the
+original discriminant gain maximization problem P can be
+simplified as
+P1: max
+C,M,Q G =
+2
+L(L −1)
+D
+X
+d=1
+L
+X
+ℓ=1
+X
+ℓ<ℓ′
+(ˆµℓ(d) −ˆµℓ′(d))2
+ˆσ2
+d
+s.t.
+c2
+k(d)
+ˆPk
+≤
+mH
+d hk
+2 , ∀k ∈K, ∀d ∈D,
+(32a)
+D
+X
+d=1
+K
+X
+k=1
+c2
+k(d)
+mH
+d hk
+2 · E
+
+s2
+k(d)
+
+≤E
+T ,
+(32b)
+log
+ ˆP PK
+k=1 hk(hk)H + σ2
+zI + Q
+
+|Q|
+≤C. (32c)
+The problem in P1 is still non-convex due to the non-
+convexity of the objective function and the long-term energy
+constraints in terms of ck(d) and md. In the next section, we
+will illustrate how the simplified problem can be efficiently
+solved.
+IV. ALGORITHM DEVELOPMENT
+In this section, we developed an efficient algorithm to
+solve the simplified problem. By applying some variable
+transformations, the simplified problem is transformed into
+an equivalent form, which allows us to obtain a sub-optimal
+solution using successive convex approximation (SCA) and
+alternating optimization techniques. Besides, the convergence
+analysis of the algorithm is also provided at the end.
+A. Variables Transformation
+To simplify problem P1, we introduce auxiliary variables
+A = {α(d), · · · , α(d)} with α(d) representing the average
+discriminant gain on all class pairs of the d-th feature element,
+which can be given as
+α(d) =
+2
+L(L −1)
+L
+X
+ℓ=1
+X
+ℓ<ℓ′
+(ˆµℓ(d) −ˆµℓ′(d))2
+ˆσ2
+d
+, ∀d ∈D.
+(33)
+By substituting ˆµℓ(d) and ˆσ2
+d in (28) into the constraint (33),
+it can be derived as
+Λ({ck(d)}, {md}, Q) = Γ1(α(d), {ck(d)}),
+(34)
+where
+Λ({ck(d)}, md, Q) =
+ K
+P
+k=1
+ck(d)
+2
+σ2
+d +
+K
+P
+k=1
+c2
+k(d)ε2
+k + 1
+2mH
+d
+ σ2
+zI + Q
+
+md
+2
+L(L−1)
+L
+P
+ℓ=1
+P
+ℓ<ℓ′ (µℓ(d) −µℓ′(d))2
+,
+Γ1(α(d), {ck(d)}) =
+ K
+P
+k=1
+ck(d)
+2
+α(d)
+, ∀d ∈D.
+(35)
+Next, we can extend the feasible region of the equality
+constraint (34) as below while keeping the same optimal
+solution to P1, which is shown in Lemma 3.
+Λ({ck(d)}, {md}, Q) ≤Γ1(α(d), {ck(d)}).
+(36)
+Lemma 3. A new problem P′
+1 which extends the feasible
+region of (34) into (36) and remaining the same objective
+function and other constraints reaches the same optimal
+solution as P1.
+Proof. Please see Appendix C.
+Nevertheless, the simplified problem is still very diffi-
+cult to solve due to the high couple of variables across
+multiple time slots in the constraints (32b). To make this
+problem feasible, we further introduce auxiliary variables
+B = [β1,1, β1,2, · · · , βk,d]T as upper bound such that the
+following inequality holds1
+c2
+k(d)
+mH
+d hk
+2 ≤βk,d, ∀k ∈K, ∀d ∈D,
+(37)
+Lemma 4. Based on the defined auxiliary variables, the
+energy constraint term can equivalently be written as
+c2
+k(d)
+βk,d
+≤
+mH
+d hk
+2 , ∀k ∈K, ∀d ∈D,
+(38a)
+D
+X
+d=1
+K
+X
+k=1
+βk,d ≤E.
+(38b)
+Proof. Please see Appendix D.
+Therefore, problem (32) is further reduced to
+1The term E[s2
+k(d)] is omitted just as ˆPk does.
+9
+P2: max
+A,B,C
+M,Q
+G =
+D
+X
+d=1
+α(d)
+s.t.
+c2
+k(d)
+ˆPk
+≤
+mH
+d hk
+2 , ∀k ∈K, ∀d ∈D,
+(39a)
+c2
+k(d)
+βk,d
+≤
+mH
+d hk
+2 , ∀k ∈K, ∀d ∈D,
+(39b)
+D
+X
+d=1
+K
+X
+k=1
+βk,d ≤E,
+(39c)
+log
+ ˆP PK
+k=1 hk(hk)H + σ2
+zI + Q
+
+|Q|
+≤C, (39d)
+Λ({ck(d)}, {md}, Q) ≤Γ1(α(d), {ck(d)}),
+∀d ∈D.
+(39e)
+B. Alternating Optimization Approach
+In this part, we shall propose an alternating optimization
+approach to solve problem (39) for obtaining a suboptimal
+solution. Specifically, the problem can be split into two
+subproblems to be solved iteratively. One subproblem fixes
+the quantization matrix Q and jointly optimizes the transmit
+precoding matrix C and receive beamforming matrix M, while
+the other fixes other variables and optimizes the quantization
+matrix Q. The proposed algorithm is summarized in Algorithm
+1.
+1) Subproblem 1: With fixed Q, problem (39) is reduced
+to the following problem:
+P2.1: max
+A,B
+C,M
+G =
+D
+X
+d=1
+α(d)
+s.t.
+c2
+k(d)
+ˆPk
+≤
+mH
+d hk
+2 , ∀k ∈K, ∀d ∈D,
+(40a)
+c2
+k(d)
+βk,d
+≤
+mH
+d hk
+2 , ∀k ∈K, ∀d ∈D,
+(40b)
+D
+X
+d=1
+K
+X
+k=1
+βk,d ≤E,
+(40c)
+Λ({ck(d)}, {md}, Q) ≤Γ1(α(d), {ck(d)}),
+∀d ∈D. (40d)
+Although the objective function is convex, it is still chal-
+lenging to solve problem (40) due to the non-convex con-
+straints. In general, there is no standard method for solving
+such non-convex optimization problems optimally. Herein we
+adopt the SCA technique to solve problem (40). To apply the
+SCA approach, we convert problem (40) from the complex
+domain to the real domain with the following variables:
+˜md =
+
+ℜ(md)T, ℑ(md)TT , ∀d ∈D,
+(41a)
+˜Hk =
+ℜ(hkhH
+k )
+−ℑ(hkhH
+k )
+ℑ(hkhH
+k )
+ℜ(hkhH
+k )
+
+, ∀k ∈K,
+(41b)
+˜Q =
+ℜ( ˜Q)
+−ℑ( ˜Q)
+ℑ( ˜Q)
+ℜ( ˜Q)
+
+.
+(41c)
+Algorithm 1 Proposed Algorithm for Solving Problem P
+Input: Initial points A[0], B[0],C[0], M[0], Q[0] and solution
+precision ϵ.
+1: Set t = 0.
+2: repeat
+3:
+Solving problem (47) for given Q[t], and denote the up-
+dating solution as {A[t+1/2], B[t+1], C[t+1], M[t+1]};
+4:
+Solving problem (48) for given C[t+1], M[t+1], and
+denote the updating solution as {A[t+1], Q[t+1]};
+5:
+Compute discirminant gain G;
+6:
+Set t = t + 1;
+7: until the increase of the discriminant gain is below the
+given threshold ϵ.
+Output: A, B, C, M and Q.
+The problem (40) can be reformulated as follows:
+max
+A,B
+C, ˜
+M
+G =
+D
+X
+d=1
+α(d)
+s.t.
+c2
+k(d)
+ˆPk
+≤˜mT
+d ˜Hk ˜md, ∀k ∈K, ∀d ∈D,
+(42a)
+c2
+k(d)
+βk,d
+≤˜mT
+d ˜Hk ˜md, ∀k ∈K, ∀d ∈D,
+(42b)
+D
+X
+d=1
+K
+X
+k=1
+βk,d ≤E,
+(42c)
+Λ({ck(d)}, { ˜md}, Q) ≤Γ1(α(d), {ck(d)}),
+∀d ∈D.(42d)
+Next we also define
+Γ2( ˜md) = ˜mT
+d ˜Hk ˜md, ∀k ∈K, ∀d ∈D.
+(43)
+and then the following lemma is obtained.
+Lemma 5. Given the reference point A[t], C[t], ˜M[t] in the t-
+th iteration, the function Γ1(α(d), {ck(d)}), Γ2( ˜md) is lower
+bounded by their respective first-order Taylor expansion, i.e.,
+Γ1(α(d), {ck(d)}) ≥ˆΓ1(α[t](d), {c[t]
+k })
+= Γ1(α[t](d), {c[t]
+k }) + ∂Γ1(α[t](d), {c[t]
+k })
+∂α(d)
+(α(d) −α[t](d))
++
+K
+X
+k=1
+∂Γ1(α[t](d), {c[t]
+k })
+∂ck(d)
+(ck(d) −c[t]
+k (d)), ∀d ∈D,
+(44)
+where
+∂Γ1(α[t](d), {c[t]
+k })
+∂α(d)
+= −
+ 
+K
+P
+k=1
+c[t]
+k (d)
+α[t](d)
+!2
+, ∀d ∈D,
+∂Γ1(α[t](d), {c[t]
+k })
+∂ck(d)
+=
+2
+K
+P
+k=1
+c[t]
+k (d)
+α[t](d)
+, ∀d ∈D.
+(45)
+10
+Γ2( ˜md) ≥ˆΓ2( ˜m[t]
+d )
+= Γ2( ˜m[t]
+d ) + ∂Γ2( ˜md)
+∂˜md
+( ˜md −˜m[t]
+d )
+= (2 ˜Hk ˜m[t]
+d )T ˜md −( ˜m[t]
+d )T ˜Hk ˜m[t]
+d , ∀k ∈K, ∀d ∈D.
+(46)
+With any given local point {A[t], C[t], ˜M[t]} as well as the
+lower bounds, problem (42) is approximated as the following
+problem in (47), whose feasible region is a subset of the
+problem in (42).
+max
+A,B
+C, ˜
+M
+G =
+D
+X
+d=1
+α(d)
+s.t.
+c2
+k(d)
+ˆPk
+≤ˆΓ2( ˜m[t]
+d ), ∀k ∈K, ∀d ∈D,
+(47a)
+c2
+k(d)
+βk,d
+≤ˆΓ2( ˜m[t]
+d ), ∀k ∈K, ∀d ∈D,
+(47b)
+D
+X
+d=1
+K
+X
+k=1
+βk,d ≤E,
+(47c)
+Λ({ck(d)}, {md}, Q) ≤ˆΓ1(α[t](d), {c[t]
+k }),
+∀d ∈D.
+(47d)
+As a result, this problem is convex, which can be efficiently
+solved by using convex optimization tools, e.g., CVX [55].
+2) Subproblem 2: Next we fix transmit precoding matrix
+C and the receive beamforming matrix M to optimize the
+quantization noise matrix, then problem (39) is reduced to the
+following problem:
+P2,2: max
+A,Q G =
+D
+X
+d=1
+α(d)
+s.t. log
+ ˆP PK
+k=1 hk(hk)H + σ2
+zI + Q
+
+|Q|
+≤C, (48a)
+Λ({ck(d)}, {md}, Q) ≤Γ1(α(d), {ck(d)}),
+∀d ∈D. (48b)
+It is not hard to verify that all constraints in (48) are convex
+with respect to Q [34]. For auxiliary variables A, we apply
+similar SCA technique to Γ1(α(d), {ck(d)}) but Taylor expan-
+sion is only done at A. Therefore, this problem also becomes
+convex.
+C. Complexity and Convergence Analysis
+As the complexity of alternating optimization is difficult
+to achieve, the complexity of solving the subproblem in each
+iteration is analyzed. The complexity of the (47) subproblem
+is bounded by O((2K +MN +1)3D3), where (2K +MN +
+1)D is the number of variables. The complexity of the (48)
+subproblem is given by O((MN + D)3), where MN + D is
+the number of variables.
+Based on [56], it can be proved that the solutions of
+problems (47) and (48) will eventually converge to a sta-
+tionary point that satisfies the Karush-Kuhn-Tucker (KKT)
+conditions. Similar conclusions are also derived in those
+works based on SCA and alternating optimization [57], [58].
+The complete proof process is omitted here due to space
+limitation. Next, we focus on the convergence of alternating
+optimization. We denote G(A, B, C, M, Q) as the value of
+the objective function in problem (39) for a feasible solution
+{A, B, C, M, Q}. As shown in step 4 of Algorithm 1, a feasi-
+ble solution of problem (48) (i.e., {A[t], B[t], C[t], M[t], Q[t]})
+is also feasible to problem (47). The reasons are as follows.
+In problem (48), only the auxiliary variable A and quanti-
+zation noise matrix Q are optimized with constraint (39e)
+still being satisfied. Besides, for the optimized precoding C
+and beamforming matrix M of problem (47), the remaining
+constraints as well as the constraint in (39e) also hold, such
+that a feasible solution of problem (48) is always feasible
+for problem (47). We denote {A[t], B[t], C[t], M[t], Q[t]} and
+{A[t+1], B[t+1], C[t+1], M[t+1], Q[t+1]} as a feasible solution
+of problem (39) at the t-th and (t + 1)-th iterations, respec-
+tively.
+Then, for step 3 of Algorithm 1, problem (47) is convex
+under given Q[t], solving which leads to a non-decreasing
+value of the objective function, i.e.,
+G(A[t], B[t], C[t], M[t], Q[t]) ≤
+G(A[t+1/2], B[t+1], C[t+1], M[t+1], Q[t]),
+(49)
+where {A[t+1/2], B[t+1], C[t+1], M[t+1]} is the solution ob-
+tained by solving problem (47) using convex approximation
+technique. Similarly, for given C[t+1] and M[t+1] as shown in
+step 4 of Algorithm 1, the solution {A[t+1], Q[t+1]} obtained
+on problem (48) will also not reduce the value of the objective
+function, thus we have
+G(A[t+1/2], B[t+1], C[t+1], M[t+1], Q[t]) ≤
+G(A[t+1], B[t+1], C[t+1], M[t+1], Q[t+1]).
+(50)
+Based on (49) and (50), we further obtain
+G(A[t+1], B[t+1], C[t+1], M[t+1], Q[t+1]) ≥
+G(A[t], B[t], C[t], M[t], Q[t]),
+(51)
+which shows that the objective value of problem (39) is always
+increasing over iterations. Therefore, the proposed algorithm
+converges. This thus completes the proof.
+V. NUMERICAL RESULTS
+In this section, we evaluate the performance of the proposed
+AirComp-based edge inference system over Cloud-RAN.
+A. Experiment Settings
+1) Network Settings: We consider a Cloud-RAN network
+with K = 20 single-antenna devices and M = 4 RRHs.
+The number of antennas will be stated later. The devices
+and RRHs are both randomly and independently located in a
+circular area with an inner radius of 100m and an outer radius
+of 500m. The channel is modeled as the small-scale fading
+coefficients multiplied by the square root of the path loss, i.e.,
+hk,m = 10−pl(d)/20sk,m, where pl(d) is the path loss in dB
+given as 30.6 + 36.7 log10(d) and d (in meter) is the distance
+between the device k and RRH m. The small-scale fading
+coefficients {sk,m} are assumed to follow the standard com-
+plex Gaussian distribution, i.e., sk,m ∼CN(0, I), ∀(k, m).
+11
+The power spectral density of the background noise at each
+RRH is set as −169 dBm/Hz and the noise figure is 7 dB. All
+numerical results are averaged over 50 trails.
+2) Inference Task: We perform two inference tasks, one on
+the human motion dataset [59] and the other on the Fashion
+MNIST dataset [60]. The human motion dataset contains
+6400 training samples and 1600 testing samples of 4 different
+human motions, i.e., child walking, child pacing, adult pacing
+and adult walking. The heights of children and adults are
+assumed to be uniformly distributed in the interval [0.9m,
+1.2m] and [1.6m, 1.9m], respectively. The speed of standing,
+walking, and pacing are 0 m/s, 0.5H m/s, and 0.25H m/s,
+respectively, where H is the height value. The heading of the
+moving human is set to be uniformly distributed in [−180◦,
+180◦]. In the human motion dataset, each edge device transmits
+the frequency-modulated continuous-wave (FMCW) consisting
+of multiple up-ramp chirps for sensing. The reflected echo
+signals are sampled and arranged into a two-dimensional data
+matrix that contains the motion information of the interesting
+target polluted by the ground clutter and noise. The obtained
+data matrix is applied to a singular value decomposition (SVD)
+based linear filter for clutter elimination and is flattened into
+a 1520-dimensional vector. The Fashion MNIST dataset com-
+prises 60, 000 training images and 10, 000 testing images with
+10 different fashion products such as T-shirts and Trousers.
+3) Inference Model: Two commonly used AI models, i.e.,
+SVM and MLP neural networks are considered for the infer-
+ence task. In the training process, the human motion dataset
+and Fashion MNIST dataset retain 12 and 50 principal compo-
+nents respectively, which also determines the input dimension
+of SVM and MLP. It is sufficient since the proportion of
+variance contributed by the retained principal components
+accounts for more than 70% [61]. The one-vs-one strategy
+is employed in SVM, where a unique classifier is trained
+for each different pair of labels. This results in 6 and 45
+binary classifiers for the human motion and Fashion MNIST
+datasets, respectively. Each classifier uses hinge loss as the
+loss function and the sequential minimal optimization (SMO)
+algorithm as the optimization solver. As for MLP, the neural
+network model consists of two hidden layers and is the same
+for both two datasets. These two layers have 80 and 40 neurons
+and the ReLU is used as activation function. The network
+model adopts the LBFGS algorithm to minimize the cross-
+entropy loss. The entire training process terminates after the
+16-th iteration for the human motion dataset and the 1000-
+th iteration for the Fashion MNIST dataset. These models are
+trained without any distortion, i.e., sensing clutter, quantization
+and noise distortion. The testing dataset is distorted by the
+clutter, quantization and noise introduced by the sensing and
+communication process. Although the training data used here
+are noise-free, it has been shown that the result of PCA on
+noisy data is similar to the result of PCA on noise-free data
+when the data and noise are independent [62].
+B. Convergence of the Proposed Algorithm
+In this part, we show the convergence behavior of the
+proposed algorithm and outline the relationships between the
+0
+5
+10
+15
+20
+Iterations
+0
+2
+4
+6
+8
+10
+12
+14
+Discriminant gain
+Proposed algorithm
+Figure 4: Convergence behavior of Proposed Algorithm.
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+Discriminant gain
+45
+50
+55
+60
+65
+70
+75
+80
+85
+90
+Inference accuracy (%)
+SVM
+Neural network
+Figure 5: Inference accuracy versus discriminant gain.
+discriminant gain and inference accuracy. In Fig. 4, we plot
+the discriminant gain achieved by the proposed algorithm
+with power constraint P = 23 dBm. It is observed that the
+discriminant gain increases quickly and converges within a few
+iterations. This demonstrates the efficiency of the proposed
+algorithm for joint optimization. Besides, the relation between
+discriminant gain and the instantaneous inference accuracy
+is illustrated in Fig. 5. It can be found from the figure that
+the inference accuracy is monotonically increasing with an
+increasing value of discriminant gain for both models, which
+verifies the effectiveness of the latter.
+C. Impact of Key System Parameters
+In this part, we show the performance gain of joint opti-
+mization over other baseline methods under the wireless and
+fronthaul resource constraints and investigate the impact of
+various key system parameters. For ease of presentation, we
+refer to our proposed algorithm for jointly optimizing transmit
+precoding, quantization noise matrix and receive beamforming
+as Proposed and set the following schemes as baselines for
+comparison:
+• Baseline 1: Uniform quantization with joint optimiza-
+tion of transmit precoding and receive beamforming.
+In Baseline 1, the optimized portion of transmit precoding
+and receive beamforming follows Algorithm 1. The CP
+performs uniform quantization at all antennas across all
+RRHs, i.e., setting Q = λI, where scalar λ can be
+easily be selected by binary search to exactly satisfy
+12
+10
+13
+16
+19
+22
+25
+28
+30
+40
+50
+60
+70
+80
+90
+100
+Proposed
+Baseline 1
+Baseline 2
+Baseline 3
+(a) Inference accuracy of SVM versus fronthaul capacity.
+10
+13
+16
+19
+22
+25
+28
+30
+40
+50
+60
+70
+80
+90
+100
+Proposed
+Baseline 1
+Baseline 2
+Baseline 3
+(b) Inference accuracy of MLP versus fronthaul capacity.
+Figure 6: Inference accuracy comparison among different models under different fronthaul capacities for the human motion dataset with
+N = 4.
+20
+24
+28
+32
+36
+40
+44
+48
+20
+30
+40
+50
+60
+70
+80
+90
+Proposed
+Baseline 1
+Baseline 2
+Baseline 3
+(a) Inference accuracy of SVM versus fronthaul capacity.
+20
+24
+28
+32
+36
+40
+44
+48
+15
+25
+35
+45
+55
+65
+75
+85
+Proposed
+Baseline 1
+Baseline 2
+Baseline 3
+(b) Inference accuracy of MLP versus fronthaul capacity.
+Figure 7: Inference accuracy comparison among different models under different fronthaul capacities for the Fashion MNIST dataset with
+N = 2.
+0.2
+0.5
+0.8
+1.1
+1.4
+1.7
+2
+30
+40
+50
+60
+70
+80
+90
+100
+Proposed
+Baseline 1
+Baseline 2
+Baseline 3
+(a) Inference accuracy of SVM versus energy.
+0.2
+0.5
+0.8
+1.1
+1.4
+1.7
+2
+30
+40
+50
+60
+70
+80
+90
+100
+Proposed
+Baseline 1
+Baseline 2
+Baseline 3
+(b) Inference accuracy of MLP versus energy.
+Figure 8: Inference accuracy comparison among different models under different energy constraints for the human motion dataset with
+N = 4.
+13
+0.2
+0.75
+1.3
+1.85
+2.4
+30
+40
+50
+60
+70
+80
+90
+Proposed
+Baseline 1
+Baseline 2
+Baseline 3
+(a) Inference accuracy of SVM versus energy.
+0.2
+0.75
+1.3
+1.85
+2.4
+30
+40
+50
+60
+70
+80
+90
+Proposed
+Baseline 1
+Baseline 2
+Baseline 3
+(b) Inference accuracy of MLP versus energy.
+Figure 9: Inference accuracy comparison among different models under different energy constraints for the Fashion MNIST dataset with
+N = 2.
+the capacity constraint (32a). The transmit precoding and
+receive beamforming are jointly optimized.
+• Baseline 2: Uniform receive beamforming with joint
+optimization of transmit precoding and quantization
+matrix. In Baseline 2, the optimized portion of the trans-
+mit precoding and quantization matrix follows Algorithm
+1. The receive beamforming is uniformly designed, i.e.,
+setting md = 1.
+• Baseline 3: Fixed transmit precoding with joint op-
+timization of quantization matrix and receive beam-
+forming. In Baseline 3, we fixed the transmitting pre-
+coding {bk(d)} as the same value for all devices in
+all time slots. The set value does not violate energy
+and power constraints. Then the quantization and receive
+beamforming are jointly designed.
+In the sequel, the proposed joint optimization scheme is
+compared with the above three baseline schemes.
+1) Inference Accuracy v.s. Fronthaul Capacity: The infer-
+ence accuracy of both models achieved by different schemes
+under various fronthaul capacity C is shown in Fig. 6 and
+Fig. 7. It is observed that when fronthaul capacity increases
+in all cases, inference accuracy in all schemes improves.
+Our proposed joint optimization achieves the best perfor-
+mance over Baselines 1, 2 and 3. Particularly, the proposed
+scheme outperforms Baseline 3. Generally, the fixed transmit
+precoding design in Baseline 3 cannot capture the diverse
+importance levels of different feature elements on inference
+accuracy. Furthermore, it is also noticed that Baseline 1 with
+uniform quantization consistently outperforms Baseline 2. This
+indicates that optimization of beamforming on the CP can
+achieve more performance gain than that of quantization.
+2) Inference Accuracy v.s. Energy: Fig. 8 and Fig. 9 show
+the inference accuracy of both models achieved by different
+schemes under different energy thresholds. From the figure,
+the inference accuracy increases as the energy requirement is
+gradually relaxed. This is due to the fact that more energy
+suppresses the channel noise and thus the discriminant gain
+is enhanced. In addition, similar to the case of the fronthaul
+capacity, we can also conclude that Baseline 1 outperforms
+Baseline 2.
+The extensive experimental results presented above show
+the priority of the proposed joint optimization scheme and
+verify our theoretical analysis.
+VI. CONCLUSION
+In this paper, we implemented task-oriented communication
+for multi-device cooperative edge inference over a Cloud-
+RAN based wireless network, where the edge devices upload
+extracted features to the CP using AirComp. The design of
+AirComp does not follow the previous criterion of MMSE,
+but directly adopts the inference accuracy as the design goal.
+Particularly, since the instantaneous inference accuracy is
+intractable, an approximate metric called discriminant gain is
+adopted as the alternative. This task-oriented communication
+systems are ultimately modeled as an optimization problem
+that maximizes discriminant gain. To address this problem,
+we develop an efficient iterative algorithm to solve this non-
+convex problem by applying variable transformation, SCA
+and alternating optimization techniques. Extensive numerical
+results show that our proposed optimization algorithm can
+achieve higher inference performance and the effectiveness of
+the proposed Cloud-RAN network architecture for cooperative
+inference was also verified.
+This work opens several research directions. One is the
+device scheduling at each CP for selecting only a subset of
+devices. The other is to overcome the shortages such as pilot
+overheads and channel estimation errors caused by the channel
+estimations of the large number of wireless links.
+VII. APPENDIX
+A. Proof of Lemma 1
+As mentioned in (6), the ground-true feature vector can
+be written as the average of L independent Gaussian random
+variables,
+˜x = 1
+L
+L
+X
+ℓ=1
+˜xℓ,
+(52)
+14
+where ˜xℓ∼N(µℓ, Σ).
+Then taking back into (4), the ground-true feature vector ˜x
+becomes
+˜xk = 1
+L
+L
+X
+ℓ=1
+˜xℓ+ ˜ek = 1
+L
+L
+X
+ℓ=1
+˜xℓ,k,
+(53)
+where ˜xℓ,k = ˜xℓ+ ˜ek. Thus we can obtain the distribution of
+˜xℓ,k as
+˜xℓ,k ∼CN(µℓ, Σ + ε2
+kI), 1 ≤ℓ≤L.
+(54)
+Finally, the distribution of local feature vector ˜xℓ,k of device
+k is given by
+f(˜xk) = 1
+L
+L
+X
+ℓ=1
+N(µℓ, Σ + ε2
+kI), ∀k ∈K.
+(55)
+B. Proof of Lemma 2
+Following the same approach as lemma 1 but taking the
+element-wise version, the estimated element can be written as
+ˆs(d) = 1
+L
+K
+X
+k=1
+L
+X
+ℓ=1
+ck(d)˜xℓ(d) +
+K
+X
+k=1
+ck(d)˜ek(d) + n(d)
+= 1
+L
+L
+X
+ℓ=1
+˜xℓ,s(d),
+(56)
+where ˜xℓ,s(d) =
+K
+P
+k=1
+ck(d)˜xℓ(d) +
+K
+P
+k=1
+ck(d)˜ek(d) + n(d).
+Thus, we can obtain the distribution of ˜xℓ,s(d) as
+˜xℓ,s(d) ∼N
+ K
+X
+k=1
+ck(d)µℓ(d),
+ K
+X
+k=1
+ck(d)
+2
+σ2
+d +
+K
+X
+k=1
+c2
+k(d)ε2
+k + σ2
+!
+, 1 ≤ℓ≤L.
+(57)
+Finally, the distribution of the aggregation signal ˆs(d) is
+given by
+ˆs(d) ∼1
+L
+L
+X
+ℓ=1
+N
+ ˆµℓ(d), ˆσ2
+d
+
+, ∀d ∈D.
+(58)
+C. Proof of Lemma 3
+Suppose that the new problem P′
+1 has an optimal solution:
+{A∗, C∗, M∗, Q∗}, these exists a d′ ∈[1, D] such that the
+inequality (36) strictly holds, i.e.,
+Λ({c∗
+k(d′)}, {m∗
+d′}, Q∗) < Γ1(α∗(d′), {c∗
+k(d′)}),
+(59)
+Based on the continuity of inversely proportional function
+about α(d) on the right-hand side of (59), under a fixed
+{C∗, M∗, Q∗}, there always exists a number η > 0 such that
+α∗
++(d′) = (1 + η) α∗(d′) > α∗(d′),
+(60)
+which leads to
+Λ({c∗
+k(d′)}, {m∗
+d′}, Q∗) < Γ1(α∗
++(d′), {c∗
+k(d′)})
+< Γ1(α∗(d′), {c∗
+k(d′)}).
+(61)
+By substituting α∗
++(d′) into P′
+1, the value of the objective
+function can be increased further. This is a contradiction of
+the fact that α∗(d′) is the optimal solution of problem P′
+1.
+Thus, the problem extended the constraint (34) achieves the
+same optimal solution as P1.
+D. Proof of Lemma 4
+Given a set of variables {C, M} satisfying constraint (32b),
+it is always possible to let βk,d =
+c2
+k(d)
+|mH
+dhk|
+2 , ∀k ∈K, ∀d ∈D,
+then constraints (38a) (38b) holds. Given a set of variables
+{B, C, M} satisfying constraints (38a) (38b), then imme-
+diately constraint (37) holds by simple algebra operations.
+Simultaneously summing K and D on both sides of the
+inequality in constraint (37) and combining with (38b), the
+inequality (32b) is derived.
+REFERENCES
+[1] K. B. Letaief, Y. Shi, J. Lu, and J. Lu, “Edge artificial intelligence for
+6G: Vision, enabling technologies, and applications,” IEEE J. Sel. Areas
+Commun., vol. 40, no. 1, pp. 5–36, 2022.
+[2] K. B. Letaief, W. Chen, Y. Shi, J. Zhang, and Y. A. Zhang, “The roadmap
+to 6G: AI empowered wireless networks,” IEEE Commun. Mag., vol. 57,
+no. 8, pp. 84–90, 2019.
+[3] G. Zhu, D. Liu, Y. Du, C. You, J. Zhang, and K. Huang, “Toward
+an intelligent edge: Wireless communication meets machine learning,”
+IEEE Commun. Mag., vol. 58, no. 1, pp. 19–25, 2020.
+[4] D. Wen, X. Li, Q. Zeng, J. Ren, and K. Huang, “An overview of
+data-importance aware radio resource management for edge machine
+learning,” J. Commun. Inf. Netw., vol. 4, no. 4, pp. 1–14, 2019.
+[5] D. Li, Y. Gu, H. Ma, Y. Li, L. Zhang, R. Li, R. Hao, and E.-P. Li,
+“Deep learning inverse analysis of higher order modes in monocone
+tem cell,” IEEE Transactions on Microwave Theory and Techniques,
+vol. 70, no. 12, pp. 5332–5339, 2022.
+[6] Q. Lan, D. Wen, Z. Zhang, Q. Zeng, X. Chen, P. Popovski, and
+K. Huang, “What is semantic communication? A view on conveying
+meaning in the era of machine intelligence,” J. Commun. Inf. Networks,
+vol. 6, no. 4, pp. 336–371, 2021.
+[7] Y. Shi, K. Yang, T. Jiang, J. Zhang, and K. B. Letaief, “Communication-
+efficient edge AI: algorithms and systems,” IEEE Commun. Surv. Tuto-
+rials, vol. 22, no. 4, pp. 2167–2191, 2020.
+[8] D. Wen, X. Li, Y. Zhou, Y. Shi, S. Wu, and C. Jiang, “Integrated
+sensing-communication-computation for edge artificial intelligence,”
+CoRR, vol. abs/2306.01162, 2023.
+[9] M. Lee, G. Yu, and H. Dai, “Decentralized inference with graph
+neural networks in wireless communication systems,” IEEE Trans. Mob.
+Comput., vol. 22, no. 5, pp. 2582–2598, 2023.
+[10] S. F. Yilmaz, B. Hasircioglu, and D. G¨und¨uz, “Over-the-air ensemble
+inference with model privacy,” in IEEE International Symposium on
+Information Theory, ISIT 2022, Espoo, Finland, June 26 - July 1, 2022,
+pp. 1265–1270, IEEE, 2022.
+[11] G. Zhu, Z. Lyu, X. Jiao, P. Liu, M. Chen, J. Xu, S. Cui, and P. Zhang,
+“Pushing AI to wireless network edge: an overview on integrated
+sensing, communication, and computation towards 6G,” Sci. China Inf.
+Sci., vol. 66, no. 3, p. 130301, 2023.
+[12] J. Shao and J. Zhang, “Communication-computation trade-off in
+resource-constrained edge inference,” IEEE Commun. Mag., vol. 58,
+no. 12, pp. 20–26, 2020.
+[13] K. Yang, Y. Shi, W. Yu, and Z. Ding, “Energy-efficient processing
+and robust wireless cooperative transmission for edge inference,” IEEE
+Internet Things J., vol. 7, no. 10, pp. 9456–9470, 2020.
+[14] X. Huang and S. Zhou, “Dynamic compression ratio selection for edge
+inference systems with hard deadlines,” IEEE Internet Things J., vol. 7,
+no. 9, pp. 8800–8810, 2020.
+[15] S. Yun, J.-M. Kang, S. Choi, and I.-M. Kim, “Cooperative Inference
+of DNNs Over Noisy Wireless Channels,” IEEE Trans. Veh. Technol.,
+vol. 70, no. 8, pp. 8298–8303, 2021.
+[16] Z. He, T. Zhang, and R. B. Lee, “Attacking and protecting data privacy
+in edge–cloud collaborative inference systems,” IEEE Internet Things
+J., vol. 8, no. 12, pp. 9706–9716, 2020.
+[17] Y. Kang, J. Hauswald, C. Gao, A. Rovinski, T. Mudge, J. Mars, and
+L. Tang, “Neurosurgeon: Collaborative intelligence between the cloud
+and mobile edge,” ACM SIGARCH Comput. Archit. News, vol. 45, no. 1,
+pp. 615–629, 2017.
+15
+[18] E. Li, L. Zeng, Z. Zhou, and X. Chen, “Edge AI: On-demand acceler-
+ating deep neural network inference via edge computing,” IEEE Trans.
+Wireless Commun., vol. 19, no. 1, pp. 447–457, 2019.
+[19] Z. Liu, Q. Lan, and K. Huang, “Resource allocation for multiuser edge
+inference with batching and early exiting,” IEEE J. Sel. Areas Commun.,
+vol. 41, no. 4, pp. 1186–1200, 2023.
+[20] W. Shi, Y. Hou, S. Zhou, Z. Niu, Y. Zhang, and L. Geng, “Improving
+device-edge cooperative inference of deep learning via 2-step pruning,”
+in IEEE INFOCOM WKSHPS, pp. 1–6, IEEE, 2019.
+[21] J. Shao, H. Zhang, Y. Mao, and J. Zhang, “Branchy-GNN: A device-
+edge co-inference framework for efficient point cloud processing,” in
+ICASSP 2021-2021 IEEE ICASSP, pp. 8488–8492, IEEE, 2021.
+[22] J. Shao and J. Zhang, “Bottlenet++: An end-to-end approach for feature
+compression in device-edge co-inference systems,” in 2020 IEEE ICC
+Workshops, pp. 1–6, IEEE, 2020.
+[23] Q. Lan, Q. Zeng, P. POPOVSKI, D. G ¨UND ¨UZ, and K. Huang, “Pro-
+gressive feature transmission for split inference at the wireless edge,”
+IEEE Trans. on Wireless Commun., 2021.
+[24] J. Shao, Y. Mao, and J. Zhang, “Task-oriented communication for multi-
+device cooperative edge inference,” IEEE Trans. Wireless Commun.,
+2022.
+[25] H. Lee and S.-W. Kim, “Task-oriented edge networks: Decentralized
+learning over wireless fronthaul,” arXiv preprint arXiv:2312.01288,
+2023.
+[26] D. Wen, X. Jiao, P. Liu, G. Zhu, Y. Shi, and K. Huang, “Task-oriented
+Over-the-Air computation for multi-device Edge AI,” IEEE Trans. on
+Wireless Commun., 2023.
+[27] Z. Zhuang, D. Wen, Y. Shi, G. Zhu, S. Wu, and D. Niyato, “Integrated
+Sensing-Communication-Computation for Over-the-Air Edge AI Infer-
+ence,” IEEE Trans. on Wireless Commun., 2023.
+[28] L. Liu and R. Zhang, “Optimized uplink transmission in multi-antenna
+C-RAN with spatial compression and forward,” IEEE Trans. Signal
+Process., vol. 63, no. 19, pp. 5083–5095, 2015.
+[29] A. W. Dawson, M. K. Marina, and F. J. Garcia, “On the benefits of RAN
+virtualisation in C-RAN based mobile networks,” in Third European
+Workshop on Software Defined Networks, EWSDN 2014, Budapest,
+Hungary, September 1-3, 2014, pp. 103–108, IEEE Computer Society,
+2014.
+[30] Y. Shi, J. Zhang, K. B. Letaief, B. Bai, and W. Chen, “Large-scale convex
+optimization for ultra-dense cloud-RAN,” IEEE Wireless Commun.,
+vol. 22, no. 3, pp. 84–91, 2015.
+[31] H. Ma, X. Yuan, and Z. Ding, “Over-the-air federated learning in mimo
+cloud-ran systems,” arXiv preprint arXiv:2305.10000, 2023.
+[32] Y. Shi, S. Xia, Y. Zhou, Y. Mao, C. Jiang, and M. Tao, “Vertical federated
+learning over cloud-ran: Convergence analysis and system optimization,”
+IEEE Trans. on Wireless Commun., pp. 1–1, 2023.
+[33] R. G. Stephen and R. Zhang, “Joint millimeter-wave fronthaul and
+OFDMA resource allocation in ultra-dense CRAN,” IEEE Trans. Com-
+mun., vol. 65, no. 3, pp. 1411–1423, 2017.
+[34] Y. Zhou and W. Yu, “Optimized backhaul compression for uplink cloud
+radio access network,” IEEE J. Sel. Areas Commun., vol. 32, no. 6,
+pp. 1295–1307, 2014.
+[35] Y. Shi, Y. Zhou, D. Wen, Y. Wu, C. Jiang, and K. B. Letaief, “Task-
+Oriented Communications for 6G: Vision, Principles, and Technologies,”
+accepted to IEEE Wireless Commun. Mag., 2023.
+[36] L. Liu and R. Zhang, “Optimized uplink transmission in multi-antenna
+C-RAN with spatial compression and forward,” IEEE Trans. Signal
+Process., vol. 63, no. 19, pp. 5083–5095, 2015.
+[37] D. Wen, P. Liu, G. Zhu, Y. Shi, J. Xu, Y. C. Eldar, and S. Cui, “Task-
+oriented sensing, computation, and communication integration for multi-
+device edge ai,” IEEE Trans. Wireless Commun., 2023.
+[38] J. Xiao, S. Cui, Z. Luo, and A. J. Goldsmith, “Power scheduling of
+universal decentralized estimation in sensor networks,” IEEE Trans.
+Signal Process., vol. 54, no. 2, pp. 413–422, 2006.
+[39] J. Xiao and Z. Luo, “Decentralized estimation in an inhomogeneous
+sensing environment,” IEEE Trans. Inf. Theory, vol. 51, no. 10,
+pp. 3564–3575, 2005.
+[40] G. Yang, J. Li, S. G. Zhou, and Y. Qi, “A wide-angle e-plane scanning
+linear array antenna with wide beam elements,” IEEE Antennas Wireless
+Propag. Lett., vol. 16, pp. 2923–2926, 2017.
+[41] J. J. Xiao, S. Cui, Z. Q. Luo, and A. J. Goldsmith, “Power scheduling
+of universal decentralized estimation in sensor networks,” IEEE Trans.
+Signal Process., vol. 54, no. 2, pp. 413–422, 2006.
+[42] G. J. McLachlan and S. I. Rathnayake, “On the number of components
+in a Gaussian mixture model,” WIREs Data Mining Knowl. Discov.,
+vol. 4, no. 5, pp. 341–355, 2014.
+[43] G. J. McLachlan, S. X. Lee, and S. I. Rathnayake, “Finite mixture
+models,” Annu. Rev. Statist. Its Appl., vol. 6, pp. 355–378, 2019.
+[44] K. Yang, T. Jiang, Y. Shi, and Z. Ding, “Federated learning via Over-
+the-Air computation,” IEEE Trans. Wireless Commun., vol. 19, no. 3,
+pp. 2022–2035, 2020.
+[45] G. Zhu, Y. Wang, and K. Huang, “Broadband analog aggregation for
+low-latency federated edge learning,” IEEE Trans. Wireless Commun.,
+vol. 19, no. 1, pp. 491–506, 2019.
+[46] X. Cao, G. Zhu, J. Xu, and K. Huang, “Optimized power control
+for over-the-air computation in fading channels,” IEEE Trans. Wirel.
+Commun., vol. 19, no. 11, pp. 7498–7513, 2020.
+[47] W. Liu, X. Zang, Y. Li, and B. Vucetic, “Over-the-Air computation
+systems: Optimization, analysis and scaling laws,” IEEE Trans. on
+Wireless Commun., vol. 19, no. 8, pp. 5488–5502, 2020.
+[48] A. S¸ahin and R. Yang, “A survey on over-the-air computation,” IEEE
+Commun. Surv. Tutorials, 2023.
+[49] M. Peng, C. Wang, V. Lau, and H. V. Poor, “Fronthaul-Constrained
+Cloud Radio Access Networks: Insights and Challenges,” IEEE Wireless
+Commun., vol. 22, no. 2, pp. 152–160, 2015.
+[50] T. Q. Quek, M. Peng, O. Simeone, and W. Yu, Cloud Radio Access
+Networks: Principles, Technologies, and Applications. Cambridge Uni-
+versity Press, 2017.
+[51] S. Kullback, Information Theory and Statistics. Courier Corporation,
+1997.
+[52] D. Wen, G. Zhu, and K. Huang, “Reduced-Dimension Design of
+MIMO Over-the-Air Computing for Data Aggregation in Clustered IoT
+Networks,” IEEE Trans. Wireless Commun., vol. 18, no. 11, pp. 5255–
+5268, 2019.
+[53] A. Wiesel, Y. C. Eldar, and S. Shamai, “Zero-forcing precoding and
+generalized inverses,” IEEE Trans. Signal Process., vol. 56, no. 9,
+pp. 4409–4418, 2008.
+[54] X. Li, G. Zhu, Y. Gong, and K. Huang, “Wirelessly powered data
+aggregation for IoT via over-the-air function computation: Beamforming
+and power control,” IEEE Trans. Wireless Commun., vol. 18, no. 7,
+pp. 3437–3452, 2019.
+[55] M. Grant and S. Boyd, “CVX: Matlab software for disciplined convex
+programming, version 2.1.” http://cvxr.com/cvx, Mar. 2014.
+[56] B. R. Marks and G. P. Wright, “A general inner approximation algorithm
+for nonconvex mathematical programs,” Operations research, vol. 26,
+no. 4, pp. 681–683, 1978.
+[57] C. Sun, W. Ni, and X. Wang, “Joint computation offloading and
+trajectory planning for uav-assisted edge computing,” IEEE Trans. Wirel.
+Commun., vol. 20, no. 8, pp. 5343–5358, 2021.
+[58] W. Lyu, Y. Xiu, J. Zhao, and Z. Zhang, “Optimizing the age of
+information in ris-aided SWIPT networks,” IEEE Trans. Veh. Technol.,
+vol. 72, no. 2, pp. 2615–2619, 2023.
+[59] G. Li, S. Wang, J. Li, R. Wang, X. Peng, and T. X. Han, “Wireless sens-
+ing with deep spectrogram network and primitive based autoregressive
+hybrid channel model,” in 2021 IEEE 22nd International Workshop on
+SPAWC, pp. 481–485, IEEE, 2021.
+[60] H. Xiao, K. Rasul, and R. Vollgraf, “Fashion-mnist: a novel im-
+age dataset for benchmarking machine learning algorithms,” CoRR,
+vol. abs/1708.07747, 2017.
+[61] A. Rea and W. Rea, “How many components should be retained from a
+multivariate time series PCA?,” arXiv preprint arXiv:1610.03588, 2016.
+[62] H. Khalilian and I. V. Bajic, “Video Watermarking With Empirical
+PCA-Based Decoding,” IEEE Trans. Image Process., vol. 22, no. 12,
+pp. 4825–4840, 2013.

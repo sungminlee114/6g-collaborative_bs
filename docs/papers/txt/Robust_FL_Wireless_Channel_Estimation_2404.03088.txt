@@ -1,0 +1,740 @@
+Robust Federated Learning for Wireless Networks:
+A Demonstration with Channel Estimation
+Zexin Fang∗, Bin Han∗, and Hans D. Schotten∗†
+∗University of Kaiserslautern (RPTU), Germany
+†German Research Center for Artificial Intelligence (DFKI), Germany
+Abstract—Federated learning (FL) offers a privacy-preserving
+collaborative approach for training models in wireless networks,
+with channel estimation emerging as a promising application.
+Despite extensive studies on FL-empowered channel estimation,
+the security concerns associated with FL require meticulous
+attention. In a scenario where small base stations (SBSs) serve
+as local models trained on cached data, and a macro base
+station (MBS) functions as the global model setting, an attacker
+can exploit the vulnerability of FL, launching attacks with
+various adversarial attacks or deployment tactics. In this paper,
+we analyze such vulnerabilities, corresponding solutions were
+brought forth, and validated through simulation.
+Index Terms—Federated learning, incremental learning, chan-
+nel estimation, adversarial attack, data poisoning.
+I. INTRODUCTION
+Federated learning (FL) empowers devices to collectively
+train a global model without sharing raw data, a crucial
+aspect for maintaining user data confidentiality in wireless
+networks [1]. On-device computing units, such as TrueNorth
+and Snapdragon neural processors, further enable FL with the
+necessary hardware solutions [2]. Retaining data at its origin
+and employing on-device learning enable swift responses to
+real-time events in latency-sensitive applications. FL is recog-
+nized as a promising enhancement for wireless networks in
+various aspects, such as resource allocation [3], [4] as well
+as beamforming design [5]. On the other hand, the global
+shift towards higher frequencies, attributed to their abundant
+spectrum resources, will raise new challenges. For instance,
+compared to sub-6GHz systems, millimeter-wave (mmWave)
+systems face a more complex environment, characterized by
+higher scattering, penetration losses, and path loss for fixed
+transmitter and receiver gain [6]. Especially, due to signif-
+icantly shorter channel coherent time, conventional channel
+estimation techniques become impractical. Machine learning
+(ML) based channel estimation techniques have demonstrated
+their effectiveness in improving estimation performance, as
+well as reducing the estimation time [7].
+Given the inherent high dynamics of high-frequency radio
+channels, which can exhibit diverse characteristics across
+varying weather conditions, timely model updates based on
+real-time data are crucial. With FL, the model can undergo
+rapid updates without substantial communication overhead.
+Meanwhile, the training will be carried out parallel, further
+reducing the update time. While compelling, many recent
+studies involve training local models with edge devices, fol-
+lowed by the base station receiving and aggregating model
+updates to update the global model [6], [8], [9]. On-device
+training reduces communication overhead, yet synchronizing
+diverse edge devices on large-scale, particularly on resource-
+constrained mobile user (MU), poses a significant challenge.
+Thus, effort have been made towards small base station (SBS)
+level training, with the SBSs training on a small dataset cached
+from nearby MUs, and the model aggregation is performed
+on a macro base station (MBS) [10], [11]. This FL strategy
+aims to provide more reliable and timely model updates. Most
+recently, research focus have been shifted to scenarios where
+both base station (BS) and edge devices are capable of training
+local models, and the aggregation is performed on the BS [12],
+[13].
+Threats of FL-based channel estimation can be categorized
+in two aspects: i) malicious local models providing malicious
+model updates ii) data from poisoned sources. In BS-based
+training, compromising a BS into a malicious local model is
+unlikely, yet the security concern persists with the vulnerability
+to poisoned data sources. However, there is still overlap
+between security concern of those frameworks. In instances
+of data poisoning, an attacker may deploy a substantial set of
+malicious MU to execute data poisoning attacks on a specific
+BS. In such scenarios, the impact is akin to involving a
+malicious local model.
+In this work we consider data poisoning attacks on SBS.
+The attacks may launch widely, or target in one specific
+SBS, mirroring scenarios involving malicious local models.
+Firstly, we evaluate the vulnerability to adversarial attacks on
+channel estimation models. Secondly, we propose novel aggre-
+gation functions leveraging Bayesian Model Ensemble (BME),
+which ensures resilience against attacks without compromising
+estimation performance. Thirdly, we employ a pre-filtering
+strategy based on local loss distribution to mitigate attacks
+that are widely launched. Our simulation results highlight the
+effectiveness of our methods in mitigating diverse attacks,
+surpassing conventional approaches, and offering insights to
+bolster the security and resilience of FL in wireless commu-
+nication.
+II. PRELIMINARIES
+A. Channel estimation model
+ML-based models are trained with algorithms to learn
+underlying patterns and correlations in data, subsequently
+arXiv:2404.03088v2  [cs.LG]  30 Jul 2024
+enabling them to predict patterns in new data. The channel
+estimation model h can be described as follows,
+y = h(x, w) : Pm×n →Cm×n,
+(1)
+where x represents the input pilot signal, x takes the form of
+a matrix Pm×n. The output y signifies the estimation result of
+the channel estimation model, with Cm×n denoting the pre-
+dicted Channel state information (CSI) matrix. The parameter
+w corresponds to the weights of the channel estimation model.
+By integrating FL, we can refine the model by fine-tuning
+it using cached datasets, denoted as B = {Bt
+n : 1 ≤n ≤
+N, 1 ≤t ≤T}, where n represents the number of SBS and t
+denotes the federation round. At each federation round, local
+models undergo K steps of stochastic gradient descend (SGD),
+defined by the update rule:
+wn ←wn −ηk∇ℓ(Bk, wn),
+(2)
+where wn is the model weights for each local model, and ℓ
+is the loss function. ηk and Bk denote the step size and mini-
+batch at kth step, respectively, with Bk ∈Bt
+n.
+B. Robust model aggregation
+Following the fine-tuning of the local model, the weight
+updates, denoted as W = {wt
+n : 1 ≤n ≤N, 1 ≤t ≤T},
+are aggregated to create a new global model with weight wt
+g.
+The standard aggregation function, FedAvg, can be described
+as follows:
+wt
+g =
+N
+X
+n=1
+ln
+P(L)wt
+n,
+(3)
+where L = {ln | n = 1, . . . , N} denotes the cached dataset
+length at the n local model. Considering FedAvg’s sensitivity
+to corrupted weights, robust aggregation function (RAF) is
+designed by exploring alternatives to the mean [14]. Common
+approaches for robust aggregation are exemplified here:
+• Trimmed Mean: In this approach, a parameter a <
+N
+2
+is chosen. Subsequently, the server eliminates the lowest
+a values and the highest a values and then computed
+from the remaining N −2a values, L is then modified as
+La = {ln | 1 ≤n ≤N −2a}, with
+wt
+g =
+N−2a
+X
+n=1
+ln
+P(La)wt
+n.
+(4)
+• FedMedian: Instead of averaging weights, FedMedian
+utilizes a median computation,
+wt
+g = med(wt
+1, · · · , wt
+N).
+(5)
+Through the use of RAFs, the global model effectively filters
+out potential malicious model updates. As demonstrated in
+[15], the Trimmed Mean method requires awareness of attacks,
+more specifically, the count of local models under attack,
+and its effectiveness varies across different attack modes. On
+the other hand, the FedMedian excels in resilience against
+various attacks. Despite these strengths, RAFs generally have
+a drawback: the potential to discard usefull model updates,
+which leads to inferior convergence performance compared to
+FedAvg. To address this limitation, Campos et al. proposed a
+dynamic framework, that alternates between FedAvg and RAFs
+for a better convergence than simply employing RAFs [14].
+III. THREAT MODEL
+In the above described channel estimation scenario, we
+contemplate the presence of a certain number J of adversary
+entities (AEs). These AEs strategically launching attacks on
+one or several SBSs. The objective is to manipulate the global
+model through the aggregation process. Launching attacks
+on all SBSs demands significant resources. However, with
+the advent of unmanned aerial vehicle (UAV) as potential
+attack platforms, the feasibility of attacks on the majority
+or entirety of SBSs can’t be ignored. Considering that the
+model transmission is exclusively between SBS and MBS,
+the use of dedicated links can effectively mitigate man-in-
+the-middle (MITM) attacks in the SBSs level. This attack can
+be done through the deployment of malicious MUs or MITM
+attack agents between the MUs and the SBSs. We consider
+the following attack modes:
+1) Outdate mode: AEs provide random outdated CSI with-
+out any modification. In the case of MITM attack, the attack
+agent is required to store the outdated CSI and send back to
+SBS.
+2) Collusion mode: AEs will provide the same CSI. This
+attack mode is designed to manipulate the model, potentially
+leading to model collapse, as well as to produce a desired out-
+putted CSI. This attack mode doesn’t require any knowledge
+of CSI from the MITM attack agent.
+3) Reverse mode: AEs will provide reversed version of the
+CSI, each value of CSI will be reversed regarding the mean.
+This attack mode requires the MITM attack agent to possess
+precise knowledge of the CSI and perform an additional
+processing step.
+Given the channel estimation model is fine-tuned with
+dataset Bt
+n = {(xα, yα) | 1 ≤α ≤A} . The object is to
+minimize the loss ℓ(yα, ˆyα), where ˆyα is the predicted output
+corresponding to xα. A common choice for the loss function
+is the Mean Squared Error (MSE), defined as:
+MSE = 1
+A
+A
+X
+α=1
+(ˆyα −yα)2
+= 1
+A
+A
+X
+α=1
+(wxα −yα)2.
+(6)
+And the average gradient with respect to the loss function and
+weight is given by:
+▽wℓ= −η 1
+A
+A
+X
+α=1
+∂
+∂w(wxα −yα)2
+= −2η 1
+A
+A
+X
+α=1
+xα(wxα −yα).
+(7)
+Referring to Eq. (7), if the dataset exhibits a large variety,
+the effectiveness of collusion mode, capable of injecting
+malicious gradients towards specific y, is likely to weaken. In
+comparison, reversing a subset of yα can effectively interfere
+with, or negate the useful gradient regardless of the dataset
+variety. The modified subset cached by the SBS can be
+described as
+˙Bt
+n = {( ˙xβ, ˙yβ) | 1 ≤β ≤B}, where
+˙yβ
+represents the modified CSI through different attack modes.
+And ¯Bt
+n = {(¯xγ, ¯yγ) | 1 ≤γ ≤Γ} represents the authentic
+subset.
+IV. METHODOLOGY
+A. Robust aggregation function: StoMedian
+The BME framework implements Bayesian inference on
+the server, thereby mitigating potential degradation in model
+performance [16]. Essentially, BME has the capacity to dy-
+namically aggregate local models. In the scope of BME-based
+FL, chen et al. firstly employs client parameters to construct a
+stochastic filter for the aggregation of each federation round.
+While showcasing superior accuracy compared to FedAvg,
+Chen’s approach, FedBE, relies on utilizing a diagonal Gaus-
+sian distribution for the stochastic filter, with [17]
+µ =
+X
+n
+ln
+P(L)wn,
+(8)
+Σdiag = diag
+ X
+n
+ln
+P(L)(wn −µ)2
+
+.
+(9)
+Given the sum set of all cached dataset B, p(w|B) is posterior
+distribution of w being learned. The output probability of w
+can be denoted as p(y|x; w), and integrating the outputs of all
+possible model:
+p(y|x; B) =
+Z
+p(y|x; w)p(w|B) dw.
+(10)
+BME with S samples can be described:
+p(y|x; B) ≈1
+S
+S
+X
+s=1
+p(y|x; w(s)),
+(11)
+{w(s) ∼N(µ, Σdiag)}S
+s=1.
+(12)
+Building upon this approach, it can be seamlessly integrated
+into robust aggregation techniques, ensuring system resilience
+without compromising convergence performance across feder-
+ation rounds. However, it’s worth noting that weights in ML
+models are typically normalized to approach 0, making origi-
+nal approach insensitive when encountering various adversarial
+attacks. Hence, integrating BME into our proposed aggregation
+function, StoMedian, introduces two significant enhancements
+geared towards improving sensitivity to adversarial attacks:
+i) The stochastic filter was constructed using the logarithm of
+weights to ensure high sensitivity. ii) Rather than employing
+µ, we utilized the median of weights to mitigate the potential
+impact of invaded local models. The aggregation function is
+then presented in Alg. 1.
+Fig. 1: CDF of actual samples and truncated Gaussian distri-
+bution
+Algorithm 1: StoMedian
+1 Input: the length of cached dataset L with respect to the SBS ; a small value
+ϵ being added to the weights to avoid logarithm of zero.
+2 Output: global model weight of current model update: wg.
+3 Function StoMedian :
+4
+get all weights {wn,j | 1 ≤n ≤N; 1 ≤j ≤J} from agents;
+5
+initialize {pn,j | n = 1, . . . , N; j = 1, . . . , J} ;
+6
+wj = {wn,j | 1 ≤n ≤N}; pj = {pn,j | 1 ≤n ≤N}
+7
+wn = {wn,j | 1 ≤j ≤J}; pn = {pn,j | 1 ≤j ≤J}
+8
+for each wn,j do
+9
+if wn,j > 0 then
+10
+w◦
+n,j = −log(wn,j + ϵ)
+11
+else if wn,j ≤0 then
+12
+w◦
+n,j = log |wn,j −ϵ|
+13
+end
+14
+end
+15
+for j = 1 : J do
+16
+w◦
+j = {w◦
+n,j | n = 1, . . . , N};
+17
+µj = med(w◦
+j );
+18
+σj = std(w◦
+j );
+19
+σj = max(σj, ϵ);
+20
+for n = 1 : N do
+21
+pn,j =
+1
+σj
+√
+2π e
+−
+(w◦
+n,j −µj )2
+2σ2
+j
+22
+end
+23
+pj =
+pj ⊙L
+P(pj ⊙L)
+24
+end
+25
+wg = P
+n
+pn ⊙wn
+26 end
+Algorithm 2: Local loss pre-filtering (LLPF)
+1 Input: cached dataset Bn with respect to the SBS; variance modifier index
+kσ; determination threshold θ
+2 Output: modified Bn.
+3 Function LLPF :
+4
+initialize Bt and But to put trustworthy or untrustworthy data;
+5
+get E = {ℓα | α = 1, . . . , A} using global model;
+6
+µ = med(E)
+7
+Construct Φtg with µ, kσ
+8
+for α = 1 : A do
+9
+if Φtg(ℓα) > θ then
+10
+include (xα, yα) in Bt
+11
+else if Φtg(ℓα) ≤θ then
+12
+include (xα, yα) in But
+13
+end
+14
+end
+15
+L1 = |But|; L2 = |Bt|
+16
+for each (xl1, yl1) ∈But do
+17
+r ∼U(1, L2)
+18
+replace (xl1, yl1) with (xr, yr) ∈Bt
+19
+end
+20
+Bn = But ∪Bt
+21 end
+B. Local loss pre-filtering
+In response to potential attacks employing a widely
+launched strategy, where most or all local models may be
+impacted, a common approach is to filter the anomalies before
+training. Given that the global model has been pre-trained
+and undergoes fine-tuning during each federation round for
+enhanced performance, it can be utilized to identify anomalies.
+In a departure from the conventional use of local intrinsic
+dimensionality (LID) for data discrimination, we propose
+an alternative approach to evaluate the reliability of data
+originating from each MU. The loss of each sample, E =
+{ℓα | 1 ≤α ≤A}, where ℓα = (ˆyα −yα)2, is computed.
+The distribution of ℓα heavily relies on the current model
+and is not mathematically traceable. Therefore, we evaluate it
+numerically with 300 randomly generated samples on a pre-
+trained model. Further details on the training setting, model
+specifications, and data description are provided in Section
+V. As depicted in Fig. 1, the cumulative distribution function
+(CDF) of ℓα can be accessed with CDF of a truncated Gaussian
+distribution with lower and upper bounds of [0, +∞), with
+Φtg(x) = 1
+2 + 1
+2 · erf
+kσµ
+√
+2 (x −µ)
+
+,
+(13)
+µ =
+A
+X
+α=1
+ℓα.
+(14)
+where kσ = 0.6, which is determined empirically. Similar to
+the approach introduced in [18], by assigning a threshold θ
+to Φtg, it is capable of detecting anomalies. Further details of
+the algorithm can be found in Alg. 2.
+V. EVALUATION
+A. Model and datasets
+In this work, we employ a simple Convolutional Neural
+Network (CNN) for channel estimation, comprising: i) an input
+layer (5 × 5 kernel size, 24 filters) with SeLU activation,
+ii) a hidden layer (5 × 5 kernel size, 8 filters) with Softplus
+activation, iii) an output layer (5 × 5 kernel size, 1 filter)
+with SeLU activation. This CNN processes input data of size
+612×14×1 and has demonstrated effective channel estimation
+performance, as evidenced by [19].
+The datasets used for training channel estimation mod-
+els were generated using a reference example titled ”Deep
+Learning Data Synthesis for 5G Channel Estimation,” acces-
+sible within the MATLAB 5G Toolbox, with specific settings
+considered. Given that pilot signals and CSI are typically
+represented as complex numbers, we adopted a preprocessing
+step. Specifically, we divided the complex data into its real
+and imaginary components to make it compatible with CNN.
+This approach aligns with prior work.
+B. Threat evaluation
+The global model was initially pre-trained with a small
+dataset including 200 samples. Subsequently, local models
+were fine-tuned with Bt
+n, Bt
+n = ˙Bt
+n ∪¯Bt
+n. A validation dataset
+B◦= {(x◦
+δ, y◦
+δ) | 1 ≤δ ≤∆}, was employed to assess the
+channel estimation performance, with these data never being
+part of the training.
+To demonstrate the susceptibility of FL, we simulated our
+SBSs under data poisoning attacks, alongside a CL scenario
+as comparison. The standard FedAvg aggregation function
+was used. We define MSE(γ) = MSE(¯yγ, ˆyγ) as an indi-
+cator of the model’s performance on seen data, MSE(δ) =
+MSE(y◦
+δ, ˆyδ) as an indicator of its performance on unseen
+data, and MSE(β) = MSE( ˙yβ, ˆyβ) as a measure of the
+efficacy of adversarial manipulations on the model.
+We considered a minimum cached dataset length required
+for training. In cases where the SBS lacks sufficient data, a
+subset of pre-training data is appended to meet the minimum
+requirement. AEs can be deployed either in a widespread
+strategy or to target a specific SBS. The simulation setup is
+described in Tab I.
+TABLE I: Simulation setup 1
+Parameter
+Value
+Remark
+U
+1000
+Number of MUs
+N
+10
+Number of SBSs
+System
+Mb
+1
+Number of MBS
+K
+10
+Number of model update rounds
+ra
+0% ∼50%
+Ratio of AEs
+Imin
+200
+Minimum length of cached datasets
+required for training
+P(L)
+2000
+Length of all cached datasets of
+one federation round
+ln
+ln ∼U(170, 230)
+Length of a local cached dataset
+(without targeted attacks)
+∆
+200
+Length of validation dataset
+lr
+0.001
+Learning rate for adam optimizer
+m
+0.9
+Momentum for adam optimizer
+E
+100
+Epochs of the training
+Training
+Nbatch
+64
+Batch size
+As analyzed in Section III, the reverse mode can nullify
+useful gradients learned from authentic data, a phenomenon
+whose effectiveness is confirmed by our simulation results
+in Figs. 2a–2c. Conversely, the outdate mode has minimal
+impact, only slightly degrading model accuracy, due to the
+strong correlation between outdated CSI and actual CSI. Com-
+bining Fig. 2a and Fig. 2b, FL shows significant performance
+degradation under collusion attacks compared to CL. This is
+attributed to the fact that FL trains local models on a small
+dataset, characterized by a limited diversity.
+Fig. 2c demonstrates the vulnerability of FL to targeted
+data poisoning attacks on specific clients. For reverse attack,
+at 30%, intersections between MSE(β) and either MSE(γ) or
+MSE(δ) become evident. This signifies the successful evasion
+of the attacker, making the attacks undetectable by the ML
+model itself. Meanwhile, the intersections of collusion attack
+appear at 50%. Both attack modes are significantly boosted
+because FedAvg employs a weighted approach. This results in
+the victim local model, surrounded by AEs, being assigned
+a larger weight, further degrading model performance during
+aggregation. However, the efficacy of such attack strategies
+can be efficiently mitigated by employing RAFs.
+(a) Attack evaluation of centralized learning (CL)
+(b) FL during widely launched attacks
+(c) FL during targeted attacks
+Fig. 2: Threat evaluation
+(a) Convergence results without attacks
+(b) Convergence results while under attacks
+Fig. 3: Convergence test of RAF
+C. Evaluation of proposed methodology: StoMedian
+While AEs are being deployed to target a specific SBS,
+which is a cost-efficient and most impactful attack strategy
+from attacker side. To demonstrate the effectiveness of RAFs,
+we conducted simulations to illustrate the convergence of
+MSE(δ) across 20 federation rounds for four different aggrega-
+tion functions. The simulation setup is same as listed in Tab I,
+with only reverse attack being considered and ra = 20%.
+Firstly, we examine a scenario devoid of any attacks,
+depicted in Fig.3a. Unsurprisingly, FedMedian demonstrates
+the poorest convergence performance, as we elucidated in
+Sec.II-B. StoMedian and FedBE demonstrated significantly
+superior performance compared to FedAvg, primarily due to
+its effectiveness in preventing model drift in the aggregation.
+As the overall performance improved over federation rounds,
+the performance gap became less evident, with all three
+aggregation function reaching a comparable convergence level.
+Meanwhile, FedBE performed slightly better than StoMedian.
+Nevertheless, the performance of StoMedian is contingent
+upon the distribution of underlying local datasets. In the
+worst-case scenario where local data are highly non-identically
+distributed, which is unlikely in our setting where SBSs
+have confined coverage and are not likely to exhibit diverse
+geographical deployments. StoMedian may filter out most
+local weights, resulting in convergence levels similar to that of
+FedMedian. In such a scenario, the performance degradation
+of FedAvg is inevitable.
+The results of convergence analysis of aggregation func-
+tions under attacks are depicted in Fig.3b. FedAvg exhibited
+no defense against attacks, and FedBE demonstrated limited
+defense but far from resilient. The performance gap between
+FedBE and FedMedian is larger than that of Fig.3a, due
+to the scaling which may not be immediately evident. In
+contrast, FedMedian and StoMedian demonstrated resilient and
+comparable performance against coordinated strategy. On the
+other hand, all aggregation functions failed to mitigate widely
+launched attacks effectively.
+D. Evaluation of proposed methodology: LLPF
+Having evaluated the effectiveness of StoMedian, we now
+proceed to assess the efficacy of LLPF. The simulation setup
+remains consistent with the parameters outlined in Table I,
+with StoMedian being applied. We examine three attack
+modes, with ra set at 20%.
+We compared the simulation results with two baselines, ob-
+tained by excluding 20% of the authentic data. The results de-
+picted in Fig.4 indicate that employing LLPF leads to a slight
+improvement in convergence performance. When comparing
+the reverse mode and collusion mode in Fig. 4a, the attack
+performance of collusion mode exhibits high fluctuations. This
+observation aligns with our analysis in Sec.III, confirming that
+the performance of collusion attacks strongly depends on the
+variety of data.
+In Fig. 4b, LLPF exhibited robust performance against all
+attack modes, with performance levels roughly converging to
+±1 of baseline2. However, considering a certain level of miss-
+detection is inevitable, this prevents the convergence perfor-
+mance with LLPF from reaching the level of baseline1. In
+(a) Convergence results without LLPF under 3 attack modes during
+widely launched attacks
+(b) Convergence results with LLPF (θ = 0.95 kσ = 0.6) under 3
+attack modes during widely launched attacks
+Fig. 4: Convergence test of LLPF
+summary, LLPF effectively mitigate widely launched attacks
+as well as improve the overall performance.
+VI. CONCLUSION AND OUTLOOK
+This work has demonstrated the vulnerability of FL when
+applied in wireless communication, illustrated through a chan-
+nel estimation scenario. Various adversarial attacks and strate-
+gies were devised to exploit this vulnerability. Subsequently,
+StoMedian was introduced to enhance resilience during the
+aggregation process, along with LLPF tailored for incremental
+training for channel estimation. Both StoMedian and LLPF
+have been validated through simulation.
+However, the performance of the mentioned methods may
+be impacted when the cached data exhibit highly non-identical
+distributions, a factor not addressed in our paper. Particularly
+for LLPF, in scenarios with non-identical or highly varied
+data, it may filter out new features for the model to learn.
+To address this, a soft determination process based on the
+cumulative trustworthiness of MUs, as exemplified in [20],
+could be applied. By integrating the current determination with
+the MU’s historical behaviors, a smart determination process
+could further enhance model convergence.
+ACKNOWLEDGMENT
+This work is supported partly by the German Federal
+Ministry of Education and Research within the project
+Open6GHub (16KISK003K/16KISK004), partly by the Euro-
+pean Commission within the Horizon Europe project Hexa-X-
+II (101095759). B. Han (bin.han@rptu.de) is the correspond-
+ing author.
+REFERENCES
+[1] N. H. Tran, W. Bao, A. Zomaya et al., “Federated learning over wireless
+networks: Optimization model design and analysis,” in IEEE INFOCOM
+2019 - IEEE Conference on Computer Communications, 2019, pp. 1387–
+1395.
+[2] S. Niknam, H. S. Dhillon, and J. H. Reed, “Federated learning for
+wireless communications: Motivation, opportunities, and challenges,”
+IEEE Communications Magazine, vol. 58, no. 6, pp. 46–51, 2020.
+[3] S. M. Sheikholeslami, A. Rasti-Meymandi, S. J. Seyed-Mohammadi
+et al., “Communication-efficient federated learning for hybrid vlc/rf
+indoor systems,” IEEE Access, vol. 10, pp. 126 479–126 493, 2022.
+[4] M. M. Wadu, S. Samarakoon, and M. Bennis, “Federated learning under
+channel uncertainty: Joint client scheduling and resource allocation,”
+in 2020 IEEE Wireless Communications and Networking Conference
+(WCNC), 2020, pp. 1–6.
+[5] A. M. Elbir and S. Coleri, “Federated learning for hybrid beamforming
+in mm-wave massive MIMO,” IEEE Communications Letters, vol. 24,
+no. 12, pp. 2795–2799, 2020.
+[6] S. Elbir, Ahmet M.and Coleri, “Federated learning for channel estima-
+tion in conventional and ris-assisted massive MIMO,” IEEE Transactions
+on Wireless Communications, vol. 21, no. 6, pp. 4255–4268, 2022.
+[7] S. Shahabodini, M. Mansoori, J. Abouei et al., “Recurrent neural
+network and federated learning based channel estimation approach in
+mmwave massive MIMO systems,” Transactions on Emerging Telecom-
+munications Technologies, vol. 35, 12 2023.
+[8] Y.-S. Jeon, M. Mohammadi Amiri, and N. Lee, “Communication-
+efficient federated learning over MIMO multiple access channels,” IEEE
+Transactions on Communications, vol. 70, no. 10, pp. 6547–6562, 2022.
+[9] M. M. Amiri and D. G¨und¨uz, “Federated learning over wireless fading
+channels,” IEEE Transactions on Wireless Communications, vol. 19,
+no. 5, pp. 3546–3557, 2020.
+[10] M. S. H. Abad, E. Ozfatura, D. GUndUz et al., “Hierarchical federated
+learning across heterogeneous cellular networks,” in ICASSP 2020 -
+2020 IEEE International Conference on Acoustics, Speech and Signal
+Processing (ICASSP), 2020, pp. 8866–8870.
+[11] W. Hou, J. Sun, G. Gui et al., “Federated learning for dl-csi prediction in
+fdd massive MIMO systems,” IEEE Wireless Communications Letters,
+vol. 10, no. 8, pp. 1810–1814, 2021.
+[12] J.-P. Hong, S. Park, and W. Choi, “Base station dataset-assisted broad-
+band over-the-air aggregation for communication-efficient federated
+learning,” IEEE Transactions on Wireless Communications, vol. 22,
+no. 11, pp. 7259–7272, 2023.
+[13] Y. Cao, S. Maghsudi, T. Ohtsuki et al., “Mobility-aware routing and
+caching in small cell networks using federated learning,” IEEE Trans-
+actions on Communications, pp. 1–1, 2023.
+[14] E. M. Campos, A. G. Vidal, J. L. H. Ramos et al., “FedRDF: A robust
+and dynamic aggregation function against poisoning attacks in federated
+learning,” 2024, preprint available at arXiv:2402.10082.
+[15] V. Rey, P. M. S´anchez S´anchez, A. Huertas Celdr´an et al., “Federated
+learning for malware detection in IoT devices,” Computer Networks, vol.
+204, p. 108693, 2022.
+[16] L. Cao, H. Chen, X. Fan et al., “Bayesian federated learning: A survey,”
+in IJCAI-23, 8 2023, pp. 7233–7242, survey Track.
+[17] H.-Y. Chen and W.-L. Chao, “FedBE: Making bayesian model ensem-
+ble applicable to federated learning,” in International Conference on
+Learning Representations, 2021.
+[18] B. Han and H. D. Schotten, “A secure and robust approach for distance-
+based mutual positioning of unmanned aerial vehicles,” 2024, to appear
+at IEEE WCNC 2024, preprint available at arXiv:2305.12021.
+[19] F. O. Catak, M. Kuzlu, E. Catak et al., “Defensive distillation-based
+adversarial attack mitigation method for channel estimation using deep
+learning models in next-generation wireless networks,” IEEE Access,
+vol. 10, pp. 98 191–98 203, 2022.
+[20] Z. Fang, B. Han, and H. D. Schotten, “A reliable and resilient frame-
+work for multi-uav mutual localization,” in 2023 IEEE 98th Vehicular
+Technology Conference (VTC2023-Fall), 2023, pp. 1–7.

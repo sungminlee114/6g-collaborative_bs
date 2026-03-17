@@ -1,0 +1,1958 @@
+Meta-Learning Multi-armed Bandits for Beam
+Tracking in 5G and 6G Networks
+Alexander Mattick
+Division of Positioning and Networks,
+Fraunhofer Institute for Integrated Circuits IIS,
+90411 Nuremberg, Germany
+George Yammine
+Division of Positioning and Networks,
+Fraunhofer Institute for Integrated Circuits IIS,
+90411 Nuremberg, Germany
+Georgios Kontes
+Division of Positioning and Networks,
+Fraunhofer Institute for Integrated Circuits IIS,
+90411 Nuremberg, Germany
+Setareh Maghsudi
+Ruhr University Bochum,
+44801 Bochum, Germany
+Christopher Mutschler
+Division of Positioning and Networks,
+Fraunhofer Institute for Integrated Circuits IIS,
+90411 Nuremberg, Germany
+Abstract—Beamforming-capable antenna arrays with many
+elements enable higher data rates in next generation 5G and
+6G networks. In current practice, analog beamforming uses a
+codebook of pre-configured beams with each of them radiating
+towards a specific direction, and a beam management function
+continuously selects optimal beams for moving user equipments
+(UEs). However, large codebooks and effects caused by reflec-
+tions or blockages of beams make an optimal beam selection
+challenging. In contrast to previous work and standardization
+efforts that opt for supervised learning to train classifiers to
+predict the next best beam based on previously selected beams
+we formulate the problem as a partially observable Markov
+decision process (POMDP) and model the environment as the
+codebook itself. At each time step, we select a candidate beam
+conditioned on the belief state of the unobservable optimal
+beam and previously probed beams. This frames the beam
+selection problem as an online search procedure that locates
+the moving optimal beam. In contrast to previous work, our
+method handles new or unforeseen trajectories and changes in
+the physical environment, and outperforms previous work by
+orders of magnitude.
+Index Terms—Multi-armed bandits, beam selection, rein-
+forcement learning, 5G+ networks.
+I. Introduction
+The envisioned transition to 5G and 6G technologies
+has started to transform the properties of established
+communication networks with very high transmission rates
+that are realized through usage of with Multiple Input
+Multiple Output (MIMO) antennas. However, the signal
+strength of the millimeter and terahertz signals used
+becomes too low to be reliably detectable by receivers.
+Hence, at the core of this transformation also lies the
+capability of Base Stations (BSs) to utilize directional
+beams for transmission towards a User Equipment (UE)
+served by the network. These narrowly targeted beams
+allow for more eﬀicient usage of the frequency spectrum.
+Usually, a (large) library of predetermined directional
+beams (i.e., a codebook) is available, and the question is
+which beam needs to serve a specific UE at any point in
+time. The beam tracking (Giordani et al., 2018) problem
+is even more complicated. As UEs are also moving along
+unknown trajectories, the BS needs to decide (in real-time)
+which beam needs to be used for tracking the UE.
+The core challenge of beam management is that the
+location of the UE is usually unknown. Even if we
+would first try to locate the UE (which itself is not
+trivial as positioning requires a coordinated procedure
+involving several BSs and the network) we still do not
+know the surrounding environment with all its material
+properties and their effect on radio waves propagation –
+this would be necessary for e.g. a digital twin solution
+where beams are selected based on a path tracing from
+the BS to the UE. In fact, even if we had such an accurate
+3D scan of the environment (with absorptive/reflective
+properties), we cannot guarantee that this scan is going
+to be up-to-date with recent changes in the environment,
+e.g., trees with/without leaves, parking cars, etc. Beyond
+that, beam management has strong real-time constraints:
+If one assumes a non-stationary UE, then the entire
+beam-selection problem has to be solved before the UE
+has moved from its current position. This has lead to
+a reliance on brute-force beamsweeps to select optimal
+beams, which is both energy-intensive and not scalable to
+large codebooks.
+We propose a novel method relying on Reinforcement
+Learning (RL) that aims to select the correct beam solely
+based on the received signal strength (RSS) feedback
+rather than using the ground truth position or 3D models.
+We utilize a temporal prediction system that exploits the
+locality of the UE’s movement, without needing explicit
+arXiv:2512.05680v1  [cs.LG]  5 Dec 2025
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+41
+42
+43
+44
+45
+46
+𝑝!
+48
+49
+50
+31
+32
+𝑝"
+34
+𝑝#
+36
+37
+38
+39
+40
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+11
+12
+13
+14
+15
+𝑝"#
+17
+𝑝"!
+19
+20
+1
+2
+3
+𝑝""
+5
+6
+7
+8
+9
+10
+optimal beam IDs and received power
+selected beam IDs measured power
+blocker
+reflector
+physical environment
+codebook
+GRU
+GRU
+GRU
+…
+…
+𝑡!
+𝑡#
+𝑡"
+𝑡!
+𝑡#
+𝑡"
+𝐼𝐷, 𝑝"
+GRU
+GRU
+GRU
+…
+…
+𝐼𝐷, 𝑝"!
+𝐼𝐷, 𝑝"#
+𝐼𝐷, 𝑝""
+𝑔$
+ℎ$
+Dir(.)
+Categorical
+GMM
+MLP
+Multivariate Gaussian
+…
+𝑟$!
+#
+𝑟$!
+%&
+𝑟$!
+!
+𝑟$!
+'(
+variational distribution
+model distribution
+∀𝑝!:   𝑟"!=
+𝑝!
+max
+#$%…'( 𝑝#
+calculate normalized RSS distribution
+over beam indices for last time step:
+predict goal state
+𝛿(𝑔")
+prior
+<copy>
+𝜎(⋅)
+𝒩(ℎ")
+<copy>
+prior
+predict search state
+Fig. 1: Schematic view of our approach: an agent (carrying a UE) moves through the environment. The line-of-sight
+(LOS) between the UE and the base station might be blocked and signals might be received via reflectors. During UE
+tracking, we select beam IDs from the codebook (orange) while the optimal beams are shown in green (darkness of
+colors encode larger timestamps). The right panel illustrates the learning process based on available trajectories: the
+left side depicts the variational distribution, and the right side shows the model distribution. The upper half models
+the unobservable goal state of the problem, while the lower half represents the exploration state.
+or implicit location estimation. To do this, we employ
+the framework of the “Restless Multi-Armed Bandit”
+(RMAB) to facilitate online search using a pre-trained
+neural network. As our method only uses a small stochastic
+neural network as a predictor, our beam selections are
+fast, without needing any raytracing or brute-force search.
+We show that our approach is robust against transfer to
+unknown trajectories and unseen environments and that
+we outperform existing RL approaches on the order of
+magnitudes in the number of beams to be probed to
+achieve high reference signal received power (RSRP).
+The paper is structured as follows. We discuss related
+work in Sec. II. Sec. IV provides background information
+on POMDPs, the RMAB framework, and beamforming.
+Sec. VI formalizes the problem, describes our model, and
+discusses its instantiation. Secs. VII and VIII describe the
+experimental setup and results. Sec. IX concludes.
+II. Related Work
+There has been significant work trying to improve upon
+naive beam-sweeps for beam selection. Bai et al. (2024)
+uses an LSTM and supervised learning to regress on the
+correct beam-id. (Maggi et al., 2024) provide a great
+overview on when to use RL and when to use other
+(e.g. supervised or stochastic programming) techniques
+in radio communications. Maggi et al. (2023) utilize a
+sophisticated Bayesian optimization framework to select
+beams in a Bayes-optimal sense. They first sample M
+beams and then build a Gaussian Process Model to give
+a stochastic estimate over the codebook entries. The
+selection is now performed according to a parallelized
+variant of the expected-improvement acquisition function.
+Aykin et al. (2020) use traditional Thompson sampling
+(i.e., time-independent search) to locate the optimal beam.
+This method is quite similar to ours, but relies on
+the assumption that radio signals change slowly as no
+dynamics (e.g., UE movement) are taken into account
+during beam selection. Our framework is designed for the
+opposite case: We assume that a UE might constantly
+move and therefore our search has to constantly readjust
+its own belief about beam quality.
+RMABs were originally proposed by Whittle (1988) for
+optimizing resource allocation using classical Lagrange-
+multiplier and Gittins-index methods (Gittins, 1979) un-
+der the assumption that the dynamics are fully known.
+Recent approaches study unknown dynamics, e.g., Liu
+et al. (2010) analyze RMABs using iterative “explo-
+ration” and “exploitation” phases. However, theoretical
+guarantees can generally only be given under strong
+assumptions on system parameters. Another recent area of
+research distinguishes between exogenous and endogenous
+systems (Gafni et al., 2022; Liu et al., 2010). Meshram
+et al. (2017) consider a POMDP scenario in which the
+unknown stochastic process is estimated using a Hidden
+Markov Model (HMM) under binary rewards. Meshram
+et al. (2016) analyze the behavior of Thompson sam-
+pling (Thompson, 1933), in the restless single-arm setting
+with binary reward. The closest work to ours is probably
+Jung and Tewari (2019) and Jung et al. (2019) who use
+Thompson sampling for RMABs and a similar deploy-then-
+update routine. However, in addition to their use of a
+deterministic policy (while we use a stochastic one) just
+like most prior work they assume the rewards are binary.
+From an RL point of view, several studies have ex-
+plored the problem of beam selection in millimeter-wave
+(mmWave) communication systems. One notable work
+is proposed by Raj and Kalyani (2020) who use Deep
+Deterministic Policy Gradient (DDPG) to address the
+blind beam selection problem, i.e., to replace traditional
+beam sweeping techniques. Another approach investigates
+the optimality and robustness of both the Deep Q-Network
+(DQN) and DDPG to the beam selection problem (Lee
+et al., 2020). A closely related approach by Sim et al.
+(2018) uses online contextual bandits and fast machine
+learning (FML) for contextual multi-armed bandits. How-
+ever, their approach makes significantly more assumptions
+on the environment (i.e., straight bi-directional road where
+cars send direction indicators, both being used as a
+static context for the bandit) and assumes vastly smaller
+codebooks of which 1/4th are allowed to send at once.
+From the point of view of Beam selection, most systems
+still rely on beam sweeps across a finite codebook of
+beam directions. Practical deployments tend to rely on
+codebooks as the directions can be aligned well to real
+world hardware limitations, e.g. quantized phases. While
+slow, exhaustive beam sweeps produce good results after
+search (see also (Bea, 2018)). One can further refine
+this by hierarchical sampling where one descends from
+coarse, wide beams toward narrower beams across multiple
+measurements (see for an overview (Ichkov, 2025)). The
+downside of these methods is the lack of speed as even
+in the hierarchical setting many low-performing beams
+have to be tried before a good ones are found. Further, in
+dynamic scenarios the optimal beam might have shifted
+by the time the UE is located. In our problem we assume a
+fast moving UE (or, analogously narrow beams), meaning
+that only one (or a small number) beam can be trialed
+in each iteration before the UE position has changed.
+This reduces exhaustive search to essentially a random
+search, since exhaustive exploration is stateless between
+UE position changes.
+More involved approaches utilize optimization algo-
+rithms that may be coupled to the HW properties of
+a specific basestation. For instance, Singh et al. (2022)
+uses manifold optimization to build a hybrid analog-
+digital beamforming system. While these methods are
+undoubtedly interesting, the analysis of the hardware-
+software co-design of real world basestations is out of scope
+for our work.
+While these prior works have made significant contribu-
+tions to the field, it is important to note that deterministic
+methods may be suboptimal in scenarios where predic-
+tions involve uncertainty, particularly when considering
+unknown receiver positions. In mmWave communication
+systems, the probabilistic nature of predictions plays a
+crucial role due to factors such as channel fading, noise,
+and environmental changes. Therefore, it is imperative
+to account for the inherent uncertainty and adaptability
+requirements when addressing the beam selection problem.
+III. Problem Description
+The beam selection problem is a necessary sub-task for
+beamforming antenna arrays: Given a fixed codebook A
+of N possible beam directions to choose from, the beam
+selection problem involves finding the beam a ∈A that
+maximizes the Received Signal Strength (RSS) to a UE
+with a minimal amount of measurements of codebook
+entries. Ideally, one would have access to the UEs location
+and moving direction, as well as a 3D model of the
+environment including material properties to facilitate e.g.,
+raytracing based solutions, but this is usually not possible:
+In 3GPP, the UEs location and movement direction is not
+available for beam selection due to privacy concerns, and
+even if those were available gathering a 3D model with
+material properties is intractable.
+For this reason, we assume a black-box structure, where
+we have no information about the environment, reflections,
+or even the azimuth and elevation of each beam in the
+codebook. To solve this problem, we search for an optimal
+beam by choosing k = 1 beams from the codebook and
+update our choice based on the measured RSS. Since
+UEs usually do not have a fixed position, we also predict
+a correction factor g which is used by the beam-choice
+algorithm to correct for the movement of the UE. This
+way, the beam selection problem decomposes into a state-
+estimation problem for the correction factor g, and a
+decision problem for finding the optimal beam. This opti-
+mization problem is the typical scenario for Reinforcement
+Learning (RL), where one aims to maximize the long-term
+discounted cumulative reward (RSS) just by interacting
+with the environment.
+IV. Background
+A. Reinforcement Learning
+Reinforcement Learning (RL) describes a field of study
+that attempts to solve sequential Markov Decision Pro-
+cesses (MDPs). An MDP consists of a set of states s ∈S,
+actions a ∈A, reward R : S × A →R, a transition
+distribution (typically unknown) T : S × A →S, and
+a discount factor γ. We train a decision making policy
+π : S →A that selects actions in states. Our objective
+is to find the optimal policy π∗, which maximizes the
+expected discounted sum of future rewards:
+π∗= argmaxπ E
+"tmax
+X
+t=0
+γtR(st, at)π(at|st)T(st+1|st, at)
+#
+,
+where 0 ≤γ < 1 can be configured to trade immediate
+over future rewards and guarantees boundedness of the
+expectation (Sutton and Barto, 2018). In our case, we
+assume a POMDP setting, which further differentiates
+between observations O1:t and states s1:t. “Observations”
+are measurements we directly get from the environment
+(e.g. RSS values), while “states” include unobserved infor-
+mation, such as the UE’s ground truth position.
+In this work we follow a standard POMDP formulation:
+A POMDP is defined as a 7-tuple (S, A, T, R, Ω, O, γ). The
+definitions are largely the same as in the ordinary MDP
+with the extension of an explicit observation set Ωand
+conditional observation probabilities conditioned on the
+current (hidden) state O : S ×A×Ω→R. In other words,
+O is the probability of observing O ∈Ωin state S ∈S
+after executing action A, and γ ∈[0, 1) is the reward
+discount factor.
+POMDPs reduce to ordinary MDPs in the case of S = Ω,
+but if S ̸= Ω, the agent only observes partial information
+of the true state. This makes POMDPs significantly more
+challenging to solve as the agent also has to account for
+the uncertainty induced by the necessary state estimation.
+Let b : S →R be the belief state over a state s. The agent
+maintains the belief state by updating it with received
+observations and actions:
+b(s′) ∝O(o | s′, a)
+X
+s∈S
+T(s′ | s, a)b(s),
+(1)
+as derived in (Kaelbling et al., 1998).
+This problem generally becomes diﬀicult in practice due
+to the fact that the exact observation probabilities O(o |
+s′, a) and transition probabilities T(s′ | s, a) are unknown.
+In the case of beam selection, the unknown part of the
+state is the position/change of position of the UE.
+B. Multi-Armed Bandits (MABs)
+The multi-armed bandit (MAB) problem is formally
+equivalent to a one-state Markov decision process. Here,
+we assume a stationary environment with respect to an
+agent’s actions: no matter which action a ∈A the agent
+takes, it will not change the state. In the MAB setting,
+the primary objective is to estimate the action (referred to
+as an “arm”) that maximizes the expected utility/reward.
+However, it is also crucial to balance exploration and
+exploitation, meaning that the agent must actively explore
+different actions to optimize its long-term performance.
+The MAB model is built to learn the optimal tradeoff
+between discovering new high performing actions, while
+also maintaining high cumulative rewards.
+If one assumes full access to the payoff distributions, one
+can solve MABs directly using an index policy known as
+the Gittins-index (Gittins, 1979). However, since in prac-
+tice these are not known, one can use highly eﬀicient ap-
+proximations, such as Thompson-sampling (TS) (Thomp-
+son, 1933), which updates the expected utility of each
+arm using Bayes’ rule. The high eﬀiciency makes MABs
+very popular in online decision-making scenarios such as
+recommender systems (Zhou et al., 2017), black-box opti-
+mization (Dimmery et al., 2019), anomaly detection (Ding
+et al., 2019), healthcare (Durand et al., 2018), and machine
+learning (Gagliolo and Schmidhuber, 2008).
+The limitation of MABs compared to “normal” Rein-
+forcement Learning is that one has to assume stationarity
+in the payoff distribution. Stationarity here refers to
+the distribution behind each arm not changing during
+sampling, which makes modeling dynamic problems (such
+as moving UEs) impossible. Fortunately, many extensions
+to the MAB problem exist that relax this assumption,
+allowing one to use variants of the MAB algorithms on
+dynamic problems. One of the most unrestricted these
+realizations is the Restless MAB.
+C. Restless MABs (RMABs)
+We utilize an extension of the MAB framework, some-
+times referred to as a “restless” MAB. In this extension,
+we assume that there exists an unobservable stochastic
+transition system P(st+1 | st) that rotates through hidden
+states s ∈S and that changes the payoff distribution
+behind each arm. More precisely, one assumes the exis-
+tence of Markov transitions Pa, P¯a that change all arm
+distributions depending on whether arm a was selected
+(Pa) or not selected (P¯a). Note that RMABs are only
+partially observable as we only “see” the outcome of arms
+we actually sample.
+Solving RMABs is computationally intractable, as op-
+timal policies are NP-hard to compute even in the finite
+horizon setting (Papadimitriou and Tsitsiklis, 1994). One
+possible heuristic is to study a time-averaged version of
+RMABs which yields the Whittle-index (Whittle, 1988).
+Unfortunately, the Whittle-index is itself generally only a
+heuristic1. Further, because the index is computed offline
+and fixed, any model mismatch or estimation error persists
+- there is no inherent mechanism to adjust the index
+in light of new observations. This implies that finding
+an index policy is hard to frame as a machine learning
+problem: Exploration vs Exploitation of different indices
+is not trivial to include in index policies.
+Recent advancements in learning RMABs suggest that
+Thompson Sampling (Granmo, 2010), which is an asymp-
+totically optimal Bayesian technique for solving ordinary
+MABs, can be trivially adapted towards a close to optimal
+RMAB algorithm (Jung and Tewari, 2019) in the episodic
+setting. The Bayesian nature of TS and the episodic
+setting makes this a prime candidate for the introduction
+of machine learning into RMAB solving.
+V. Beam Selection as RMAB
+In this work, we model the beam tracking problem as
+an RMAB by considering the set of arms A to be the
+codebook of beams (see, for instance, the upper left part
+of Fig. 1: the codebook consists of beamforming vectors
+(or precoding vectors), each of them corresponding to a
+specific beam direction or pattern), S to be the description
+of the location of the UE and the RSS value of all beams
+in the codebook, while the arm transitions Pa, P¯a are
+(implicitly) given by the movement of the UE. Note that
+for beam selection, we can assume that Pa = P¯a since
+1For instance, one has to guarantee indexability, which corresponds
+to the set of unplayed arms growing monotonically as the underlying
+lagrangian increases.
+a UE’s movement can be assumed to be independent of
+which beam was selected. This means that while we still
+have a state-evolution in all arms (even the ones that
+have not been tried), the state change is independent from
+the arm selection. The major challenge in treating beam
+tracking as an RL problem is that we only observe the
+part of the state (beam RSS) we end up measuring while
+the rest of the state remains unknown: Beam selection is
+a POMDP.
+Since solving such an RMAB is computationally in-
+tractable, we treat the RMAB as an episodic task similar
+to (Jung and Tewari, 2019) which allows us to use a
+machine learning approach to solve the RMAB: Specifi-
+cally, we split the RMAB inference into two parts. First,
+we collect N episodes by running TS in simulation and
+train a recurrent neural network to predict TS’s action
+distribution by updating the parameters θ of a stochastic
+neural network. Second, during deployment, the resulting
+network is now capable of approximating the optimal
+beam distribution from just the sequence of previously
+tried (beam-id, rss) values, without needing any further
+training (online inference phase).
+Since we train a suitable network during the offline
+training phase, the online inference phase is as fast as
+a single forward pass through the neural network.
+VI. Meta-Learning Multi-armed Bandits
+For our beam-selection problem, we consider an N-
+armed bandit, where N is the size of our codebook, and
+“pulling” an arm ai means measuring the received power
+ri at arm ai. Unfortunately, naive application of existing
+approaches runs into the issue of distribution shift: As the
+UE moves through the environment the hidden state st
+determining the arm-payoff keeps changing. Accounting
+for this change in arm-payoff necessitates using a more
+complex arm distribution model, which is intractable to
+solve online using e. g., MCMC. The following sections will
+cover how we solve the distribution shift (Section VI-A)
+and the inference complexity issues (Section VI-B).
+A. Distribution shift in the underlying reward process
+In contrast to ordinary MABs where the arm distri-
+bution is assumed to be stationary, the beam quality
+distribution shifts as the unobservable UE moves. We solve
+this with an estimator P g(gt+1 | o1:t) that attempts to
+predict the optimal beam ID given all previous observation
+up until the current time step. This tries to account
+for the distribution shift in the Multi-Armed Bandit
+distribution induced by the movement of the UE. We
+approximate a second distribution P s(rt+1(a) | o1:t, gt+1)
+that, intuitively, acts as the actual MAB process that
+aims at solving the exploration-exploitation trade-off, i.e.,
+accurately predicting the expected signal strength rt+1(a)
+of beam ID a, given all previous observations and the
+prediction of the optimal beam ID. The resulting RMAB
+model is:
+P(rt+1(a), gt+1 | o1:t) =
+P s(rt+1(a) | o1:t, gt+1)
+|
+{z
+}
+bandit “search” head
+P g(gt+1 | o1:t)
+|
+{z
+}
+prediction “heatmap”
+,
+(2)
+where o1:t is the set of observed values up to timestep t,
+gt+1 is the estimated optimal beam id at time step t + 1,
+and rt+1(a) is the reward distribution at time step t + 1
+when choosing action a ∈A.
+The main purpose of P g is to account for the distri-
+bution shift induced by a moving receiver, with the goal
+of correcting the P s distribution such that the sampling
+process becomes a static distribution estimation problem
+from the point-of-view of the search head P s.
+B. Meta-Learning ahead of time
+The second problem is how to make the distribution esti-
+mation tractable. Normally, Bayesian estimation through
+methods such as Markov-chain Monte-Carlo (MCMC)
+(Tierney, 1994) or Stein’s variational descent (Liu and
+Wang, 2019), become intractable to do online due to the
+large number of iterations they require, especially when
+using uninformative distributions as starting points. At
+worst, as the UE is constantly moving it might have
+already moved away from the selected beam by the time
+inference is complete. Hence, we propose meta-learning
+a distribution ahead of time, such that updating the
+estimate with further observations ot+1 is only as diﬀicult
+as executing a stochastic function.
+For this reason, we propose using a recent approach
+known as stochastic variational inference (SVI) (Hoffman
+et al., 2013) to generate the distributions. SVI approxi-
+mates the intractable posterior of the latent variable z
+given the observed values x (from some dataset), using a
+different, parameterized distribution Qϕ, which is obtained
+by minimizing the KL divergence between P and Q:
+min
+¯ϕ,¯θ DKL(Q ¯ϕ(z) ∥P¯θ(z | x)) .
+(3)
+Note that the variational distribution Q does not depend
+on the elements of the dataset x, making it trivial to
+sample from, without requiring the intractable distribu-
+tion P(x). Instead, the information on the dataset x is
+amortized into the variational parameters ϕ during train-
+ing, which can be achieved eﬀiciently by minimizing the
+KL-divergence or equivalently maximizing the Evidence
+Lower Bound (ELBO):
+ELBO = EQ(z|o1:t)[log(P s
+ϕ(rt+1(a)|z, gt+1))+
+log(P g
+ϕ(gt+1|z)) + log(P(z)) −log Qθ(z|o1:t)],
+(4)
+where P(z) is an arbitrary prior over the latent variables
+z. We use this SVI pipeline to train a policy π which
+is then fixed during deployment, effectively offloading
+the complexity of updating the posterior away from the
+inference time onto training time.
+C. Online Inference
+For the case of online inference, we need the previous
+observations o1:t as input since those are the observations
+that we will have when exploring the environment online.
+The KL divergence between variational and model distri-
+bution from Eq. (3) is only valid if we assume that only the
+data provided in the dataset is relevant to the prediction
+(as only those get amortized into the parameters). In the
+case of online prediction of some datapoint o1:t we also
+have to condition our distribution on the observations.
+SVI allows us to amortize the dataset x into the trainable
+parameter. In our case, we can optimize this distribution
+by simply conditioning P on the current set of observations
+o1:t. An observation o consists of both the received power
+and the measured beam, giving us o = (RSS, beam-id).
+The objective containing the online conditioning on o1:t
+is described by
+min
+¯ϕ,¯θ DKL(Q ¯ϕ(z | o1:t, rt+1(a)) ∥
+P¯θ(z | o1:t, x, rt+1(a), g1:t)) .
+(5)
+In words: We align the distribution Q ¯ϕ that does not
+know x to P¯θ, which does know x. This naturally forces
+the information in the dataset x into the parameters ¯ϕ
+and ¯θ.
+Since we have a goal state gt+1 and an arm sampling
+state rt+1(a), we also partition the latent along the same
+line z = (zg, zs). The latent variable random z learned
+using this objective can now be used inside the distribution
+to
+P(rt+1(a), gt+1 | o1:t, x) ∝P s
+¯θ (rt+1(a) | zs, g1:t+1)
+P g
+¯θ (gt+1 | zg)Q ¯ϕ(zg, zs|o1:t),
+where gt+1 is the “goal” beam, i.e. the best-beam estimate
+used to correct for UE movement, z is the latent parameter,
+and rt+1(a) is the distribution of returns for arm a. Note
+that our model is factorized into the two components
+“search” and “goal”, as shown in Eq. 2.
+The information from the dataset x here is amor-
+tized into the static weights θ and ϕ. The model can
+now be trained by executing the current distribution in
+the environment using Thompson sampling (Thompson,
+1933), storing the gathered datapoints in our dataset, and
+training the next distribution on the extended dataset (see
+Fig. 1).
+During inference, we treat the parameters θ and ϕ as
+static, and simply choose the maximal arm from a vector
+of samples from the learned P s
+θ (rt+1(a)|z, o1:t)P g
+ϕ(z | o1:t)
+distribution, see Thompson sampling (Thompson, 1933).
+D. Practical Considerations
+We approximate the beam selection process hierar-
+chically and chose to model the prediction heatmap
+P g(gt+1 | o1:t) as a categorical distribution with an
+uninformative Dirichlet prior with all αi = 1. The bandit
+search head P s(rt+1(a) | o1:t, gt+1) is implemented as
+a three layer MLP with skip-connections that receives
+both the categorical prediction gt+1 and the observations
+o1:t in the form of a hidden state ht with a Gaussian
+mixture model prior (see Fig. 1). To predict the posterior
+z consisting of the goal-latent gt and the search-latent ht,
+we utilize two gated recurrent units (GRU) (Cho et al.,
+2014) that receive the sequence of previous observations as
+inputs. For increased stability, we normalize the received
+power measurements “per frame” meaning we divide the
+RSS by the maximally receivable power at that timestep
+rt(i) =
+pi
+maxk=1...N pk
+,
+(6)
+where pi is the raw measured RSS for beam ID i and
+the denominator refers to the RSS of the best beam ID
+(i.e., the highest RSS that is achievable). The objective
+of this is to prevent the model from being able to
+completely ignore learning the dynamics of states where
+all codebook entries have poor RSS values. Note that the
+model remains trainable if we remove the normalization,
+but the convergence is slower. We only normalize the
+reward but not the observation: During deployment we
+only measure individual beams, which means we cannot
+normalize based on the best beam. To not introduce a
+domain shift between training and inference, we keep the
+observations unnormalized.
+To further increase stability we use automatic Rao-
+Blackwellization in the stochastic programming library
+pyro (see e.g. Schulman et al. (2015a) and Blackwell
+(1947)) and a batchsize of 64 full trajectories consisting of
+200 steps each. For exploration, we utilize a simulated en-
+vironment with 12 parallel agents and a total exploration
+budget of 500, 000 steps in our simulated environment.
+Algorithm 1 Pseudocode of our method: During acting,
+we sample according to the currently learned distribution
+and record all actions, observations, and goal states in a
+buffer. Batches from the buffer oN
+1:T , rN
+1:T (a), gN
+1:T are later
+used during training to optimize the parameters ϕ, θ.
+function act(Pϕ, Qθ, o1:t)
+z ∼Q(z|o1:t)
+gt+1 ∼P g(gt+1|z)
+rt+1(a) ∼P s(rt+1(a)|z, gt+1)
+select beam argmaxa rt+1(a)
+observe RSS for ot+1 = (a, RSS)
+during training: also observe gt+1
+end function
+function train(Pϕ, Qθ, o1:T , r1:T (a), g1:T )
+for all t ∈{1, . . . , T} do
+Estimate ELBO using Eq 4
+update ϕ, θ using Adam.
+end for
+end function
+1
+2
+3
+4
+Fig. 2: Visualization of the simulation environment: The
+UE (black cross) moves around the environment following
+the dashed path. At each step, the link between the BSs
+(black square) and the UE is checked for obstructions.
+Here, if a link is obstructed it is plotted in red and blue
+otherwise.
+To account for the fact that our exploration dataset
+grows as we continue exploring, we scale the number of
+training steps after each round of exploration to
+steps =
+$
+C
+r
+|D|
+batchsize
+%
+,
+where |D| is the current dataset size. We set C = 3 to
+roughly match the expected number of training iterations
+to the number of environment rollouts in each training
+episode. This is not an extensively tuned parameter and
+is only used to align the number of updates to the dataset
+size and therefore reduce the total amount of compute
+necessary. We use the ADAM optimizer (Kingma and Ba,
+2014) with a learning rate of 3×10−4. Algorithm 1 shows
+the pseudo code of our algorithm.
+VII. Experimental Setup
+Geometries. We consider three slightly different envi-
+ronments for our benchmark: First an environment with
+a single basestation and flexible real-world configurations
+(e.g. with/without certain signal blockers and reflectors).
+This is aimed to show robustness against real world
+variation. Second, we consider a setting with 4 basestations
+and different codebook sizes to investigate scaling across
+different numbers of beams and basestation positions.
+Finally, in order to also investigate moving the UE at
+different speeds through the environment we instantiate
+an environment with different total speeds.
+Simulation environment and geometry. We designed and
+implemented a simulator to generate the required radio
+channels and to obtain the input RSS values. We set up a
+simulation environment in Matlab with a geometry that is
+representative of a typical urban scenario. We place four
+base stations in the environment and let their panels point
+into a specific directions, see Fig. 2.
+To model complex environments, we add objects that
+act as blockers and attenuate the received signal, or
+as reflectors. They are defined using different shapes,
+sizes and locations. When acting as blockers, signals are
+attenuated (with a varying amount between experiments,
+imitating different materials) when passing through. When
+acting as reflectors, the signal power drops to account
+for reflection losses. We apply such parameters based on
+experimental data (Hosseini et al., 2021).
+The
+radio
+channels
+are
+generated
+using
+QuaDRiGa
+(Jaeckel
+et
+al.,
+2014).
+For
+the
+system
+model,
+we
+chose
+a
+carrier
+frequency
+of
+28 GHz,
+a
+bandwidth of 100 MHz, OFDM modulation, and 64
+active
+sub-carriers.
+The
+base
+stations
+are
+modeled
+with uniform rectangular array antenna panels with
+half-wavelength-separated
+elements.
+For
+beamforming,
+discrete analog DFT-based (Tse and Viswanath, 2005)
+codebooks of predefined azimuth and elevation pointing
+angles are designed given a panel design similar to that
+from Fig. 1. For simplicity, the UE is equipped with an
+omni-directional antenna (i.e., no beamforming).
+UE trajectories and movements. Using QuaDRiGa, we
+define the environment layout and place the 4 base
+stations and blockers. We then randomly defined a tra-
+jectory for the UE using 4 anchor points defining a track
+around the middle blocker when present, otherwise similar
+tracks are used when the blocker is not present in the
+environment. We project a ray from each BS to the
+UE for each spatial sampling point on this track and
+count the intersections with blockers and attenuate the
+signal accordingly. Once this info is obtained, we generate
+the frequency-domain channel coeﬀicients including the
+environmental attenuation. Unless stated otherwise, we
+use 70% of the generated trajectories for training 15% for
+testing and 15% for validation.
+Evaluation metric. For our evaluation, we assume a
+system without noise and only line-of-sight (LOS) or
+obstructed LOS paths and no multipath signals. As a
+measure, we define the RSS indicator as the received power
+calculated in the frequency domain. Even though we do
+not consider more sophisticated network topologies in this
+work, in order to clearly compare the performance of our
+approach with the available baseline solutions, the task at
+hand remains a challenge whose complexity stems from
+the availability of multiple BSs with large codebooks.
+Computing infrastructure. For all experiments we used
+a machine equipped with 32GB memory, an Nvidia
+RTX3090 GPU and an AMD Ryzen 5800X3D CPU. We
+did not experience any hardware bottlenecks as we were
+mainly constrained by the inherent sequentiallity of our
+model and SVI itself.
+TABLE I: Test optimal beam classification of training and
+validating on different dataset combinations. This shows
+the RSS/top-1/top-5 accuracy of classifying the optimal
+beam for unknown trajectories.
+tested on 60 beams
+trained on
+no blocker
+blocker
+blocker ref
+no blocker
+176.43 / 70% / 91%
+159.06 / 51% / 73%
+160.99 / 55% / 78%
+blocker
+143.94 / 52% / 75%
+163.54 / 53% / 76%
+156.25 / 52% / 75%
+blocker ref
+120.18 / 36% / 64%
+132.74 / 35% / 62%
+141.88 / 40% / 70%
+random
+18.12 / 2% / 8%
+37.76 / 2% / 8%
+31.78 / 2% / 8%
+VIII. Evaluation
+We investigate the robustness of the selection policies
+learned by our method by evaluating across unseen trajec-
+tories and environments (Section VIII-A), codebook sizes
+and basestation positions (Section VIII-B), movement
+speeds of UEs (Section VIII-C), and close this with an ab-
+lation of the size of the correction model (Section VIII-D).
+Since we assume a small number of beam evaluations
+for every timestep, we do not directly compare against
+exhaustive beam sweeps since they would either be
+essentially random (one beam evaluation per timestep
+while the UE is moving) or would break the beam
+evaluation budget by an order of magnitude or more2.
+Instead, we demonstrate the performance of our MAB-
+based approach by comparing it against state-of-the-art
+solutions from the field of communications (Maggi et al.,
+2023) and Reinforcement Learning (Schulman et al., 2017)
+(Section VIII-E). Additionally, we offer an uncertainty
+estimation experiment in Section A, which showcases how
+our method can dynamically delegate to e.g. full beam
+sweeps if its uncertainty is high.
+A. Robustness and Generalization across Trajectories and
+Environments
+We evaluate the robustness of our approach to changes
+in the environment. To do so, we consider only BS2 (see
+Figure 2) and use a codebook consisting of 60 beams
+while varying the physical topology of the environment.
+Specifically, we instantiate three versions of the environ-
+ment from Fig. 2: (1) without the central cuboid blocker
+(“no blocker”), (2) with the blocker (“blocker”, ), and
+(3) with both the blocker and reflections (“blocker ref”).
+BS2 is placed 10 m above the ground, pointing towards
+the central “blocker”. We train a control policy for BS2
+on 3 different trajectory types, each with 350 instances
+for 200 timesteps each, and record all 60 codebook power
+indicators. For testing we do the same but use unseen
+trajectory types.
+Table I shows the results. We report the normalized
+achieved RSS and the top-1 and top-5 accuracy (i.e.,
+if our method chooses the best or one of the top-5
+best beams). As we normalize the reward per timestep,
+2We do report the performance of random selection and report
+the achieved RSS as a percentage of the optimal (exhaustive sweep)
+beam
+TABLE II: Ablation across codebook sizes and basestation
+position. Reported are the percentage of the maximum
+cumulative RSS / raw cumulative RSS. Test results shown
+here on unseen trajectories.
+low attenuation
+high attenuation
+5 × 5
+9 × 9
+11 × 11
+5 × 5
+9 × 9
+11 × 11
+BS1
+27% / 0.63
+13% / 1.16
+28% / 6.03
+28% / 0.61
+15% / 1.01
+50% / 10.46
+BS2
+92% / 7.91
+91% / 27.90
+81% / 65.13
+94% / 7.36
+92% / 28.18
+70% / 48.82
+BS3
+90% / 4.67
+82% / 13.96
+91% / 42.61
+94% / 4.73
+92% / 16.27
+91% / 43.32
+BS4
+93% / 4.43
+68% / 10.27
+57% / 18.11
+93% / 4.38
+69% / 9.29
+55% / 17.51
+the total achievable reward is 200 (number of steps in
+each trajectory). Noticeable at first glance, our method
+performs overall well as it collects the vast majority of the
+achievable reward. Note that the theoretical limit of 200
+is only achievable if the agent may predict the movement
+of the UE perfectly. The “random” results correspond
+to a naive beam-sweeping procedure that takes 60 time
+steps to probe all the beams. From these results we can
+conclude that our method is robust against modest to large
+changes in the physical environment with our model only
+negligibly sacrificing reward. One particularly interesting
+artifact is the better performance on the “blocker ref”
+environment that we obtain training without the blocker
+instead of training on “blocker ref” directly. We believe
+this to be due to the higher complexity of the blocker ref
+environment yielding slower convergence and a generally
+overly conservative policy.
+Beyond classical robustness to changes in the domain,
+we are also able to quantify our method’s uncertainty due
+to the usage of Bayesian inference. This can be quite useful
+to e.g., use classical methods once the agent hits consistent
+high uncertainty or to trigger additional training. We
+accomplish this by predicting the chance of error directly
+from the internally predicted variances. We demonstrate
+an initial study showing our model’s ability to quantify
+its own uncertainty and switch to full-beam sweeps in
+Appendix A. While these results already show promise,
+we leave a more thorough analysis of how to strategically
+switch between different beam-selection algorithms for
+future work.
+B. Impact of Codebook Size and Basestation Position
+We
+consider
+different
+configurations
+of
+the
+beam
+and basestation topology. Specifically we study another
+“blocker ref” scenario, but now choose from 3 different
+codebook sizes (5×5, 9×9, 11×11) and 4 different basesta-
+tion positions (BS1, BS2, BS3, BS4). We ablate the effect
+of blocker strength by considering both a low attenuation
+and a high attenuation blocker (infinite strength). Finally,
+we increase the trajectory length to 390 steps to validate
+long-range inference performance. Hence, in total we train
+3×4×2=24 policies. This experiment design demonstrates
+that our approach works on a variety of settings with
+different underlying transition distributions and codebook
+sizes.
+TABLE III: Top-3 accuracy across codebook sizes and
+basestation position.
+low attenuation
+high attenuation
+5 × 5
+9 × 9
+11 × 11
+5 × 5
+9 × 9
+11 × 11
+Basestation 1
+30%
+16%
+36%
+30%
+16%
+56%
+Basestation 2
+98%
+95%
+88%
+96%
+95%
+78%
+Basestation 3
+95%
+89%
+96%
+97%
+96%
+97%
+Basestation 4
+96%
+75%
+63%
+96%
+71%
+56%
+Table II shows the test results on unseen trajecto-
+ries. This benchmark has roughly twice the number of
+timesteps per trajectory than the previous environments
+and considers two variants across three different codebook
+sizes. We found that we needed to increase the amount
+of optimization steps to account for the increase in the
+number of beams: Specifically, we increased the amount
+of compute used by 2×, while keeping the amount of
+environment interactions the same.
+We additionally report top-3 accuracy results in Ta-
+ble III. We report a top-3 accuracy due to the high number
+of beam selections with nearly identical performance. We
+found that top-3 accuracy generally correlates well with
+empirical RSS distributions on our simulation.
+We see high performance in all configurations apart
+from BS1, which is placed such that it points directly
+into the blocker. This means that the difference between
+an optimal and a suboptimal beam is small as even
+the optimal beam can barely see the UE. As no beam
+clearly dominates another, the model continuously ex-
+plores different beams rather than sticking to one slightly
+better beam. We also observe a lower accuracy in high
+dimensional codebooks, which is however balanced out
+by the much higher possible transmission rates possible
+for larger codebooks. This is expected as more available
+actions make the selection problem harder, but the optimal
+beam has higher throughput. The normalized RSS drops
+for larger codebooks, while the actual received power
+increases substantially.
+C. Impact of movement speed
+We also evaluate the impact of UEs moving at drasti-
+cally different speeds. We generate a set of trajectories and
+train on different sampling rates (to account for different
+movement speeds of the UE): Sampling every timestep
+of the trajectories leads to a “base speed” (slowest),
+TABLE IV: Expected cumulative RSS as a percentage of
+maximally achievable over time. We train and evaluate
+models on different speeds and observe consistent perfor-
+mance across all different speed ranges.
+1.11m/s
+2.22m/s
+3.33m/s
+4.44m/s
+model@1.11m/s
+74.23%
+73.27%
+75.12%
+75.65%
+model@2.22m/s
+74.84%
+73.99%
+74.91%
+74.57%
+model@3.33m/s
+75.04%
+74.25%
+75.22%
+74.87%
+model@4.44m/s
+74.48%
+74.10%
+74.81%
+75.18%
+1
+2
+3
+4
+5
+·105
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+exploration steps
+expected total RSS per episode
+depth 5
+depth 4
+depth 3
+depth 2
+Fig. 3: Performance comparison between different goal
+model sizes on the “no house” environment. We observe
+significant performance increases up to a depth of 4.
+while skipping every N entries gives an effective speed
+of N × base speed. We set our base speed at 1.11m/s and
+compare N = 4 speed levels each with a 5 × 5 codebook.
+To adequately test this, we generate long trajectories with
+500 timesteps, such that “skipping” steps for faster moving
+UEs still have enough timesteps to allow for meaningful
+comparison. Our models were first trained on random
+trajectories in the environment with a total training time
+of on average 2.5h.3 After training, inference time is
+negligible. Notice that since we only record the RSS
+values for each beam, doppler shifts do not affect the
+measurements.
+The results are shown in Table IV. Our method is robust
+against changes in UE speed both during training and
+inference. We want to note that the absolute velocities
+are not too important for this analysis: only the relative
+change between speeds is important from a selection point
+of view, since our method makes no assumption on the
+physical or antenna configuration. The main change for
+faster trajectories is that faster trajectories lead to faster
+changes in the codebook values, but the relative speedup
+in codebook changes only corresponds to how much of a
+multiple of the training speed our method is evaluated at.
+D. Impact of Goal-model size
+One of the most important elements of the search model
+we propose is the implicit correction towards domain shift
+introduced by the goal model. For this reason, we compare
+different numbers of “goal state” layers (top of fig. 1
+against each other.
+As shown in Fig 3, performance improves up until a
+depth of 4 GRU layers, after which the improvement stops.
+We hypothesize that this is due to the model getting
+close to representing the “true” goal belief distribution.
+3Training time depends on the speed since faster trajectories have
+fewer timesteps to train over
+TABLE V: GP baseline (Maggi et al., 2023) for differ-
+ent speeds and different number of sampled beams per
+timestep. Drawing more than 4 samples per timestep is
+intractable due to exploding computational and memory
+complexity in the GP. For multiple samples we always
+assume the best beam is used for transmission.
+1.11m/s
+2.22m/s
+3.33m/s
+4.44m/s
+samples 1
+65.85%
+65.68%
+67.51%
+66.99%
+samples 2
+78.30%
+77.42%
+78.84%
+78.04%
+samples 3
+81.44%
+79.07%
+79.83%
+79.35%
+samples 4
+88.18%
+86.27%
+87.16%
+85.80%
+Exceeding the capacity needed to approximate the goal
+distribution will not improve overall performance as even
+in the limit of perfect belief-state representation, the
+model would not be able to accurately capture the true
+goal due to partial observability.
+E. Comparison against the State of the Art
+We compare our method with two contemporary state-
+of-the-art methods in intelligent beam selection and RL
+respectively. Beam selection. We compare against an
+online Bayesian optimization scheme proposed by (Maggi
+et al., 2023), which iteratively samples beams from the
+codebook according to an acquisition function over a
+Gaussian Process (GP) fit on the measured RSS. In
+contrast to our work, Maggi et al. (2023) must sample
+multiple beams per timestep (configured via an “overhead”
+function). As we only samples one beam per timestep4, we
+fix the number of beams tried in Maggi et al. (2023) and
+compare different per-timestep sampling budgets. For this
+we take the same test set used in Section VIII-C.
+The results are shown in Table V. Our method is
+consistently better than the GP based baseline in the 1
+sample case. However, once multiple samples per timestep
+can be drawn, the GP baseline starts closing in and
+exceeding our method, though at the expected increase
+in real-world sampling cost: Trying 2 different beams
+corresponds to sampling close to 10% of the codebook
+for a 5 × 5 antenna array.
+One core issue with GP based solutions is the huge
+computational burden involved in fitting GPs to data:
+Computing the weights of a GP for a dataset with N
+elements corresponds to fitting kernel hyperparameters by
+constructing and then inverting a large N × N matrix
+multiple times. This quickly becomes intractable in both
+memory and compute, especially on edge devices with real
+time guarantees. For this method, the dataset grows with
+num_timesteps×samples_per_timesteps. This means the
+“samples 4” case would yield a matrix of size 2000 × 2000
+to construct and invert multiple times.
+4Recent work by Karbasi et al. (2021) shows that Thompson
+sampling in the ordinary MAB setting can also be parallelized. We
+believe an analogous scheme also works for RMABs but leave the
+characterization of this scheme for future work.
+TABLE VI: Evaluation from the high-attenuation set for
+BS4 seen in Table II. The GP method has significantly
+lower performance when compared to ours while having
+higher computational and memory complexity
+1 sample
+2 samples
+3 samples
+4 samples
+5x5
+10.04%
+18.27%
+23.61%
+28.97%
+9x9
+4.93%
+9.70%
+12.09%
+14.06%
+11x11
+2.07%
+5.09%
+5.69%
+6.88%
+In practical terms, this means that computing the
+results of Table V on an Intel Xeon Gold 5120 server-
+CPU across 25 parallel threads takes approx. 13 hours,
+while inference for our method in Table IV across a single
+thread takes ≈20min on a consumer CPU. This means
+our method is approximately 975× more eﬀicient to infer,
+with that advantage increasing with larger time horizons.
+Further, we expect our runtime to be improveable by e.g.
+applying pruning or quantization techniques to the model.
+From a complexity point of view, inferencing our
+method scales in time with order O(1) while GP solutions
+are constrained to scaling in O(T 3). This means that our
+method is realtime capable, while GPs generally are not.5
+However, an even bigger concern for the GP based
+solution is how well these methods scale to larger codebook
+sizes. GP based search is well known to behave poorly
+when increasing the number of dimensions to search over.
+We evaluate Maggi et al. (2023) on the existing 5×5, 9×9
+and 11 × 11 codebook grids used for the high attenuation
+tests in Table II. As can be seen in Table VI, the GP
+based search behaves poorly compared to ours, which we
+believe to be due to many irrelevant beams existing in the
+set6. While our search can exploit prior knowledge in how
+beamsets correlate and, based on that information, discard
+low value choices, Maggi et al. (2023) has to discover
+these correlations at inference time, severely increasing
+the number of samples needed for good coverage. To get
+good results on large codebooks one needs to significantly
+increase the number of beam-measurements per timestep.
+This would increase the memory and compute costs
+dramatically. This also implies an implicit dependence
+between codebook size and time/memory complexity.
+Reinforcement Learning. On the RL side, we further
+demonstrate our method’s high performance by comparing
+to a tuned PPO agent (Schulman et al., 2017) with the
+implementation from (Raﬀin et al., 2021) against our
+approach. PPO is a state-of-the-art RL method consisting
+of a policy gradient that is constrained to stay within a KL-
+Ball to ensure policy updates do not put undue confidence
+on low amounts of data (see Schulman et al. (2015b,
+5There are ways of speeding up Gaussian processes via, for instance,
+Nyström approximation, or using sparse variational GPs (Titsias,
+2009). This usually comes with a drop in performance. General
+scaling of GPs to big data remains a major challenge, especially
+in online learning scenarios.
+6Note that the 5 × 5 results are worse than in the “moving UEs
+case” due to fewer beams with high performance
+0
+1
+2
+3
+4
+5
+·105
+2
+4
+6
+8
+exploration steps
+exp. total RSS / episode
+Ours
+PPO
+Fig. 4: Total RSS of PPO vs. our approach.
+2017)). Both our agent and the tuned PPO agent are
+given a training budget of 500, 000 steps on the “blocker”
+environment. Fig. 4 shows the achieved RSS values on
+a validation set over the course of training, with the x-
+axis being the total number of exploration steps seen
+by each algorithm. Our method outperforms the PPO-
+baseline right from the beginning, reaching PPO’s final
+performance after having seen only a little more than half
+of the total exploration budget. Under equal exploration
+budgets for our method and PPO, we reach almost double
+the baseline’s RSS.
+IX. Conclusion
+We proposed a novel method for solving challenging
+POMDPs where a critical challenge is to trade-off belief-
+state estimation and reward maximization. We solve these
+problems by recursively deploying a neural network as
+an approximate posterior into an environment, running
+online restless multi-armed bandit inference, and using
+the gathered information to update the network weights
+for the next rollout. We prove the eﬀiciency of our
+approach by evaluating our method in hard beam-tracking
+problems across many different environment and network
+configurations. Our method has the potential to improve
+on existing methods for online RMAB inference in general.
+References
+M. Giordani, M. Polese, A. Roy, D. Castor, and M. Zorzi,
+“A tutorial on beam management for 3gpp nr at
+mmwave frequencies,” IEEE Communications Surveys
+& Tutorials, vol. 21, no. 1, pp. 183–196, 2018.
+Y. Bai, J. Zhang, C. Sun, L. Zhao, H. Li, and X. Wang,
+“Ai-based beam management in 3gpp: Optimizing data
+collection time window for temporal beam prediction,”
+IEEE Open Journal of Vehicular Technology, vol. 5, pp.
+48–55, 2024.
+L. Maggi, M. Andrews, and R. Koblitz, “To rl or not
+to rl? an algorithmic cheat-sheet for ai-based radio
+resource management,” ArXiv, vol. abs/2405.19045,
+2024. [Online]. Available: https://api.semanticscholar.
+org/CorpusID:270094919
+L.
+Maggi,
+R.
+Koblitz,
+Q.
+Zhu,
+and
+M.
+Andrews,
+“Tracking
+the
+best
+beam
+for
+a
+mobile
+user
+via
+bayesian optimization,” 2023 IEEE 97th Vehicular
+Technology Conference (VTC2023-Spring), pp. 1–7,
+2023. [Online]. Available: https://api.semanticscholar.
+org/CorpusID:257833586
+I. Aykin, B. Akgun, M. Feng, and M. Krunz, “Mamba:
+A multi-armed bandit framework for beam tracking in
+millimeter-wave systems,” in IEEE INFOCOM 2020 -
+IEEE Conference on Computer Communications, 2020,
+pp. 1469–1478.
+P. Whittle, “Restless bandits: activity allocation in a
+changing world,” Journal of Applied Probability, vol. 25,
+no. A, p. 287–298, 1988.
+J. C. Gittins, “Bandit processes and dynamic allocation
+indices,” Journal of the Royal Statistical Society: Series
+B (Methodological), vol. 41, no. 2, pp. 148–164, 1979.
+[Online]. Available: https://rss.onlinelibrary.wiley.com/
+doi/abs/10.1111/j.2517-6161.1979.tb01068.x
+H. Liu, K. Liu, and Q. Zhao, “Learning in a changing
+world:
+Restless
+multiarmed
+bandit
+with
+unknown
+dynamics,” IEEE Transactions on Information Theory,
+vol.
+59,
+pp.
+1902–1916,
+2010.
+[Online].
+Available:
+https://api.semanticscholar.org/CorpusID:10127959
+T.
+Gafni,
+M.
+Yemini,
+and
+K.
+Cohen,
+“Restless
+multi-armed bandits under exogenous global markov
+process,” ICASSP 2022 - 2022 IEEE International
+Conference on Acoustics, Speech and Signal Processing
+(ICASSP), pp. 5218–5222, 2022. [Online]. Available:
+https://api.semanticscholar.org/CorpusID:247158537
+R. Meshram, A. Gopalan, and D. Manjunath, “A hidden
+markov restless multi-armed bandit model for playout
+recommendation systems,” ArXiv, vol. abs/1704.02894,
+2017. [Online]. Available: https://api.semanticscholar.
+org/CorpusID:17484305
+R. Meshram, A. Gopalan, D. Manjunath, and I. A.
+Gopalan,
+“Optimal
+recommendation
+to
+users
+that
+react: Online learning for a class of pomdps,” 2016
+IEEE
+55th
+Conference
+on
+Decision
+and
+Control
+(CDC),
+pp.
+7210–7215,
+2016.
+[Online].
+Available:
+https://api.semanticscholar.org/CorpusID:16959266
+W.
+R.
+Thompson,
+“On
+the
+likelihood
+that
+one
+unknown
+probability
+exceeds
+another
+in
+view
+of
+the evidence of two samples,” Biometrika, vol. 25,
+no.
+3/4,
+pp.
+285–294,
+1933.
+[Online].
+Available:
+http://www.jstor.org/stable/2332286
+Y. H. Jung and A. Tewari, “Regret bounds for thompson
+sampling in episodic restless bandit problems,” in
+Neural Information Processing Systems, 2019. [Online].
+Available:
+https://api.semanticscholar.org/CorpusID:
+209431191
+Y. H. Jung, M. Abeille, and A. Tewari, “Thompson
+sampling in non-episodic restless bandits,” ArXiv, vol.
+abs/1910.05654, 2019.
+V. Raj and S. Kalyani, “Deep reinforcement learning
+based blind mmwave mimo beam alignment,” IEEE
+Transactions on Wireless Communications, vol. PP, pp.
+1–1, 2020.
+H. Lee, M. A. Girnyk, and J. Jeong, “Deep reinforcement
+learning approach to mimo precoding problem: Optimal-
+ity and robustness,” ArXiv, vol. abs/2006.16646, 2020.
+G. H. Sim, S. Klos, A. Asadi, A. Klein, and M. Hollick,
+“An online context-aware machine learning algorithm
+for 5g mmwave vehicular communications,” IEEE/ACM
+Transactions on Networking, vol. 26, no. 6, pp. 2487–
+2500, 2018.
+Codebook‐Based Beamforming Protocols for 5G Millime-
+ter Wave Communications, 2018, pp. 275–298.
+A. Ichkov, “Beam management and resource allocation
+for 5g-and-beyond millimeter-wave cellular networks,”
+Ph.D. dissertation, 2025. [Online]. Available: https:
+//publications.rwth-aachen.de/record/1008390
+D.
+Singh,
+A.
+Shukla,
+K.
+L.
+Hui,
+and
+M.
+Sain,
+“Hybrid precoder using stiefel manifold optimization
+for mm-wave massive mimo system,” Applied Sciences,
+vol.
+12,
+no.
+23,
+2022.
+[Online].
+Available:
+https:
+//www.mdpi.com/2076-3417/12/23/12282
+R. S. Sutton and A. G. Barto, Reinforcement Learning:
+An Introduction, 2nd ed.
+The MIT Press, 2018.
+[Online]. Available: http://incompleteideas.net/book/
+the-book-2nd.html
+L.
+P.
+Kaelbling,
+M.
+L.
+Littman,
+and
+A.
+R.
+Cassandra,
+“Planning
+and
+acting
+in
+partially
+observable
+stochastic
+domains,”
+Artificial
+Intel-
+ligence,
+vol.
+101,
+no.
+1,
+pp.
+99–134,
+1998.
+[Online].
+Available:
+https://www.sciencedirect.com/
+science/article/pii/S000437029800023X
+Q. Zhou, X. Zhang, J. Xu, and B. Liang, “Large-
+scale bandit approaches for recommender systems,”
+in International Conference on Neural Information
+Processing,
+2017.
+[Online].
+Available:
+https://api.
+semanticscholar.org/CorpusID:39293925
+D. Dimmery, E. Bakshy, and J. Sekhon, “Shrinkage
+estimators in online experiments,” in Proceedings of
+the 25th ACM SIGKDD International Conference on
+Knowledge Discovery & Data Mining, 2019, pp. 2914–
+2922.
+K.
+Ding,
+J.
+Li,
+and
+H.
+Liu,
+“Interactive
+anomaly
+detection
+on
+attributed
+networks,”
+Proceedings
+of
+the Twelfth ACM International Conference on Web
+Search and Data Mining, 2019. [Online]. Available:
+https://api.semanticscholar.org/CorpusID:59528439
+A.
+Durand,
+C.
+Achilleos,
+D.
+Iacovides,
+K.
+Strati,
+G. D. Mitsis, and J. Pineau, “Contextual bandits
+for adapting treatment in a mouse model of de
+novo
+carcinogenesis,”
+in
+Proceedings
+of
+the
+3rd
+Machine
+Learning
+for
+Healthcare
+Conference,
+ser.
+Proceedings of Machine Learning Research, F. Doshi-
+Velez, J. Fackler, K. Jung, D. Kale, R. Ranganath,
+B. Wallace, and J. Wiens, Eds., vol. 85.
+PMLR,
+17–18
+Aug
+2018,
+pp.
+67–82.
+[Online].
+Available:
+https://proceedings.mlr.press/v85/durand18a.html
+M. Gagliolo and J. Schmidhuber, “Algorithm selection
+as a bandit problem with unbounded losses,” ArXiv,
+vol. abs/0807.1494, 2008. [Online]. Available: https:
+//api.semanticscholar.org/CorpusID:8278587
+C.
+H.
+Papadimitriou
+and
+J.
+N.
+Tsitsiklis,
+“The
+complexity
+of
+optimal
+queueing
+network
+control,”
+Proceedings
+of
+IEEE
+9th
+Annual
+Conference
+on
+Structure in Complexity Theory, pp. 318–322, 1994.
+[Online].
+Available:
+https://api.semanticscholar.org/
+CorpusID:11950868
+O.-C. Granmo, “Solving two-armed bernoulli bandit prob-
+lems using a bayesian learning automaton,” Interna-
+tional Journal of Intelligent Computing and Cybernet-
+ics, vol. 3, pp. 207 – 234, 08 2010.
+L. Tierney, “Markov Chains for Exploring Posterior Dis-
+tributions,” The Annals of Statistics, vol. 22, no. 4, pp.
+1701–1728, Dec. 1994.
+Q. Liu and D. Wang, “Stein Variational Gradient Descent:
+A General Purpose Bayesian Inference Algorithm,” Sep.
+2019.
+M. D. Hoffman, D. M. Blei, C. Wang, and J. Paisley,
+“Stochastic variational inference,” Journal of Machine
+Learning Research, vol. 14, no. 40, pp. 1303–1347, 2013.
+K. Cho, B. van Merrienboer, D. Bahdanau, and Y. Ben-
+gio, “On the properties of neural machine translation:
+Encoder–decoder approaches,” in SSST@EMNLP, 2014.
+J. Schulman, N. M. O. Heess, T. Weber, and P. Abbeel,
+“Gradient
+estimation
+using
+stochastic
+computation
+graphs,” in NIPS, 2015.
+D. Blackwell, “Conditional Expectation and Unbiased
+Sequential Estimation,” The Annals of Mathematical
+Statistics, vol. 18, no. 1, pp. 105 – 110, 1947. [Online].
+Available: https://doi.org/10.1214/aoms/1177730497
+D. P. Kingma and J. Ba, “Adam: A method for stochastic
+optimization,” CoRR, vol. abs/1412.6980, 2014.
+N. Hosseini, M. Khatun, C. Guo, K. Du, O. Ozdemir,
+D. W. Matolak, I. Guvenc, and H. Mehrpouyan,
+“Attenuation of Several Common Building Materials:
+Millimeter-Wave Frequency Bands 28, 73, and 91 GHz,”
+vol. 63, no. 6, pp. 40–50, 2021.
+S. Jaeckel, L. Raschkowski, K. Börner, and L. Thiele,
+“QuaDRiGa: A 3-D Multi-Cell Channel Model With
+Time Evolution for Enabling Virtual Field Trials,”
+vol. 62, no. 6, pp. 3242–3256, 2014.
+D. Tse and P. Viswanath, Fundamentals of Wireless
+Communications.
+Cambridge University Press, 2005.
+J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and
+O. Klimov, “Proximal policy optimization algorithms,”
+ArXiv, vol. abs/1707.06347, 2017.
+A.
+Karbasi,
+V.
+S.
+Mirrokni,
+and
+M.
+Shadravan,
+“Parallelizing thompson sampling,” in Neural Infor-
+mation Processing Systems, 2021. [Online]. Available:
+https://api.semanticscholar.org/CorpusID:235313681
+M. Titsias, “Variational learning of inducing variables
+in
+sparse
+gaussian
+processes,”
+in
+Proceedings
+of
+the
+Twelfth
+International
+Conference
+on
+Artificial
+Intelligence and Statistics, ser. Proceedings of Machine
+Learning Research, D. van Dyk and M. Welling,
+Eds.,
+vol.
+5.
+Hilton
+Clearwater
+Beach
+Resort,
+Clearwater
+Beach,
+Florida
+USA:
+PMLR,
+16–18
+Apr 2009, pp. 567–574. [Online]. Available: https:
+//proceedings.mlr.press/v5/titsias09a.html
+A.
+Raﬀin,
+A.
+Hill,
+A.
+Gleave,
+A.
+Kanervisto,
+M. Ernestus, and N. Dormann, “Stable-baselines3:
+Reliable
+reinforcement
+learning
+implementations,”
+Journal
+of
+Machine
+Learning
+Research,
+vol.
+22,
+no.
+268,
+pp.
+1–8,
+2021.
+[Online].
+Available:
+http://jmlr.org/papers/v22/20-1364.html
+J.
+Schulman,
+S.
+Levine,
+P.
+Abbeel,
+M.
+I.
+Jordan,
+and P. Moritz, “Trust region policy optimization,”
+ArXiv, vol. abs/1502.05477, 2015. [Online]. Available:
+https://api.semanticscholar.org/CorpusID:16046818
+T. Chen and C. Guestrin, “Xgboost: A scalable tree
+boosting
+system,”
+Proceedings
+of
+the
+22nd
+ACM
+SIGKDD
+International
+Conference
+on
+Knowledge
+Discovery and Data Mining, 2016. [Online]. Available:
+https://api.semanticscholar.org/CorpusID:4650265
+J.
+Bergstra,
+D.
+Yamins,
+and
+D.
+Cox,
+“Making
+a
+science of model search: Hyperparameter optimization
+in hundreds of dimensions for vision architectures,”
+in Proceedings of the 30th International Conference
+on Machine Learning, ser. Proceedings of Machine
+Learning Research, S. Dasgupta and D. McAllester,
+Eds., vol. 28, no. 1.
+Atlanta, Georgia, USA: PMLR,
+17–19
+Jun
+2013,
+pp.
+115–123.
+[Online].
+Available:
+https://proceedings.mlr.press/v28/bergstra13.html
+TABLE VII: Oracle based evaluation on Basestation 4
+results
+low attenuation
+high attenuation
+5 × 5
+9 × 9
+11 × 11
+5 × 5
+9 × 9
+11 × 11
+Percentage of total RSS
+90.47%
+66.88%
+74.11%
+90.73%
+68.81%
+76.36%
+Percentage Call-to-Oracle
+1%
+5%
+49%
+1%
+4%
+53%
+Appendix
+A. Uncertainty based Oracle evaluation
+One of the great benefits of bayesian systems is their
+ability to predict their own uncertainty for any prediction.
+In the context of beam selection one can exploit this
+property by selecting a different algorithm once our
+method self-reports high uncertainty. To provide initial
+results on this design, we train an XGBoost (Chen and
+Guestrin, 2016) model that predicts the likelihood of
+being outside the top-5 arms, solely from the amplitude
+of the latent noise. To set the hyperparameters, we use
+hyperopt (Bergstra et al., 2013) on 5-fold cross-validation
+over the existing training trajectories to select for a
+maximal f1-score.
+Using this XGBoost model, we analyze our meta-
+bandit’s ability to measure its own uncertainty on beam
+choice quality. We accomplish this by training a classifier
+to predict whether the chosen arm is inside the top-5 best
+arms, based on the variance of the latent distribution
+The results are shown in Fig. 5. One can clearly see
+that the model has high uncertainty at the beginning of
+exploration, and quickly reduces due to online learning.
+This uncertainty management allows for automatic failover
+to an e. g., exhaustive beam-sweep in case the predicted
+model’s uncertainty rises above a threshold. To maximize
+performance, one would have to train our model with this
+“escape hatch” already in mind, as calling an external
+oracle leads to a distribution shift in our timeseries
+estimate of the goal and arm posteriors. We leave a
+thorough study of this for future work.
+Inspecting our results in Table VII, we observe that
+both 5 × 5 and 9 × 9 only rarely calls into the oracle and
+overall looses a tiny bit of performance when compared
+to the baseline without an oracle. We hypothesize that
+this is specifically due to the distribution shift and the
+low amount of information gained from the oracle: Both
+of these models are already very close to the theoretical
+maximum and the information gain in these small beam-id
+grids is relatively minimal. Calling into the oracle is most
+likely just confusing the model due to the distribution
+shift. In the 11 × 11 case, we see significant performance
+improvements from having an oracle backup. This makes
+sense since getting the “correct” beam yields much more
+information than in the smaller grids, and the 11 × 11
+configuration is further away from the true optimum.
+In general, we argue that such an uncertainty based
+prediction model would have to be introduced into the
+model training process, for example by adding in an
+0
+100
+200
+300
+400
+0.4
+0.6
+0.8
+1
+timesteps
+expected uncertainty
+Uncertainty of BS4 for size 11 × 11
+low attenuation
+high attenuation
+0
+100
+200
+300
+400
+0
+0.2
+0.4
+0.6
+0.8
+1
+timesteps
+Uncertainty of BS2
+5x5 high
+5x5 low
+9x9 high
+9x9 low
+11x11 low
+11x11 high
+Fig. 5: Uncertainty of beam quality over time as measured using our XGBoost model.
+additional selection option that provides low reward,
+but calls the oracle for increased long-term performance.
+However, as can be seen in our 11 × 11 model, even naive
+implementations of uncertainty quantification can greatly
+boost the final performance. We leave investigations of
+more eﬀicient versions of this approach for future works.

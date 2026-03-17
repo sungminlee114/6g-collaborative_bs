@@ -1,0 +1,1576 @@
+1
+Learning Radio Environments by
+Differentiable Ray Tracing
+Jakob Hoydis, Fayc¸al A¨ıt Aoudia, Sebastian Cammerer, Florian Euchner, Merlin Nimier-David,
+Stephan ten Brink, and Alexander Keller
+Abstract—Ray tracing (RT) is instrumental in 6G research in
+order to generate spatially-consistent and environment-specific
+channel impulse responses (CIRs). While acquiring accurate
+scene geometries is now relatively straightforward, determining
+material characteristics requires precise calibration using channel
+measurements. We therefore introduce a novel gradient-based
+calibration method, complemented by differentiable parametriza-
+tions of material properties, scattering and antenna patterns. Our
+method seamlessly integrates with differentiable ray tracers that
+enable the computation of derivatives of CIRs with respect to
+these parameters. Essentially, we approach field computation as
+a large computational graph wherein parameters are trainable
+akin to weights of a neural network (NN). We have validated our
+method using both synthetic data and real-world indoor channel
+measurements, employing a distributed multiple-input multiple-
+output (MIMO) channel sounder.
+Index Terms—Radio propagation, differentiable ray tracing,
+calibration, machine learning, channel measurements
+I. INTRODUCTION
+Ray tracing (RT) is a mature technology capable of ac-
+curately predicting the propagation of electromagnetic waves
+in many scenarios of interest [1]. In contrast to the widely
+used geometry-based stochastic channel models, e.g., [2],
+RT is able to generate spatially consistent channel impulse
+responses (CIRs) for specific radio environments. This is a key
+requirement for many 6G research topics, such as integrated
+sensing and communications (ISAC) [3], multi-modal sensing
+[4], s (RIS) [5], radio-based localization [6], machine learning
+(ML)-based transceiver algorithms [7], as well as some use-
+cases of the 3GPP study-item on ML for the air interface [8].
+RT is also considered an important building block of digital
+twin networks [9], [10].
+Research on RT has seen a surge in interest due to
+ML’s potential to speed up and improve the accuracy of
+calculations [11], [12]. Several studies have applied neural
+networks (NNs) for improved path loss prediction [13], [14],
+[15], [16], while [17] explores NNs for modeling how rays
+interact with surfaces. The influence of ML and NNs is also
+J. Hoydis and F. A¨ıt Aoudia are with NVIDIA, France (email: {jhoydis,
+faitaoudia}@nvidia.com).
+S.
+Cammerer
+and
+A.
+Keller
+are
+with
+NVIDIA,
+Germany
+(email:
+{scammerer, akeller}@nvidia.com).
+M.
+Nimier-David
+is
+with
+NVIDIA,
+Switzerland
+(email:
+mnimier-
+david@nvidia.com).
+F. Euchner and S. ten Brink are with the University of Stuttgart, Germany,
+(email: {euchner, tenbrink}@inue.uni-stuttgart.de) and acknowledge support
+by the German Federal Ministry of Education and Research (BMBF) within
+the project KOMSENS-6G (grant no. 16KISK113).
+J. Hoydis, F. A¨ıt Aoudia, and S. Cammerer acknowledge financial support
+from the European Union under Grant Agreement 101096379 (CENTRIC).
+reshaping the field of computer vision, notably through neural
+rendering techniques such as neural radiance fields (NeRFs)
+[18]. Simultaneously, the interest in inverse rendering and
+differentiable ray tracing methods grows [19], [20], [21].
+The accuracy of RT predictions is fundamentally reliant on
+two key elements: the scene geometry and the characteristics
+of the materials involved, e.g., their conductivity σ and relative
+permittivity εr. While scene geometries can nowadays be
+rather easily obtained with high precision [22], there is no
+automated and scalable solution to obtain material character-
+istics. Finding these is a process know as calibration.
+There are essentially three different approaches to ray tracer
+calibration in the literature. The first consists in measuring the
+material characteristics of individual objects [23] of which a
+scene is composed. While this approach is the only option
+when the acquisition of channel measurements is difficult, it
+does not scale to large and complex scenes. It is also indepen-
+dent of the actual RT process and hence cannot compensate
+for any mismatches in the geometry or field computations.
+The second approach tries to tune material parameters to
+fit aggregate statistics of rays, such as path loss or delay
+spread, to measurements. In [24], a simplified RT model
+based on angle-independent reflection and penetration losses is
+proposed which allows for a closed-form calibration solution.
+The authors of [25] use simulated annealing to optimize the
+relative permittivity and loss tangent for an ultra-wideband
+(UWB) system in an indoor scenario. The idea has been
+extended to account for diffuse reflections in [26] and used
+in [27] for the calibration of a high-speed railway scenario.
+The third approach aims at extracting individual rays from
+measurements which can then be matched to the RT predic-
+tions. In [28], a sophisticated calibration effort of a commercial
+ray tracer against outdoor high-precision measurements at
+28 GHz is described. The novelty with respect to (w.r.t.) prior
+work is the calibration on a per-ray basis rather than on aggre-
+gate statistics which allows for the object-specific calibration
+of diffuse scattering parameters. A key step in the process is
+the extraction of rays from measurements in the angle-delay
+domain using super-resolution techniques and matching them
+to the RT-based predictions. The same technique was applied
+in [29] to an indoor industrial scenario.
+The aim of this paper is to introduce a novel fourth calibra-
+tion method that leverages the automatic gradient computation
+capabilities of differentiable ray tracers like Sionna RT [30].
+After a suitable parametrization of the material characteristics,
+antenna and scattering patterns, the field computation can
+be seen as a large computational graph, similar to an NN,
+arXiv:2311.18558v1  [cs.IT]  30 Nov 2023
+2
+with measurement positions as inputs and the corresponding
+channel frequency responses (CFRs) as outputs. The trainable
+parameters of this graph can then be optimized w.r.t. any
+differentiable loss function of the outputs using the same
+gradient-based methods which have led to the success of deep
+NNs, e.g., [31]. However, in contrast to NNs, the calibrated
+model is fully explainable as each parameter has a precise
+physical meaning. One may therefore think of our calibration
+approach as a special kind of physics-informed [32] or model-
+based NN. It scales to very complex scenes and allows for
+learning of antenna and scattering patterns which is out of
+reach for existing methods. The dataset, 3D model of the
+scene, and source code to reproduce all results presented in
+this paper are provided in [33] and [34].
+The rest of this paper is structured as follows. Section II
+discusses relevant background on RT. Section III describes
+different parametrizations of materials, antenna and scattering
+patterns, and introduces the loss function used for training.
+Section IV contains a description of experiments with syn-
+thetic and measured data. Section V concludes the paper.
+Notations: Vectors and matrices are denoted by boldface
+letters. Unit vectors are represented by a hat symbol, e.g., ˆx.
+In a global coordinate system (GCS) with Cartesian standard
+basis (ˆx, ˆy, ˆz), we denote by ˆr(θ, φ), ˆθ(θ, φ), and ˆφ(θ, φ) the
+spherical unit vectors.
+II. RAY TRACING BACKGROUND
+This section explains how a CIR is obtained in the open-
+source differentiable ray tracer Sionna RT [30]. While most
+of this material can be found in well-known text books and
+tutorial papers, we have decided to reproduce it here so that
+the reader can clearly understand which parameters can be
+calibrated, how they impact the CIR, and why the latter is
+differentiable w.r.t. to them.
+A. Channel impulse response (CIR)
+The CFR H(f) between a transmitter and receiver at carrier
+frequency f is computed as the sum of M propagation paths
+(e.g., [35, Eq. (8)]):
+H(f) =
+M
+X
+i=1
+λ
+4π CR
+ θR
+i , φR
+i
+H Ti
+ CT
+ θT
+i , φT
+i
+
+|
+{z
+}
+≜ai
+e−j2πfτi (1)
+where λ is the wavelength, (θT
+i , φT
+i ) and (θR
+i , φR
+i ) are the
+angles of departure (AoD) and angles of arrival (AoA) of the
+ith path with delay τi and transfer function Ti : C2 7→C2.
+CT(θ, φ) ∈C2 and CR(θ, φ) ∈C2 are the transmit- and
+receive-antenna patterns, respectively. All of these terms will
+be explained in detail later on. Each path can hence be
+described by a complex coefficient ai ∈C and delay τi.
+For an ideal orthogonal frequency-division multiplexing
+(OFDM) system with N (even) subcarriers spread ∆f apart,
+the channel is characterized by the discrete CFR H[n]:
+H[n] = H(f + n∆f), n = −N
+2 , . . . , N
+2 −1.
+(2)
+We denote by W
+= N∆f the bandwidth. The discrete
+complex baseband-equivalent CIR h[ℓ] is obtained from H[n]
+via an N-point inverse discrete Fourier transform (IDFT), i.e.,
+h[ℓ] =
+1
+√
+N
+N
+2 −1
+X
+n=−N
+2
+H[n]ej 2π
+N nℓ, ℓ= −N
+2 , . . . , N
+2 −1.
+(3)
+The vector with elements h[ℓ] is denoted h ∈CN.
+B. Modeling of antennas
+Antennas are described by their complex antenna pattern
+C(θ, φ) ∈C2 which consists of a vertical ˆθ(θ, φ) and
+horizontal ˆφ(θ, φ) component:
+C(θ, φ) =
+Cθ(θ, φ)
+Cφ(θ, φ)T .
+(4)
+The directional antenna gain G(θ, φ) is then given by
+G(θ, φ) = ∥C(θ, φ)∥2
+(5)
+which satisfies
+Z 2π
+0
+Z π
+0
+G(θ, φ) sin(θ)dθdφ = 4πηrad
+(6)
+where ηrad ∈[0, 1] is the radiation efficiency. One can define
+antenna patterns by their directional gain and polarization slant
+angle ζ, where ζ = 0 and ζ = π/2 correspond to vertical and
+horizontal polarization, respectively:
+C(θ, φ) =
+
+cos(ζ)
+p
+G(θ, φ)
+sin(ζ)
+p
+G(θ, φ)
+T .
+(7)
+We have chosen this polarization model for its simplicity.
+Other models are proposed in the literature, e.g., [2, Sec.
+7.3.2]. Closed-form expressions for the directional gain of
+different antennas can be found in [36] and [2, Table 7.3-1]. In
+Section III-A, we describe a parametric differentiable antenna
+pattern that can be used for gradient-based calibration.
+C. Transfer function
+A propagation path consists of a sequence of Q scattering
+events, such as specular and diffuse reflections, as well as
+diffraction. For each scattering process, one needs to compute
+a relationship between the incoming field at the current scatter-
+ing point sj ∈R3, for j = 1, . . . , Q, and the created far-field
+at the next scattering point sj+1, where s0 and sQ+1 denote
+the position of the transmitter and receiver, respectively.
+For every scattering process, the electrical field is repre-
+sented in its local basis. Since the field is transversal, it can
+always be represented by two orthogonal components p and
+q. Let us denote by EOut
+j (sj+1) ∈C2 the vector of the two
+components of the outgoing field of the jth scattering process
+at the j+1th scattering point, represented in the basis of the jth
+scattering process. The incoming field at the j +1th scattering
+point in its own basis EIn
+j+1(sj+1) is then given by
+EIn
+j+1(sj+1) = Dj+1EOut
+j (sj+1)
+(8)
+where
+Dj+1 =
+" ˆeIn
+p,j+1
+T ˆeOut
+p,j
+ ˆeIn
+p,j+1
+T ˆeOut
+q,j
+ ˆeIn
+q,j+1
+T ˆeOut
+p,j
+ ˆeIn
+q,j+1
+T ˆeOut
+q,j
+#
+(9)
+3
+is
+a
+basis
+transformation
+matrix,
+and
+ ˆeIn
+p,j, ˆeIn
+q,j
+
+and
+ ˆeOut
+p,j, ˆeOut
+q,j
+
+are pairs of orthogonal basis vectors used for
+the description of the incoming and outgoing field of the jth
+scattering process, respectively.
+The incoming and outgoing field of the jth scattering
+process are related as
+EOut
+j (sj+1) = Fj
+ EIn
+j (sj)
+
+(10)
+where Fj : C2 7→C2 depends on the type of scattering process
+as will be discussed below and, in particular, we have
+EIn
+0 (s0) = CT
+ θT, φT
+(11)
+F0(EIn
+0 (s0)) = e−j2 π
+λ d1
+d1
+EIn
+0 (s0)
+(12)
+where dj = ∥sj −sj−1∥for j = 1, . . . , Q + 1.
+Combining (8)–(12), we arrive at the following expression
+for the relationship between the transmitted and received field
+EIn
+Q+1(sQ+1) = DQ+1FQ
+ · · · D1F0
+ EIn
+0 (s0)
+
+(13)
+= T
+ CT
+ θT, φT
+e−j2πfτ
+(14)
+where we have factored out an exponential term represent-
+ing the phase shift caused by the total propagation delay
+τ = (λf)−1 P
+q dq. The last equation defines the transfer
+function Ti in (1) for the considered propagation path. The
+structure of this sequence of computations resembles the
+computational graph of a feed-forward NN. As long as all
+functions Fj are differentiable, so will be the final CFR.
+D. Reflection
+We distinguish between specular and diffuse reflections
+and denote by S2 the fraction of the reflected energy that
+is diffusely scattered, where S ∈[0, 1] is the scattering
+coefficient [37]. Similarly, R2 is the specularly reflected
+fraction of the reflected energy, where R =
+√
+1 −S2. We
+consider materials that are uniform non-magnetic dielectrics
+with relative permeability µr = 1. A material is described
+by four parameters, the conductivity σ ≥0, the relative
+permittivity εr ≥1, the scattering coefficient S, and the cross
+polarization discrimination (XPD) coefficient Kx ∈[0, 1]. The
+latter determines how much energy is transferred into the
+orthogonal polarization direction after a diffuse reflection [38].
+Each material has a scattering pattern fs that describes, similar
+to an antenna pattern, the directivity of the scattered field. The
+complex relative permittivity η is defined as [39, Eq. (9b)]
+η = εr −j σ
+ε0ω
+(15)
+where ε0 is the vacuum permittivity and ω = 2πf.
+1) Specular reflection: For an incident wave in vacuum
+with direction ˆki incident on a surface with permittivity η and
+surface normal ˆn, the field transformation (10) is given as
+Fj
+ EIn
+j (sj)
+
+=
+Rr⊥
+0
+0
+Rr∥
+
+EIn
+j (sj)Ar(sj+1, sj)e−j2 π
+λ dj+1
+(16)
+where Ar(sj+1, sj) is the spreading factor [40, Eq. (24)] that
+depends on the shape of the wavefront and r⊥, r∥are the
+Fresnel reflection coefficients [39, Eq. (37)]:
+r⊥=
+cos(θi) −
+q
+η −sin2(θi)
+cos(θi) +
+q
+η −sin2(θi)
+(17)
+r∥=
+η cos(θi) −
+q
+η −sin2(θi)
+η cos(θi) +
+q
+η −sin2(θi)
+(18)
+where cos(θi) = −ˆkT
+i ˆn. The basis vectors used to compute
+Dj+1 can be found in [41, Eq. (3.3)-(3.8)]. The reflected ray
+has direction ˆkr = ˆki −2(ˆkT
+i ˆn)ˆn. It is obvious that (16) is
+differentiable w.r.t. to the parameters εr, σ, S, as well as the
+input EIn
+j (sj).
+2) Diffuse reflection (scattering): We consider the model
+from [38] for which the field transformation (14) is given as
+Fj
+ EIn
+j (sj)
+
+= ∥Es
+j(sj)∥
+dj+1
+√1 −Kxejχ1
+√Kxejχ2
+
+e−j2 π
+λ dj+1
+(19)
+∥Es
+j(sj)∥2 = ∥EIn
+j (sj)∥2 cos(θi)dAS2Γ2fs(ˆki, ˆks, ˆn) (20)
+where χ1, χ2 ∼U[0, 2π) are random phase terms, ˆks is the
+direction of the scattered ray, dA is the size of a small area
+element, fs(ˆki, ˆks, ˆn) is the scattering pattern, and Γ is the
+fraction of the incoming power that is reflected, i.e.,
+Γ =
+
+r⊥
+0
+0
+r∥
+
+EIn
+j (sj)
+ ∥EIn
+j (sj)∥−1.
+(21)
+Under the backscattering lobe model from [37], the scattering
+pattern has the following form
+fs(ˆki, ˆks, ˆn) =
+1
+Fαr,αs(θi)
+×
+"
+Λ
+ 
+1 + ˆkT
+r ˆks
+2
+!αr
++ (1 −Λ)
+ 
+1 + ˆkT
+i ˆks
+2
+!αs#
+(22)
+where Fαr,αs(θi) normalizes the hemispherical integral of the
+pattern to one, αr, αs ≥1 are integer parameters that control
+the lobe width, and Λ ∈[0, 1] determines the fraction of
+the scattered energy in the specular lobe. The basis trans-
+formation matrix Dj+1 ensures that energy transfer between
+both polarization directions is correctly applied. While (19) is
+differentiable in all material parameters εr, σ, S, Kx as well
+as Λ, this is not the case for αr and αs. In Section III-B,
+we will present a fully differentiable version of a scattering
+pattern with similar structure.
+E. Diffraction
+Diffraction is modeled according to the uniform theory of
+diffraction (UTD) by [42] (see [41] for an introduction) with
+the heuristic extension to finitely conducting wedges by [43]
+(adopted in [44]). We consider infinitely long wedges whose
+two faces can be made of possibly different materials η0 and
+η1. Under this model, the field transformation (10) is given as
+Fj
+ EIn
+j (sj)
+
+= QEIn
+j (sj)Ad(sj+1, sj)e−j2 π
+λ dj+1
+(23)
+4
+where Q is the diffraction matrix and Ad(sj+1, s + j) the
+spreading factor for diffraction. The computation of Q is rather
+involved and requires the computation of Fresnel integrals.
+However, what matters for the presentation here is that (23) is
+differentiable with respect to the parameters of the materials
+of both faces of the wedge. Diffraction is expressed in an
+edge-fixed coordinate system [41, Sec. 6.2].
+F. Path tracing
+We consider a fixed maximum number of specular reflec-
+tions, possibly followed by a diffuse reflection. Only first-
+order diffraction (i.e., transmitter-diffraction-receiver) is as-
+sumed and refraction ignored. Specular paths are found by
+first determining a set of candidate primitives using shooting-
+and-bouncing rays (SBR) which are then corrected to exact
+specular chains using the image method. Diffuse reflections
+are found through next event estimation in the same process.
+Candidate edges for diffraction are also identified during SBR
+and valid points of diffraction are found by the principle of the
+shortest distance [45]. Note that we do not seek to compute
+gradients w.r.t. the scene geometry, although this would be
+in principle possible, e.g., [46]. This has the advantage that
+the calibration is carried out on the field computations alone
+which avoids re-tracing of paths for every training iteration.
+III. DIFFERENTIABLE RAY TRACING FOR SCENE
+CALIBRATION
+In this section, we will explain how one can parametrize
+antenna and scattering patterns as well as material properties
+in a suitable way for gradient-based optimization.
+A. Trainable antenna patterns
+Antenna patterns as described in Section II-B are square
+integrable functions on the sphere that need to satisfy the nor-
+malization constraint (6). We will now propose a parametric
+model for a trainable antenna pattern that has these properties.
+We restrict ourselves to trainable directional gains G(θ, φ)
+from which the antenna pattern can be computed according
+to (7). Since many antenna patterns have strong directional
+characteristics, we model them as a mixture of M spherical
+Gaussians (or von Mises-Fisher distributions):
+G(θ, φ) = ηrad
+M
+X
+i=1
+wi
+ai
+eλiµT
+i ˆr(θ,φ)
+(24)
+ai = 2π
+λi
+ eλi −e−λi
+(25)
+where ηrad ∈[0, 1] is the radiation efficiency, wi ∈[0, 1] are
+mixture weights satisfying P
+i wi = 1, λi > 0 are concentra-
+tion parameters, and µi ∈R3 are unit norm mean directions.
+All of these quantities are modeled as trainable variables.
+B. Trainable scattering patterns
+In contrast to antenna patterns, scattering patterns are de-
+fined on the hemisphere and take three arguments, namely the
+direction of the incoming and outgoing rays, as well as the
+surface normal. Both differences make their parametrization
+more difficult. We propose the following model which can be
+considered the hemispherical Gaussian-equivalent to (22) with
+the addition of a diffuse component:
+fs
+
+ˆki, ˆks, ˆn
+
+= w1
+π
+ˆkT
+s ˆn + w2
+a2
+eλ2ˆkT
+s ˆki + w3
+a3
+eλ3ˆkT
+s ˆkr
+(26)
+where λ2, λ3 ≥0 are concentration parameters, wi ∈[0, 1] are
+mixture weights satisfying P
+i wi = 1, ˆkr = ˆki −2(ˆnTˆki)ˆn is
+the direction of the specular reflection, and ai, i = 2, 3, are
+approximate normalization factors given by [47, Algorithm 1]
+ai = 2π
+λi
+ e−λi −1
+
+(2si −1)
+(27)
+si =
+etieti cos(βi) −1
+(eti −1)
+ eti cos(βi) + 1
+
+(28)
+ti =
+p
+λi
+1.6988λ2
+i + 10.8438λi
+λ2
+i + 6.2201λi + 10.2415
+(29)
+cos(β2) = ˆkT
+s ˆki
+(30)
+cos(β3) = ˆkT
+s ˆkr.
+(31)
+The difference between the normalization factors ai in (25)
+and (27) arises because the integral of the hemispherical
+Gaussian has no closed-form solution for arbitrary values of
+cos(βi). The authors of [47] propose a heuristic approximation
+which we have used here that achieved excellent accuracy in
+our experiments, is differentiable, and easy to implement.
+C. Trainable materials
+As described in Section II-D, a material is characterized by
+its constituent parameters σ ≥0 and εr ≥1, the scattering
+coefficient S ∈[0, 1], and the XPD coefficient Kx ∈[0, 1].
+Although one could immediately consider these parameters as
+trainable variables, it turned out to be beneficial to use an over-
+parametrization that helps avoid local minima during gradient-
+based optimization [48]. We adopt the following model:
+σ = evTw1
+(32)
+εr = 1 + evTw2
+(33)
+S = sigmoid(vTw3)
+(34)
+Kx = sigmoid(vTw4)
+(35)
+where sigmoid(x) = 1/(1 + e−x), v ∈RL and wi ∈RL
+for i = 1, . . . , 4, are trainable vectors in L dimensions. The
+read-out vector v is used to convert the embeddings wi to
+scalar values. As σ and εr need to cover a very large range
+of values, they are represented in the logarithmic domain.
+D. Neural materials
+The granularity at which material properties in a scene are
+modeled is an important part of ray tracer calibration. In the
+simplest case, all objects are made of the same material. One
+can then subdivide the scene into different object classes with
+individual materials, e.g., floor, walls, and ceiling. In the most
+extreme case, all triangles of the meshes defining objects in
+the scene would have their own materials. This discretization
+has two difficulties. First, the number of materials that need
+5
+MLP
+Positional 
+Encoding
+Coordinate
+Transform
+𝐩
+𝜸(𝐩$)
+𝐩$
+1 + exp (⋅)
+𝜀!
+exp (⋅)
+𝜎
+⋮
+Fig. 1: Processing steps of the computation of neural materials
+to be calibrated can become very large. Second, the process
+of discretizing a scene into objects or parts of objects sharing
+the same material cannot be easily automated. For this reason,
+we propose a different approach here called neural materials
+that does not require discretization, is easy to implement and
+calibrate, and can, in principle, scale to arbitrarily large scenes.
+The key idea is to have a small NN, such as a multilayer
+perceptron (MLP), that computes the corresponding material
+properties for every ray-scene intersection point. This does not
+need to be limited to εr, σ, S, and Kx, but may also comprise
+the computation of the weights and concentration parameters
+of the scattering pattern in (26) among others. Rather than
+having the NN operate directly on the input coordinates p =
+[x, y, z]T ∈R3, we adopt the positional encoding [49]
+γ(p) =
+
+sin(2πp), cos(2πp), . . . , sin(2Lπp), cos(2Lπp)
+
+(36)
+that is separately applied to each coordinate. This has been
+essential to enable NNs to better represent functions with high
+frequency components over low-dimensional domains [50].
+The parameter L controls how fast material properties can
+vary across space. To make the positional encoding unique,
+the input coordinates are transformed to the unit cube:
+¯p = p −b
+∆b
+(37)
+where ∆b ∈R is the length and b ∈R3 the center of the axis-
+aligned bounding box (AABB) of the scene, which defines the
+smallest bounding box that encloses all objects in the scene
+and has edges parallel to the coordinate axes. The normalized
+and encoded coordinates γ(¯p) ∈R6L are fed into an MLP
+which has one output for each parameter. The outputs are then
+transformed as in (32)–(35). Fig. 1 shows a block diagram
+of all processing steps. One may also apply the positional
+encoding on the coordinates represented in the UV space [51]
+or replace the positional encoding by a multiresolution hash
+encoding as in [18].
+E. Loss function
+One challenge related to the calibration of a ray tracer to
+measurements is the choice of metric or loss function. In our
+experiments, we have used the following per-example loss
+L = l(τRMS, ˆτRMS) + l(P, ˆP)
+(38)
+where
+l (x, y) = |x −y|
+x + y ∈[0, 1]
+(39)
+is the symmetric mean absolute percentage error (SMAPE),
+τRMS =
+v
+u
+u
+tX
+ℓ
+ℓ−¯τ
+W
+2 pℓ
+P
+(40)
+is the root mean square (RMS) delay spread with ¯τ = P
+ℓℓpℓ
+P
+and pℓ= |h[ℓ]|2, and P is the total channel gain:
+P =
+X
+ℓ
+pℓ.
+(41)
+The values ˆP and ˆτRMS are obtained from ray-traced CIRs,
+while P and τRMS are obtained from measurements. The
+intuition behind the loss in (38) is that the first term measures
+differences in the delay distribution of the relative path powers
+while the second term measures differences in the absolute
+power. As the loss is typically computed over a batch of
+measurements taken at different positions in a scene, the
+normalization in (39) ensures that all examples are given
+equal importance. Without this normalization, the calibration
+procedure would focus on areas with strong channels, leading
+to poor performance in areas of weak coverage. The reason
+why we have chosen this loss over alternatives, such as the
+power-angular-delay spectrum [28], is that both the RMS delay
+spread and absolute power are agnostic to time offsets which
+are present in our dataset. However, alternative losses may
+be used as drop-in replacements for calibration with other
+measurements where this is not an issue.
+F. Scaling of measurements
+A particularity of our channel measurements is that no ab-
+solute power reference is known. This means that all examples
+of the measured dataset are scaled by a common but unknown
+value α ∈R. In order to find a suitable scaling parameter,
+we estimate it iteratively by an exponentially moving average
+(EMA) during the calibration process:
+αi = δαi−1 + (1 −δ)ˆαi,
+i = 1, 2, . . .
+(42)
+where B is the batch size, δ > 0 the decay parameter,
+α0 = ˆα1, and ˆαi is computed as
+ˆαi = arg min
+α
+1
+B
+B
+X
+b=1
+
+αPb −ˆPb
+2
+=
+P
+b Pb ˆPb
+P
+b P 2
+b
+.
+(43)
+In the limit, αi is expected to be close to the scaling parameter
+that solves (43) for the entire dataset. Computing the latter at
+every iteration would be too costly. In our experiments, this
+approach has led to better results than learning a scaling factor
+via gradient descent.
+G. Training algorithm
+Similar to training an NN, we calibrate our scene using
+stochastic gradient descent (SGD) on the loss (38) w.r.t. to all
+trainable parameters of the materials, antenna and scattering
+patterns described in the previous sections and which we
+denote by Ω. It is assumed that a reference dataset of D CIRs
+hd together with their associated positions pd is available.
+The algorithm starts by randomly initializing all trainable
+parameters Ω. It then iteratively computes the scaling factor αi
+and the ray tracing predictions ˆhb = RT(pb; Ω) for a random
+batch of B examples and uses the gradient of the average
+loss over the batch to update the parameters until convergence.
+Algorithm 1 provides a formal description of this process using
+6
+vanilla SGD with a learning rate β for the sake of compactness.
+Note that any other SGD-variant might be used as well: We
+employ Adam [31] throughout Section IV.
+Algorithm 1: Gradient-based Scene Calibration
+Input: B, δ, β
+Data: (hd, pd) for d ∈D = {1, . . . , D}
+1 Randomly initialize all trainable parameters Ω
+2 i ←1
+3 repeat
+4
+Draw random batch of B examples B ⊆D
+5
+Compute αi as in (42)
+6
+for b ∈B do
+7
+hb ←√αihb
+8
+ˆhb ←RT(pb; Ω)
+9
+Compute sample loss Lb as in (38)
+10
+end
+11
+L = 1
+B
+P
+b Lb
+12
+Ω←Ω−β∇ΩL
+13
+i ←i + 1
+14 until convergence;
+IV. EXPERIMENTS
+A. Scenario and measurements
+The calibration dataset stems from a small subset of a mea-
+surement campaign [34, “dichasus-dc01”] carried out at the
+Institute of Telecommunications of the University of Stuttgart,
+utilizing the DICHASUS channel sounder [52]. Instructions
+about how to access the dataset and 3D scene model can be
+found in [33]. Measurements were executed at a center fre-
+quency of f = 3.438 GHz and a signal bandwidth of 50 MHz.
+CFRs across 1024 OFDM subcarriers were captured at around
+32.5k measurement positions from a remote-controlled single-
+antenna dipole transmitter to two distributed uniform planar
+8x4 antenna panels with λ/2 spacing and vertically polarized
+antennas. The panels were located at opposing ends of the
+institute’s hallway (around 50 m apart) and the transmitter
+had its location meticulously tracked using a tachymeter.
+The data collection was done within the hallway and the
+entrance hall, as illustrated in Fig. 2. Despite the intricate
+nature of this setting, characterized by composite walls of
+drywall, glass, and metal, a ceiling half-covered by a metal
+grid, and a sizable magnetic board in the entrance hall, we
+opted for a rudimentary handcrafted 3D model. This model
+solely represents the visible walls, floor, and ceiling.
+B. Synthetic dataset
+To validate that scene parameters can be accurately recov-
+ered using differentiable ray tracing combined with gradient
+descent-based optimization, we produced a synthetic dataset
+using the 3D model of our environment. To make things
+simple, we considered only a single receive antenna located in
+the center of the RX 2 panel (see Fig. 2). We then computed
+CFRs through ray tracing for 256 random transmitter positions,
+taking into account up to three specular reflections as well
+TABLE I: Scene parameters for synthetic dataset generation
+Object
+εr
+σ
+S
+Kx
+Floor (ITU Concrete [39])
+5.24
+0.121
+0.3
+0.2
+Walls (ITU Plasterboard)
+2.73
+0.027
+0.5
+0.4
+Ceiling (ITU Ceiling board)
+1.48
+0.004
+0.8
+0.3
+as first-order diffuse scattering and diffraction. All materials
+were assumed to adhere to the backscattering lobe model with
+αr = 5, αi = 8, and Λ = 0.8. Other material parameters are
+detailed in Table I. In contrast to (19), we did not apply random
+phase shifts to diffusely reflected paths, i.e., χ1 = χ2 = 0.
+We then pretended that the material parameters as well as
+the scattering and transmit antenna patterns were unknown
+and tried to recover them by gradient descent on the loss
+function in (38) using the trainable parametrizations described
+in Sections III-A–III-C. The material embeddings were chosen
+to have L = 30 dimensions and the transmit antenna pattern
+M = 3 mixtures. It was not necessary to learn a scaling
+parameter which was set to α = 1 (see Section III-F). To
+speed-up the training process, we separated the path tracing
+from the field computation. In each training iteration, we
+computed the field and resulting CFRs for the precomputed
+geometrical paths and updated all trainable weights based on
+the loss using the Adam optimizer with a learning rate of 0.01.
+Fig. 3 shows learning curves for the four different material
+parameters of all three objects in the scene. After around 3000
+training steps (approx. 10 min on an NVDIA RTX 3090), all
+parameters have converged to the correct values. Fig. 4 and
+Fig. 5 visualize the learned antenna and scattering patterns.
+Both match the ground truth also very closely. Overall, these
+results demonstrate that it is possible to recover all scene
+parameters via gradient descent from an ideal synthetic dataset.
+C. Calibration with measured data
+Calibrating our ray tracer to the measured dataset faces
+several challenges. As mentioned in Section III-F, all mea-
+sured CFRs are scaled by a common but unknown factor α
+which needs to be estimated. This scaling factor has a very
+significant impact on the material properties. For example, if
+the former is too large, the radio environment needs to be
+overly “reflective” to compensate for the underestimated path
+loss. Second, no information about absolute path delays is
+available. For this reason, all measured CIRs are aligned to
+have the first significant peak on tap ℓ= 0.
+Although we may in principle calibrate antenna and scat-
+tering patterns as done for the synthetic dataset, we did not
+observe any benefits in doing so for our measured dataset.
+For this reason, diffuse reflections were turned off and the
+receive and transmit antennas were respectively configured
+with vertically polarized 3GPP 38.901 [2] and ideal dipole
+antenna patterns. We have simulated specular reflections up to
+fifth order as well as first order diffractions. To keep the size of
+the dataset manageable, we have only used 10k of the available
+32.5k measurement points. These were split randomly into
+5000 for training, 100 for validation, and 4900 for testing.
+The calibration accuracy is quantified as follows. At every
+measurement point, we compute the average total channel gain
+7
+Fig. 2: Measurement setup within the University of Stuttgart’s Institute of Telecommunications. Two 32-antenna panels from
+the DICHASUS channel sounder were positioned at opposing ends of the main corridor. A remotely-operated transmitter
+navigated the hallway and entrance hall along a pseudo-random path.
+0
+500
+1000
+1500
+2000
+2500
+3000
+Iteration
+1
+2
+3
+4
+5
+Relative permittivity εr
+Floor
+Ceiling
+Walls
+(a)
+0
+500
+1000
+1500
+2000
+2500
+3000
+Iteration
+0.00
+0.25
+0.50
+0.75
+1.00
+1.25
+Conductivity σ
+Floor
+Ceiling
+Walls
+(b)
+0
+500
+1000
+1500
+2000
+2500
+3000
+Iteration
+0.2
+0.4
+0.6
+0.8
+Scattering coeﬃcient S
+Floor
+Ceiling
+Walls
+(c)
+0
+500
+1000
+1500
+2000
+2500
+3000
+Iteration
+0.0
+0.2
+0.4
+0.6
+0.8
+XPD coeﬃcient Kx
+Floor
+Ceiling
+Walls
+(d)
+Fig. 3: Learning curves for the material parameters of all objects in the scene. Dashed and solid lines represent ground truth
+and learned values, respectively. All parameters can be almost perfectly recovered within 3000 iterations.
+P (41) and RMS delay spread τRMS (40) over the CIRs from
+the transmitter to all 64 receive antennas across the two arrays.
+These quantities are denoted by ¯P, ¯τRMS and ˆ¯P, ˆ¯τRMS for the
+measured and ray-traced CIRs, respectively. We then compute
+the absolute logarithmic error (ALE) for the channel gain:
+ALE = | ¯PdB −ˆ¯PdB|
+(44)
+and the relative absolute error (RAE) for the delay spread:
+RAE = |¯τRMS −ˆ¯τRMS|
+¯τRMS
+.
+(45)
+In the following, we will show results for an uncalibrated
+baseline as well as two different calibration techniques. For
+the baseline that will be referred to as “ITU Materials”, the
+scene is configured as described in Table I with S = Kx = 0.
+The first calibration technique is named “Learned Materials”
+and refers to the parametrization described in Section III-C
+with material embeddings of L = 30 dimensions. The second,
+called “Neural Materials”, is based on the approach described
+in Section III-D with a positional encoding of size L = 10
+and an MLP consisting of four hidden layers with 128 neurons
+each and rectified linear unit (ReLU) activations.
+8
+0°
+45°
+90°
+135°
+180°
+225°
+270°
+315°
+(a) Horizontal cut
+0°
+45°
+90°
+135°
+180°
+225°
+270°
+315°
+IEEE 38.901
+Learned
+(b) Vertical cut
+Fig. 4: Visualization of the learned antenna pattern
+0°
+30°
+θr
+90°
+-30°
+θi
+-90°
+ˆki
+ˆkr
+Backscattering Model
+Learned
+Fig. 5: Visualization of the learned backscattering pattern. The
+quantities θi and θr denote the angles of the incident and
+specular directions with the surface normal, respectively.
+The top row of Fig. 6 shows a heatmap of the path
+loss −PdB, i.e., the inverse total channel gain, for the mea-
+surements, the “ITU Materials”, as well as both calibration
+techniques for RX 2, located in the right wing. The bottom row
+shows the associated ALE. One can clearly see the benefits
+of “Learned Materials” in the left corridor where the ALE is
+substantially improved w.r.t. to the “ITU Materials”. However,
+due to the overly simplistic scene modelling, large errors in
+the entrance hall persist even after calibration. The “Neural
+Materials” show uniformly improved performance across the
+whole area. Fig. 7a provides another look at these results
+via the cummulative distribution function (CDF) of the ALE.
+“Neural Materials” not only achieve superior accuracy for the
+path loss, but also the delay spread which can be seen from the
+CDF of the RAE in Fig. 7b. The corresponding error statistics
+are provided in Table II
+Fig. 8 depicts measured and simulated CIRs at four different
+positions. The “ITU Materials” generally fail to model paths
+with long propagation delays which can be partially compen-
+sated for through calibration using “Learned Materials” (cf.
+TABLE II: Error statistics
+Metric
+ALE (power)
+RAE (delay spread)
+Statistic
+mean
+std
+mean
+std
+ITU Materials
+4.93
+5.26
+0.54
+0.23
+Learned Materials
+2.16
+1.69
+0.24
+0.17
+Neural Materials
+1.00
+0.95
+0.13
+0.12
+Fig. 7b). However, due to the very coarse scene representation,
+this impacts the accuracy of early reflections. The fine-grained
+modeling capabilities of “Neural Materials” do not suffer from
+this problem and are capable of producing CIRs that closely
+resemble the measurements.
+Fig.
+9
+illustrates
+the
+reflection
+coefficient
+r = 1
+2(|r⊥|2 + |r∥|2) at an incident angle of θi
+=
+45◦;
+comparing “Learned-” and “Neural Materials” across the
+scene. The “Neural Materials” notably assign high values
+to the locations of the metallic grid on the ceiling and the
+magnetic board on a wall in the entrance hall, as seen in
+Fig. 2. While further study is needed, these observations
+suggest that “Neural Materials” can effectively represent
+objects’ electromagnetic behaviors in a scene, offering a
+unique perspective on the environment through the lens of
+radio propagation.
+D. Discussion
+We have only scratched the surface of gradient-based cal-
+ibration in this paper and many open questions remain to be
+answered. We will now briefly discuss a few of them:
+• The loss function (38) is non-convex in the scene pa-
+rameters and there is no guarantee that gradient-based
+solutions will converge to the global minimum. It is
+not even clear if there is a unique optimal solution.
+For example, the same absolute value of a reflection
+coefficient (17) can be obtained for different values of
+conductivity and permittivity. Regularization of parame-
+ters during calibration may enforce plausible solutions.
+• Although all parameters have clear physical interpreta-
+tions, the calibration does not necessarily lead to the
+same values which would be obtained by directly mea-
+suring them for each object. The reason for this is that
+calibration also compensates for errors in the geometry
+and measurements as well as modelling errors in the RT
+process. For example, we have entirely ignored refraction
+in Section IV-C, which certainly plays an important role
+in our indoor scenario.
+• The advantage of “Neural Materials” is their capability
+to represent material properties in a very fine-grained
+(continuous) manner across the entire scene. However,
+this comes at the cost of poor generalization performance
+to areas in which no measurements are available. Investi-
+gating their bias-variance trade-off is an important topic
+of future research. It is also interesting to study extensions
+or alternatives to the positional encoding (36).
+• Our calibration method is agnostic to phase errors.
+One may learn location-specific phase correction terms
+through “Neural Materials” or investigate phase-error
+aware calibration techniques.
+V. CONCLUSIONS
+In this paper, we have introduced a novel gradient-based cal-
+ibration method for differentiable ray tracers, enabling scene
+calibration akin to training a deep neural network. This method
+hinges on a carefully designed loss function, coupled with dif-
+ferentiable parameterizations of material properties, scattering
+9
+−10
+0
+10
+20
+x [m]
+−3
+−2
+−1
+0
+1
+y [m]
+Measurements
+−10
+0
+10
+20
+−3
+−2
+−1
+0
+1
+ITU Materials
+−10
+0
+10
+20
+−3
+−2
+−1
+0
+1
+Learned Materials
+−10
+0
+10
+20
+−3
+−2
+−1
+0
+1
+Neural Materials
+−10
+0
+10
+20
+−3
+−2
+−1
+0
+1
+−10
+0
+10
+20
+−3
+−2
+−1
+0
+1
+−10
+0
+10
+20
+−3
+−2
+−1
+0
+1
+−80
+−60
+−40
+Path loss [dB]
+0
+2
+4
+ALE [dB]
+Fig. 6: Visualization of path loss (−PdB) and absolute logarithmic error (ALE) across space for different calibration techniques
+0
+2
+4
+6
+8
+10
+Absolute logarithmic error (ALE) [dB]
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+CDF
+ITU Materials
+Learned Materials
+Neural Materials
+(a) Channel gain
+0.0
+0.2
+0.4
+0.6
+0.8
+Relative absolute error (RAE)
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+CDF
+ITU Materials
+Learned Materials
+Neural Materials
+(b) Delay spread
+Fig. 7: CDFs of the ALE and RAE
+behaviors, and antenna patterns. We have implemented our
+calibration method in the open-source ray tracer Sionna RT
+[30] and validated it against indoor measurements from a
+distributed multiple-input multiple-output (MIMO) channel
+sounder. This advancement in differentiable ray tracing, es-
+pecially when combined with contemporary machine learning
+techniques, opens up exciting avenues for multidisciplinary
+research and holds immense potential for future explorations.
+REFERENCES
+[1] Z. Yun and M. F. Iskander, “Ray tracing for radio propagation modeling:
+Principles and applications,” IEEE Access, vol. 3, Jul. 2015.
+[2] “TR 38.901: Study on channel model for frequencies from 0.5 to 100
+GHz,” 3GPP, Tech. Rep. 17.0.0, Mar. 2022.
+[3] A. Bourdoux, A. N. Barreto, B. van Liempd, C. de Lima, D. Dardari,
+D. Belot, E.-S. Lohan, G. Seco-Granados, H. Sarieddeen, H. Wymeer-
+sch, J. Suutala, J. Saloranta, M. Guillaud, M. Isomursu, M. Valkama,
+M. R. K. Aziz, R. Berkvens, T. Sanguanpuak, T. Svensson, and Y. Miao,
+“6G White Paper on Localization and Sensing,” University of Oulu: 6G
+Research Visions, Jun. 2020.
+[4] A.
+Alkhateeb,
+G.
+Charan,
+T.
+Osman,
+A.
+Hredzak,
+J.
+Morais,
+U. Demirhan, and N. Srinivas, “DeepSense 6G: A large-scale real-
+world multi-modal sensing and communication dataset,” arXiv preprint
+arXiv:2211.09769, 2022.
+[5] M. D. Renzo, M. Debbah, D.-T. Phan-Huy, A. Zappone, M.-S.
+Alouini, C. Yuen, V. Sciancalepore, G. C. Alexandropoulos, J. Hoydis,
+H. Gacanin, J. d. Rosny, A. Bounceur, G. Lerosey, and M. Fink, “Smart
+radio environments empowered by reconfigurable AI meta-surfaces: An
+idea whose time has come,” vol. 2019, no. 1, p. 129, May 2019.
+[6] C. Studer, S. Medjkouh, E. Gonultas¸, T. Goldstein, and O. Tirkkonen,
+“Channel charting: Locating users within the radio environment using
+channel state information,” IEEE Access, vol. 6, pp. 47 682–47 698,
+2018.
+[7] J. Hoydis, F. A. Aoudia, A. Valcarce, and H. Viswanathan, “Toward a
+6G AI-Native Air Interface,” IEEE Commun. Mag., vol. 59, no. 5, pp.
+76–81, May 2021.
+[8] RP-212708, “New SID on AI/ML for NR Air Interface,” 3GPP TSG
+RAN#94e, Tech. Rep., Dec. 2021.
+[9] A. Alkhateeb, S. Jiang, and G. Charan, “Real-Time Digital Twins: Vision
+and Research Directions for 6G and Beyond,” arXiv e-prints, pp. arXiv–
+2301, 2023.
+[10] X. Lin, L. Kundu, C. Dick, E. Obiodu, and T. Mostak, “6G Digital Twin
+Networks: From Theory to Practice,” arXiv preprint arXiv:2212.02032,
+2022.
+[11] S. Bakirtzis, K. Qiu, J. Zhang, and I. Wassell, “DeepRay: Deep Learning
+Meets Ray-Tracing,” in 16th European Conf. Ant. Prop. (EuCAP),
+Madrid, Spain, Mar. 2022, pp. 1–5.
+[12] L. Azpilicueta, M. Rawat, K. Rawat, F. M. Ghannouchi, and F. Falcone,
+“A ray launching-neural network approach for radio wave propaga-
+tion analysis in complex indoor environments,” IEEE Trans. Antennas
+Propag., vol. 62, no. 5, pp. 2777–2786, Feb. 2014.
+[13] X. Zhang, X. Shu, B. Zhang, J. Ren, L. Zhou, and X. Chen, “Cellular
+network radio propagation modeling with deep convolutional neural
+networks,” in Proc. 26th ACM SIGKDD Int. Conf. Knowledge discovery
+& Data Mining, Aug. 2020, pp. 2378–2386.
+[14] R. Levie, C. Yapar, G. Kutyniok, and G. Caire, “RadioUNet: Fast Radio
+Map Estimation With Convolutional Neural Networks,” IEEE Trans.
+Wireless Commun., vol. 20, no. 6, pp. 4001–4015, Feb. 2021.
+[15] L. Eller, P. Svoboda, and M. Rupp, “A Deep Learning Network Planner:
+Propagation Modeling Using Real-World Measurements and a 3D City
+Model,” IEEE Access, vol. 10, pp. 122 182–122 196, Nov. 2022.
+10
+−100
+0
+100
+200
+300
+400
+500
+600
+τ (ns)
+0.00
+0.25
+0.50
+0.75
+1.00
+1.25
+|h[ℓ]|
+×10−4
+Measurement
+ITU Materials
+Learned Materials
+Neural Materials
+−100
+0
+100
+200
+300
+400
+500
+600
+τ (ns)
+0
+1
+2
+3
+4
+|h[ℓ]|
+×10−5
+−100
+0
+100
+200
+300
+400
+500
+600
+τ (ns)
+0.00
+0.25
+0.50
+0.75
+1.00
+1.25
+|h[ℓ]|
+×10−4
+−100
+0
+100
+200
+300
+400
+500
+600
+τ (ns)
+0
+2
+4
+6
+8
+|h[ℓ]|
+×10−5
+Fig. 8: CIR examples for different measurement positions and calibration techniques
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Reﬂection coe±cient at 45°
+Magnetic
+board
+Metal
+grid
+Fig. 9: Visualization of the reflection coefficient across the
+scene: Neural Materials (left), Learned Materials (right).
+[16] A. Gupta, J. Du, D. Chizhik, R. A. Valenzuela, and M. Sellathurai,
+“Machine Learning-Based Urban Canyon Path Loss Prediction Using 28
+GHz Manhattan Measurements,” IEEE Trans. Antennas Propag., vol. 70,
+no. 6, pp. 4096–4111, Feb. 2022.
+[17] T. Orekondy, P. Kumar, S. Kadambi, H. Ye, J. Soriaga, and A. Behboodi,
+“WiNeRT: Towards neural ray tracing for wireless channel modelling
+and differentiable simulations,” in International Conference on Learning
+Representations, 2023.
+[18] T. M¨uller, A. Evans, C. Schied, and A. Keller, “Instant neural graphics
+primitives with a multiresolution hash encoding,” ACM Trans. Graph.,
+vol. 41, no. 4, pp. 102:1–102:15, Jul. 2022.
+[19] T.-M. Li, M. Aittala, F. Durand, and J. Lehtinen, “Differentiable Monte
+Carlo ray tracing through edge sampling,” ACM Trans. Graph., vol. 37,
+no. 6, Dec. 2018.
+[20] W. Jakob, S. Speierer, N. Roussel, and D. Vicini, “Dr.Jit: A just-in-
+time compiler for differentiable rendering,” Transactions on Graphics
+(Proceedings of SIGGRAPH), vol. 41, no. 4, Jul. 2022.
+[21] W. Jakob, S. Speierer, N. Roussel, M. Nimier-David, D. Vicini, T. Zelt-
+ner, B. Nicolet, M. Crespo, V. Leroy, and Z. Zhang, “Mitsuba 3
+Renderer,” 2022, https://mitsuba-renderer.org.
+[22] Z. Li, T. M¨uller, A. Evans, R. H. Taylor, M. Unberath, M.-Y. Liu, and
+C.-H. Lin, “Neuralangelo: High-fidelity neural surface reconstruction,”
+in IEEE Conf. Computer Vision and Pattern Recognition (CVPR), 2023.
+[23] K. Guan, B. Ai, B. Peng, D. He, G. Li, J. Yang, Z. Zhong, and
+T. K¨urner, “Towards realistic high-speed train channels at 5G millimeter-
+wave band—Part I: Paradigm, significance analysis, and scenario recon-
+struction,” IEEE Trans. Veh. Technol., vol. 67, no. 10, pp. 9112–9128,
+Oct. 2018.
+[24] O. Kanhere and T. S. Rappaport, “Calibration of NYURay, a 3D
+mmWave and sub-THz ray tracer using indoor, outdoor, and factory
+channel measurements,” arXiv preprint arXiv:2302.12380, Feb. 2023.
+[25] J. Jemai, P. C. Eggers, G. F. Pedersen, and T. Kurner, “Calibration of a
+UWB sub-band channel model using simulated annealing,” IEEE Trans.
+Antennas Propag., vol. 57, no. 10, pp. 3439–3443, Oct. 2009.
+[26] M. Gan, P. Meissner, F. Mani, E. Leitinger, M. Fr¨ohle, C. Oestges,
+K. Witrisal, and T. Zemen, “Calibration of indoor UWB sub-band
+divided ray tracing using multiobjective simulated annealing,” in IEEE
+Int. Conf. Commun. (ICC), Sydney, NSW, Australia, Jun. 2014, pp.
+4844–4849.
+[27] D. He, B. Ai, K. Guan, Z. Zhong, B. Hui, J. Kim, H. Chung, and
+I. Kim, “Channel measurement, simulation, and analysis for high-speed
+railway communications in 5G millimeter-wave band,” IEEE Trans.
+Intell. Transp. Syst., vol. 19, no. 10, pp. 3144–3158, Oct. 2018.
+[28] R. Charbonnier, C. Lai, T. Tenoux, D. Caudill, G. Gougeon, J. Senic,
+C. Gentile, Y. Corre, J. Chuang, and N. Golmie, “Calibration of ray-
+tracing with diffuse scattering against 28-GHz directional urban channel
+measurements,” IEEE Trans. Veh. Technol., vol. 69, no. 12, pp. 14 264–
+14 276, Oct. 2020.
+[29] G. S. Bhatia, Y. Corre, and M. Di Renzo, “Tuning of ray-based channel
+model for 5G indoor industrial scenarios,” in IEEE Int. Mediterranean
+Conf. Commun. Network. (MeditCom), Dubrovnik, Croatia, Sep. 2023,
+pp. 311–316.
+[30] J. Hoydis, F. Ait Aoudia, S. Cammerer, M. Nimier-David, N. Binder,
+G. Marcus, and A. Keller, “Sionna RT: Differentiable Ray Tracing for
+Radio Propagation Modeling,” arXiv preprint, Mar. 2023.
+11
+[31] D. P. Kingma and J. Ba, “Adam: A method for stochastic optimization,”
+arXiv preprint arXiv:1412.6980, 2014.
+[32] M. Raissi, P. Perdikaris, and G. E. Karniadakis, “Physics-informed
+neural networks: A deep learning framework for solving forward and
+inverse problems involving nonlinear partial differential equations,”
+Journal of Computational physics, vol. 378, pp. 686–707, 2019.
+[33] J. Hoydis, F. Ait Aoudia, S. Cammerer, M. Nimier-David, and A. Keller,
+“Learning radio environments by differentiable ray tracing,” Dec. 2023.
+[Online]. Available: https://github.com/NVlabs/diff-rt-calibration
+[34] F. Euchner, P. Stephan, M. Gauger, and S. ten Brink, “dichasus-dcxx:
+Institute hallway with known 3D model, distributed antennas,” https:
+//dichasus.inue.uni-stuttgart.de/datasets/data/dichasus-dcxx/, Dec. 2023.
+[35] T. Fugen, J. Maurer, T. Kayser, and W. Wiesbeck, “Capability of
+3-D ray tracing for defining parameter sets for the specification of
+future mobile communications systems,” IEEE Trans. Antennas Propag.,
+vol. 54, no. 11, pp. 3125–3137, Nov. 2006.
+[36] C. A. Balanis, Antenna Theory: Analysis and Design, 2nd ed.
+John
+Wiley & Sons, 1997.
+[37] V. Degli-Esposti, F. Fuschini, E. M. Vitucci, and G. Falciasecca,
+“Measurement and modelling of scattering from buildings,” IEEE Trans.
+Antennas Propag., vol. 55, no. 1, pp. 143–153, Jan. 2007.
+[38] V. Degli-Esposti, V.-M. Kolmonen, E. M. Vitucci, and P. Vainikainen,
+“Analysis and modeling on co-and cross-polarized urban radio propaga-
+tion for dual-polarized MIMO wireless systems,” IEEE Trans. Antennas
+Propag., vol. 59, no. 11, pp. 4247–4256, Aug. 2011.
+[39] ITU, “Recommendation ITU-R P.2040-3: Effects of building materials
+and structures on radiowave propagation above about 100 MHz,” Tech.
+Rep., Aug. 2023.
+[40] G. A. Deschamps, “Ray techniques in electromagnetics,” Proc. IEEE,
+vol. 60, no. 9, pp. 1022–1035, Sep. 1972.
+[41] D. A. McNamara, C. W. I. Pistorius, and J. A. G. Malherbe, Introduction
+to the uniform geometrical theory of diffraction.
+Artech House, 1990.
+[42] R. G. Kouyoumjian and P. H. Pathak, “A uniform geometrical theory of
+diffraction for an edge in a perfectly conducting surface,” Proc. IEEE,
+vol. 62, no. 11, pp. 1448–1461, Nov. 1974.
+[43] R. Luebbers, “Finite conductivity uniform GTD versus knife edge
+diffraction in prediction of propagation path loss,” IEEE Trans. Antennas
+Propag., vol. 32, no. 1, pp. 70–76, Jan. 1984.
+[44] ITU, “Recommendation ITU-R P.526-15: Propagation by diffraction,”
+Tech. Rep., Oct. 2019.
+[45] J. B. Keller, “Geometrical theory of diffraction,” Journal of the Optical
+Society of America, vol. 52, no. 2, pp. 116–130, Feb. 1962.
+[46] B. Nicolet, A. Jacobson, and W. Jakob, “Large steps in inverse rendering
+of geometry,” ACM Trans. Graph., vol. 40, no. 6, dec 2021.
+[47] J. Meder and B. Br¨uderlin, “Hemispherical Gaussians for accurate light
+integration,” in Proc. Int. Conf. Computer Vision and Graphics (ICCVG),
+Warsaw, Poland, Sep. 2018, pp. 3–15.
+[48] A. Choromanska, M. Henaff, M. Mathieu, G. Ben Arous, and Y. LeCun,
+“The loss surfaces of multilayer networks,” in Proc. Int. Conf. Artificial
+Intelligence and Statistics (PMLR), vol. 38, San Diego, California, USA,
+9–12 May 2015, pp. 192–204.
+[49] B. Mildenhall, P. P. Srinivasan, M. Tancik, J. T. Barron, R. Ramamoorthi,
+and R. Ng, “NeRF: Representing scenes as neural radiance fields for
+view synthesis,” Communications of the ACM, vol. 65, no. 1, pp. 99–
+106, Jan. 2021.
+[50] M. Tancik, P. Srinivasan, B. Mildenhall, S. Fridovich-Keil, N. Raghavan,
+U. Singhal, R. Ramamoorthi, J. Barron, and R. Ng, “Fourier features let
+networks learn high frequency functions in low dimensional domains,”
+in Advances in Neural Information Processing Systems, H. Larochelle,
+M. Ranzato, R. Hadsell, M. Balcan, and H. Lin, Eds., vol. 33.
+Curran
+Associates, Inc., Aug. 2020, pp. 7537–7547.
+[51] M. Pharr, W. Jakob, and G. Humphreys, Physically Based Rendering:
+From Theory to Implementation, 4th ed.
+MIT Press, 2023.
+[52] F. Euchner, M. Gauger, S. D¨orner, and S. ten Brink, “A distributed mas-
+sive MIMO channel sounder for “Big CSI Data”-driven machine learn-
+ing,” in Int. ITG Workshop Smart Antennas (WSA), Sophia-Antipolis,
+France, Nov. 2021.

@@ -1,0 +1,936 @@
+1
+Accelerating vRAN and O-RAN with SIMD:
+Architectural Perspectives and Performance
+Evaluation
+Jaebum Park, Graduate Student Member, IEEE, Chan-Byoung Chae, Fellow, IEEE, and
+Robert W. Heath, Jr., Fellow, IEEE
+Abstract—The evolution of radio access networks (RANs)
+toward virtualization and openness creates new opportunities
+for flexible, cost-effective, and high-performance deployments.
+Achieving real-time and energy-efficient baseband processing on
+commercial off-the-shelf platforms, however, remains a critical
+challenge. This article explores how single instruction multiple
+data (SIMD) architectures can accelerate RAN workloads. We
+first outline why key physical-layer functions, such as channel
+estimation, multiple-input multiple-output (MIMO) detection,
+and forward error correction, are well aligned with SIMD’s
+data-level parallelism. We then present practical design guide-
+lines and prototype results, showing significant improvements
+in throughput and energy efficiency compared to conventional
+CPU-only processing, while retaining programmability and ease
+of integration. Finally, we discuss open challenges in workload
+balancing and hardware heterogeneity, and highlight the role
+of SIMD as an enabling technology for flexible, efficient, and
+sustainable 6G-ready RANs.
+I. INTRODUCTION
+T
+HE architecture of the radio access network (RAN) is
+continuing to evolve in the transition from 4G to 5G
+and beyond to 6G. This evolution is driven by several key
+factors. First, RANs must meet some performance require-
+ments, including support for higher data rates, lower latency,
+and operation across a wide range of frequency bands. Second,
+there is a desire to get more vendors to open RAN archi-
+tectures, enabling multi-vendor interoperability and reducing
+dependence on proprietary hardware. Third, the emergence
+of new deployment models such as cloud RAN and edge
+computing necessitates more flexible and software-centric
+RAN architectures. These trends are motivating a shift away
+from hardware-defined solutions toward more modular and
+virtualized designs that can adapt to future requirements with
+greater agility.
+The traditional RAN (tRAN) architecture has been widely
+deployed in 4G and 5G. In a tRAN system, most of the
+baseband processing is performed on dedicated hardware such
+as field programmable gate arrays (FPGAs), digital signal
+processors (DSPs), and application-specific integrated circuits
+(ASICs). These platforms offer low latency and some level
+of programmability, which made them attractive for initial
+J. Park and R. W. Heath, Jr.* are with the Department of Electrical and
+Computer Engineering, University of California, San Diego, La Jolla, CA
+92093, USA (emails: {jp261, rwheathjr}@ucsd.edu).
+C.-B. Chae* is with the School of Integrated Technology, Yonsei University,
+Seoul 03722, South Korea (email: cbchae@yonsei.ac.kr).
+deployments. They are, however, expensive to develop and
+difficult to upgrade as network requirements change. Because
+the hardware and software are usually provided by a single
+vendor, operators face vendor lock-in and limited interoper-
+ability. For these reasons, the industry has started to explore
+alternative architectures that are easier to maintain.
+Virtualized RAN (vRAN) is one alternative architecture. In
+vRAN, the baseband functions are implemented in software
+and run on commercial off-the-shelf (COTS) servers instead
+of specialized hardware. This makes the system easier to up-
+date and manage using general-purpose computing resources.
+vRAN also supports more flexible deployment models, such
+as centralized or cloud-based processing. The open RAN (O-
+RAN) framework builds on the idea of vRAN by defining
+standardized interfaces between different parts of the RAN [1].
+This allows components from different vendors to work to-
+gether, enabling multi-vendor interoperability and reducing
+dependence on proprietary solutions. As shown in Fig. 1,
+vRAN and O-RAN architectures together promote a more
+open and modular approach to RAN design, lowering the
+barrier for competition.
+A key feature of vRAN is that it runs mainly on general-
+purpose processors (GPPs), typically x86-64 processors, in-
+stead of dedicated baseband hardware. These CPUs are flexible
+and widely available, allowing operators to implement RAN
+more easily and reduce deployment complexity. While GPUs
+are explored for specific use cases, their higher power con-
+sumption and integration challenges have limited mainstream
+adoption. To fully benefit from CPU-based processing, the
+software must be optimized to take advantage of the CPU’s
+architecture. One important technique is single instruction,
+multiple data (SIMD), which has been a hot topic in modern
+vRAN and O-RAN baseband implementations. SIMD allows
+the same operation to be applied to multiple data elements
+in parallel. It has been widely used in fields like computer
+vision and image processing, where parallel operations on
+thousands of pixels are required in real-time tasks such as au-
+tonomous vehicles and robots [2]. In wireless systems, SIMD
+can be applied to core baseband functions such as multiple-
+input multiple-output (MIMO) detection, which involves large
+vector and matrix computations [3]. This approach enables
+faster physical (PHY) layer processing without relying on
+external accelerators. Recent research has also addressed how
+to optimize data arrangement and memory access patterns in
+open-source vRAN platforms [4]. In contrast, this paper targets
+arXiv:2510.07843v1  [eess.SP]  9 Oct 2025
+2
+Traditional Radio Access Network (tRAN)
+Core Network
+Baseband Unit 
+(BBU)
+Remote Radio Unit 
+(RRU)
+Virtualized Radio Access Network (vRAN)
+Open Radio Access Network (O-RAN)
+Core Network
+Centralized Unit (CU) 
+Distributed Unit (DU)
+Radio Unit (RU)
+PD
+CP
+RLC  
+MAC
+High 
+PHY
+O-DU
+O-CU
+O-RU
+Fronthaul
+Midhaul
+Core Network
+Backhaul
+FPGA Platform
+x86-64 COTS Platform
+Fig. 1. A general illustration of the transition from traditional RAN (tRAN) to virtualized and open RAN (vRAN/O-RAN) architectures. In tRAN, baseband
+processing is tightly coupled with proprietary hardware, limiting flexibility and scalability. In contrast, vRAN decouples hardware and software, enabling
+more agile deployments using commercial-off-the-shelf (COTS) servers. O-RAN further adopts a disaggregated architecture with standardized interfaces (e.g.,
+O-CU, O-DU and O-RU). This shift also facilitates the integration of SIMD-based software acceleration, effectively addressing the computational requirements
+of distributed MIMO (D-MIMO) systems.
+algorithm-level acceleration and demonstrates the practical
+feasibility of SIMD-based MIMO detection under commercial
+3GPP PHY parameters. The result highlights the potential
+for PHY-layer software optimization that directly reduces
+processing latency in real-world RAN deployments.
+In this article, we introduce the concept of SIMD to
+communication engineers and show how it can be applied
+in modern RAN architectures. While SIMD is one of the
+features in general-purpose CPUs and widely used in domains
+like computer architecture and image processing, it is not
+explicitly addressed in 3GPP or O-RAN standards and remains
+underutilized in many wireless PHY-layer implementations.
+We provide a more detailed introduction to the evolution of
+different RAN architectures, highlighting the growing role
+of software in baseband processing. Then, we explain the
+fundamentals of SIMD and why it is well suited for the
+parallel, structured computations found in wireless systems.
+Next, we explore the use of SIMD in a design example of
+MIMO detection under realistic 3GPP parameters, demonstrat-
+ing its potential in vRAN deployments. We also analyze its
+effectiveness compared to GPUs and FPGAs and conclude
+with use cases and future research directions.
+II. THE EVOLUTION OF RAN ARCHITECTURE
+The
+structural
+shift
+from
+hardware-centric
+tRAN
+to
+software-defined architectures has created an environment
+where SIMD acceleration can be directly integrated into the
+baseband processing stack. In vRAN and O-RAN, virtual-
+ization abstracts network functions from hardware, enabling
+flexible placement of processing tasks and dynamic allocation
+of resources. This flexibility allows developers to incorporate
+SIMD-optimized libraries into PHY-layer functions such as
+MIMO processing, which was previously not possible in
+fixed DSP pipelines of legacy RANs. In this section, we
+examine how these architectural properties enable practical
+SIMD deployment for baseband processing.
+A. The vRAN architecture
+vRAN refers to the software-defined implementation of
+RAN functions that enables baseband functions, or at least
+some of them, to run on GPPs, such as x86-64 CPUs, virtually
+on top of COTS computing platforms. The vRAN architecture
+separates software from hardware, enabling RAN workloads to
+operate on GPP-based servers. Virtualization on x86-64 plat-
+forms allows a unified software stack to support a wide range
+of deployment scenarios from small cells to macro cell base
+stations. Industry developers can implement RAN functions
+using their familiar programming languages such as C or C++,
+and port them across processors with minimal effort through
+recompilation. In contrast, tRAN architectures perform PHY
+processing on hardwired fixed-function silicon, which requires
+hardware upgrades for new services. Legacy systems also
+depend on hard-coded hardware description languages (HDLs)
+such as Verilog. These are specialized programming languages
+used to describe digital circuit behavior at the register transfer
+level (RTL). This approach ties the design to specific hardware
+and require proprietary software tools, limiting innovation due
+to the need for developers with specialized expertise.
+The evolution of vRAN architecture from virtualized net-
+work functions (VNFs) to cloud-native or containerized net-
+work functions (CNFs) significantly enhances operational ef-
+ficiency. As illustrated in Fig. 2, VNFs run within virtual
+machines (VMs) and require full guest operating systems
+(OSs) over a hypervisor, a software layer that creates and
+manages multiple VMs on a physical COTS server. While
+VNFs provided the first step toward virtualization, they are
+resource-heavy and slower to scale. CNFs, in contrast, operate
+as lightweight containers generated by a container engine. This
+containerized structure eliminates the need for a full guest
+3
+VNF
+CNF
+COTS Server
+Host OS
+Hypervisor
+VM
+VM
+Guest OS
+Guest OS
+VNF
+VNF
+COTS Server
+Host OS
+Container Engine
+Container
+Container
+Container
+Container
+App
+App
+App
+App
+Fig. 2.
+Architectural comparison between VNF- and CNF-based vRAN
+implementations. The VNF model relies on virtual machines with guest
+operating systems, while the CNF model employs lightweight containers
+orchestrated by a container engine.
+OS, enabling faster scaling, more efficient resource utilization,
+and improved software portability. CNF-based architectures
+also allow services to run across future processor genera-
+tions through simple recompilation and lightweight container
+orchestration. Although we do not cover the CNF structure
+in detail, Kubernetes-based deployment is one of the most
+commercialized container orchestrators for vRAN solutions. It
+further enables mobile network operators (MNOs) to flexibly
+manage, scale, and launch new services [5]. The CNF-based
+vRAN architecture also supports the transition to a disaggre-
+gated and interoperable RAN structure aligned with O-RAN
+principles. This cloud-native evolution creates a flexible and
+portable software environment that supports SIMD-accelerated
+baseband processing within GPPs.
+B. The O-RAN architecture
+O-RAN extends the principles of vRAN by introducing
+open standard interfaces and enabling interoperability among
+equipment from different vendors [6]. Although commercial
+adoption is still limited compared to tRAN and vRAN, O-
+RAN’s main motivation is cost reduction through disaggrega-
+tion of PHY-layer functions and increased vendor competition.
+Open interfaces also allow local vendors to enter the RAN
+ecosystem, promoting diversity and strengthening technology
+sovereignty. In the long term, O-RAN adoption is expected to
+help maintain 5G leadership and influence the development of
+6G systems.
+At the functional level, O-RAN separates legacy RAN
+modules into the radio unit (RU), distributed unit (DU), and
+centralized unit (CU), connected by standardized interfaces
+such as fronthaul and midhaul. This functional split allows in-
+dependent development and deployment of each unit, increas-
+ing flexibility in vendor selection and network design. Among
+the various functional split options, Option 7 represents a
+balanced trade-off between fronthaul bandwidth requirements
+and RU complexity. Reducing the dimensionality of signals
+sent over the fronthaul is also an active research topic [7], as
+it can significantly lower the processing load between the RU
+and DU.
+In O-RAN deployments, the pursuit of both energy effi-
+ciency and low latency aligns closely with the capabilities of
+SIMD-based acceleration. As 6G moves toward higher perfor-
+mance, greater flexibility, and improved sustainability, split-
+aware functional optimization will be essential for reducing
+baseband energy consumption [8]. At the same time, achieving
+real-time performance requires lightweight and accelerated
+implementations of the DU and RU. Maximizing the use of
+internal processing resources becomes critical as 6G faces
+strict latency requirements and processes much larger data.
+In this context, SIMD-based acceleration enables vRAN and
+O-RAN platforms to meet high throughput and real-time
+processing demands. It also supports the energy efficiency and
+latency goals of next-generation RAN systems.
+III. SIMD FUNDAMENTALS AND INTEGRATION INTO PHY
+A. SIMD fundamentals
+SIMD is a parallel computing architecture that enables a
+single instruction to operate on multiple data elements. It
+was originally introduced by Intel through extensions such as
+MMX, SSE, and AVX, and is now widely supported across
+modern CPU architectures. Compared to non-SIMD execution,
+SIMD enables fine-grained data-level parallelism directly on
+each CPU core and can achieve speedups of 8x to 16x for
+signal processing tasks.
+SIMD acceleration is realized by defining specialized data
+types (e.g., __m256 and __m128 for Intel AVX) and ap-
+plying vectorized arithmetic instructions such as add, subs,
+mul, and div. Fig. 3(a) demonstrates this concept using a
+simple element-wise array addition example. The left side
+of the figure shows a standard scalar loop, which processes
+one element at a time. The right figure shows SIMD in-
+trinsics (e.g., __m256_add_pd for double precision and
+__m256_add_ps for single precision) that process multiple
+elements in parallel within a single CPU instruction like four
+packed-double (PD) or eight packed-single (PS) values in
+a 256-bit register. This example highlights how SIMD ex-
+ploits data-level parallelism to accelerate computation. A key
+practical advantage of SIMD intrinsics is their compatibility
+with standard C/C++ environments, including compilers (e.g.,
+GCC) and debuggers (e.g., GDB). This compatibility simpli-
+fies development and debugging across generations of Intel
+CPUs and similar architectures. Provided as C function-like
+application programming interfaces (APIs), SIMD intrinsics
+directly map to specific SIMD assembly instructions and offer
+much better readability than raw assembly. These features
+make SIMD a portable and sustainable option for PHY-layer
+processing.
+The more efficiently communication engineers optimize an
+algorithm for SIMD, the greater the acceleration gains they
+can achieve. Modern CPUs support extended SIMD instruction
+sets such as Intel AVX2 and AVX-512, which provide 256-
+bit and 512-bit vector registers, respectively. These extensions
+enable high-throughput floating-point operations (FLOPs), es-
+sential for computationally intensive MIMO workloads in-
+volving dense matrix and vector algebra. Fully leveraging
+SIMD requires careful memory alignment, loop unrolling, and
+4
+Single Precision (PS)
+Double Precision (PD)
+Standard Loop 
+(C / C++ Scalar)
+Single Instruction Multiple Data (CPU Intrinsics)
+for (int i = 0; i < C.size(); i++)
+{
+C[i] = A[i]+B[i];
+}
+// Load integer arrays into __m256 registers
+__m256 vecA = _mm256_loadu_ps(A);
+__m256 vecB = _mm256_loadu_ps(B);
+// Perform SIMD addition
+__m256 vecC = _mm256_add_ps(vecA, vecB);
+// Store result back to memory
+_mm256_storeu_ps(C, vecC);
+A[7]
+A[6]
+A[5]
+A[4]
+A[3]
+A[2]
+A[1]
+A[0]
+B[7]
+B[6]
+B[5]
+B[4]
+B[3]
+B[2]
+B[1]
+B[0]
+C[7]
+C[6]
+C[5]
+C[4]
+C[3]
+C[2]
+C[1]
+C[0]
+32 bits * 8
+32 bits * 8
+32 bits * 8
+64 bits * 4
+A[3]
+A[2]
+A[1]
+A[0]
+B[3]
+B[2]
+B[1]
+B[0]
+64 bits * 4
+C[3]
+C[2]
+C[1]
+C[0]
+64 bits * 4
+// Load integer arrays into __m256d registers
+__m256d vecA = _mm256_loadu_pd(A);
+__m256d vecB = _mm256_loadu_pd(B);
+// Perform SIMD addition
+__m256d vecC = _mm256_add_pd(vecA, vecB);
+// Store result back to memory
+_mm256_storeu_pd(C, vecC);
+A[i]
+B[i]
+C[i]
+32 / 64 bits
+32 / 64 bits
+32 / 64 bits
+(a)
+Fused multiply-add (FMA) computation for 
+𝐑= 𝐇𝐇H (PS)
+// H: [ Nr × Nt]
+// H_herm: [ Nt × Nr]
+// R: [ Nr × Nr]
+for i = 0 to Nr − 1 do
+for j = 0 to Nr − 1 step 4 do
+acc = _mm256_setzero_ps()  // Initialization
+for k = 0 to Nt − 1 do
+h_simd
+= _mm256_loadu_ps(&H[i * Nt + k])
+h_herm_simd = _mm256_loadu_ps(&H_herm[k * Nr + j])
+acc         = complex_fma_ps(h_simd, h_herm_simd, acc)
+// FMA on real and imaginary parts separately
+end for
+_mm256_storeu_ps(&R[i * Nr + j], acc)
+end for
+end for
+H_im[7]
+H_re[6]
+H_im[5]
+H_re[4]
+H_im[3]
+H_re[2]
+H_im[1]
+H_re[0]
+H_herm
+_im[7]
+H_herm
+_re[6]
+H_herm 
+_im[5]
+H_herm 
+_re[4]
+H_herm 
+_im[3]
+H_herm 
+_re[2]
+H_herm 
+_im[1]
+H_herm 
+_re[0]
+R_im[7]
+R _re[6]
+R_im[5]
+R_re[4]
+R_im[3]
+R_re[2]
+R_im[1]
+R_re[0]
+FMA
+(b)
+Fig. 3. Illustration of SIMD fundamentals. (a) Element-wise array addition, comparing standard scalar loop with SIMD intrinsics in both single- and double-
+precision to demonstrate parallelism. (b) Fused multiply-add (FMA) computation for efficiently calculating covariance matrix using vectorized operations.
+load/store optimizations to maximize the benefit of register-
+level bandwidth. Moreover, SIMD allows precise control over
+the trade-off between performance and numerical accuracy.
+For example, packing single-precision (16-bit) floating-point
+elements instead of double-precision (32-bit) floating-point
+elements into a 256-bit register __m256 can nearly double
+the throughput with minimal degradation.
+B.
+SIMD integration into PHY
+SIMD shows its benefits when applied to heavy PHY opera-
+tions in modern RAN systems. In the context of vRAN and O-
+RAN, SIMD can accelerate a wide range of PHY-layer blocks,
+including MIMO detection, precoding and channel estimation.
+Among these, MIMO detection is chosen as the primary focus
+of this article because it is computationally demanding yet
+algorithmically structured, making it an ideal candidate for
+SIMD-based acceleration. As shown in Fig. 3(b), the fused
+multiply-add (FMA) example maps directly to intermediate
+operations in MIMO receivers such as covariance calculation.
+These repetitive linear algebraic tasks benefit significantly
+from SIMD’s data-level parallelism through vectorized addi-
+tive and multiplicative instructions. We use MIMO detection as
+a case study to demonstrate how SIMD can be systematically
+integrated into broader PHY-layer pipelines in vRAN and
+O-RAN systems. Offloading these tasks to SIMD-enabled
+software modules allows vRAN systems to achieve lower
+latency and higher throughput without the need for GPUs or
+FPGAs.
+SIMD-based baseband processing also runs directly on CPU
+cores, minimizing PCIe-related data transfer overhead and
+enabling tight timing control. These benefits are especially
+valuable in commercial vRAN and O-RAN systems that rely
+on fully software-defined signal chains running on COTS
+servers. Intel’s recent white paper demonstrates the viability
+of this approach by implementing a SIMD-accelerated polar
+decoder using AVX-512 for 5G control channels, showing that
+even latency-sensitive L1 modules can be handled entirely in
+software on x86-64 platforms [9]. This prior work targets a
+simple decoding task with low computational complexity and
+small payloads, such as control channels.
+Software-defined DU
+PHY
+SIMD based MIMO Detection
+(LMMSE)
+𝐖eq
+MMSE = 𝐇𝐻𝐇𝐇𝐻+ 𝜎𝑛2𝐈
+−1
+= 𝐇𝐻𝐑−1
+SIMD based LU Decomposition
+(1) LU Decomposition
+𝐑= 𝐋𝐔
+(2) Forward Substitution
+𝐑𝐗= 𝐋𝐔𝐗= 𝐈
+𝐋𝐁= 𝐈
+ 𝐁= 𝐋−1
+(3) Backward Substitution
+𝐔𝐗= 𝐁
+𝐗= 𝐔−1𝐁
+(4) Matrix Multiplication
+𝐗= 𝐑−1 = 𝐔−1𝐋−1
+MAC
+RLC
+Fig. 4.
+SIMD-accelerated MIMO detection algorithm implemented in the
+software-defined DU. The LMMSE detection process, consisting of LU
+decomposition, forward/backward substitution, and matrix inversion, is ef-
+ficiently executed using SIMD instructions by exploiting vector-level paral-
+lelism.
+We extend this approach to large-scale data processing,
+where MIMO detection involves far larger payloads and tighter
+transmission time interval (TTI) constraints. By demonstrating
+that SIMD can handle these demanding baseband operations
+with high efficiency, we highlight the broader applicabil-
+ity of software-defined PHY acceleration in real-time, high-
+throughput scenarios beyond limited control-plane use cases.
+Furthermore, we provide a feasibility for scaling to the massive
+antenna arrays anticipated in 6G deployments.
+IV.
+PERFORMANCE EVALUATION OF
+SIMD-ACCELERATED MIMO DETECTION
+To evaluate the effectiveness of SIMD acceleration in re-
+alistic MIMO scenarios, we developed a link-level simula-
+tor configured with 3GPP NR parameters. This C++-based
+simulator emulates the behavior of commercial base station
+equipment running on COTS servers. It includes key PHY
+modules compliant with NR standards and serves as a testbed
+to examine how SIMD integration affects the performance of
+virtualized baseband systems under various MIMO workloads.
+5
+0
+5
+10
+15
+SNR (dB)
+10-5
+10-4
+10-3
+10-2
+10-1
+100
+Code Block Error Rate (BLER)
+MIMO detection accuracy
+Scalar
+SIMD-PD
+SIMD-PS
+8 X 8
+2 X 2
+4 X 4
+(a)
+Average SIMD-accelerated processing time per 1 TTI
+COV
+INV
+W mmse
+EQ
+TOTAL
+0
+0.5
+1
+1.5
+2
+2.5
+3
+3.5
+4
+4.5
+5
+Duration (ms)
+10-3
+2 X 2
+Baseline
+SIMD PD
+SIMD PS
+COV
+INV
+W mmse
+EQ
+TOTAL
+0
+0.005
+0.01
+0.015
+0.02
+0.025
+0.03
+Duration (ms)
+4 X 4
+COV
+INV
+W mmse
+EQ
+TOTAL
+0
+2
+4
+6
+8
+10
+12
+14
+16
+Duration (ms)
+8 X 8
+(b)
+Fig. 5. Performance analysis of SIMD-based LMMSE MIMO detection. (a) Accuracy comparison between packed-single (PS) and packed-double (PD) modes
+under 3GPP NR and TDL-C channels. (b) Processing time breakdown across different MIMO configurations, showing that matrix inversion dominates runtime
+and benefits most from SIMD acceleration.
+This setup serves as a reference platform to evaluate the poten-
+tial performance gains of SIMD acceleration under conditions
+representative of current and near-future vRAN and O-RAN
+deployments.
+Fig. 4 depicts the detailed structure of linear minimum
+mean square error (LMMSE) MIMO detection algorithms.
+It highlights that matrix inversion remains one of the most
+computationally demanding tasks. To reduce this burden, we
+implement LU decomposition, which factorizes matrices into
+lower (L) and upper (U) triangular components [10]. This
+transformation simplifies the inversion problem into two se-
+quential steps: forward substitution and backward substitution,
+consisting of simple arithmetic operations that are highly
+suitable for SIMD vectorization.
+In the simulation, we configure LDPC channel encod-
+ing/decoding and MIMO-OFDM transmission using 15 kHz
+subcarrier spacing and 60 resource blocks (RB), corresponding
+to 720 subcarriers. We use modulation and coding scheme
+(MCS) index 9, as specified in [11], to measure the average
+processing time per TTI for MIMO detection over 10,000
+TTIs. The channel model is based on the 3GPP TDL-C
+specification. We evaluate signal detection performance using
+a LMMSE receiver, which involves inverting the received
+signal covariance matrix, R. Fig. 5(a) illustrates that SIMD PS
+instructions achieve detection accuracy nearly identical to that
+of PD, despite the reduced arithmetic precision. This obser-
+vation confirms that in practical MIMO scenarios, significant
+acceleration can be obtained without compromising detection
+performance. As the dimension of R increases with antenna
+scaling, we assess the computational efficiency of SIMD
+optimization in handling the resulting matrix operations. The
+evaluation was conducted on an Intel Core i9-14900KF CPU
+with AVX2 support. This configuration enables 256-bit SIMD
+operations using intrinsic data types such as __m256. These
+instructions allow parallel processing of multiple complex
+numbers per clock cycle, up to two 64-bit complex numbers
+(with 32-bit real and imaginary parts each) or four 32-bit
+complex numbers (with 16-bit real and imaginary parts each).
+Compared to a baseline vRAN configuration without SIMD
+acceleration, SIMD-based MIMO processing demonstrates up
+to 50% speedup, primarily due to optimization of the matrix
+inversion stage. As shown in Fig. 5(b), this performance
+gain is consistently observed across different MIMO sizes
+(2 × 2, 4 × 4, 8 × 8), where matrix inversion accounts for
+the largest portion of processing time and benefits the most
+from SIMD acceleration. Although this step is the primary
+computational bottleneck in linear MIMO receivers, SIMD
+offers the greatest opportunity for reducing end-to-end latency.
+When reducing data precision from double to single (float),
+the system maintains comparable accuracy while achieving
+additional acceleration gains. As vRAN manufacturers in-
+creasingly adopt high-performance CPUs, using AVX-512
+instructions with 512-bit vector registers can further maximize
+the processing speed. This trend highlights the potential of
+lightweight, software-native techniques for meeting real-time
+PHY processing deadlines in vRAN deployments.
+We also analyze the maximum data rates of PHY-layer and
+evaluate the scalability of SIMD acceleration under different
+MIMO configurations. To estimate the theoretical peak rates,
+we consider a 5G NR system operating with maximum MCS
+level(27), which uses 256-QAM modulation and a high coding
+rate. Leveraging the MCS, RB allocation, and the number of
+data streams, we can calculate the total PHY-layer payload
+bits over 1 TTI, known as transport block size (TBS) [11].
+With a 60 RB allocation and 15 kHz subcarrier spacing,
+each 2 × 2 MIMO carries approximately 139,376 bits per slot
+(or 139.4 kbit over 1 ms), resulting in a peak physical-layer
+throughput of 139.4 Mbps. Extending this to a 4×4 MIMO
+configuration yields about 278,776 bits per slot, or 279 Mbps.
+These values represent realistic PHY-layer payloads under 1
+ms TTI constraints.
+Targeting 4 × 4 MIMO for indoor deployments, the above
+configuration is appropriate, and our vRAN prototype demon-
+strates that SIMD acceleration reduces PHY processing time
+by more than 50 % compared to a scalar implementation. This
+enables one of the most demanding tasks, such as 4×4 MIMO
+detection, to be completed within 0.03 ms. The processing
+time accounts for only about 3% of the 1 ms TTI, leaving a
+substantial margin for other baseband operations. Such perfor-
+mance confirms that all PHY computations can be completed
+within the 1 TTI deadline. The evaluation results validate that
+software-defined base stations can meet real-time constraints
+6
+TABLE I
+COMPARISON OF PHY ACCELERATION TECHNIQUES FOR VRAN
+Metric
+SIMD (CPU)
+SIMT (GPU)
+FPGA
+Latency
+Low
+Medium
+Very Low
+Flexibility
+High
+Medium
+Low
+Deployment Effort
+Low
+High
+Very High
+Energy Efficiency
+Medium
+Low
+High
+Scalability
+High
+High
+Low
+Toolchain / Maintenance
+Standard (C/C++)
+CUDA/OpenCL
+Vendor-specific
+without external accelerators. This efficiency reduces CPU
+clock cycles and power consumption during intensive matrix
+operations, leading to significant energy savings.
+Higher MIMO configurations (e.g., 8×8 MIMO) and wider
+bandwidths (i.e., more RBs) are achievable on commercial
+high-performance CPUs with AVX-512 support. Wider SIMD
+lanes and efficient vector load/store operations increase the
+data rates that can be processed in a single TTI while still
+meeting latency requirements. This capability supports the re-
+alization of fully software-defined indoor vRAN deployments
+with Gbps-level throughput.
+V. HIGH-LEVEL DESIGN TRADE-OFFS
+In vRAN systems, several acceleration options exist for
+PHY-layer processing, including CPU-based SIMD, GPU-
+based single instruction, multiple threads (SIMT), and FPGA
+solutions. Among these, SIMD operates directly on general-
+purpose CPUs and is well-suited for latency-sensitive work-
+loads. It also executes vectorized instructions on CPU registers
+with minimal control overhead and data transfer latency.
+Table I demonstrates the strengths and weaknesses of GPUs
+in vRAN PHY acceleration. GPUs offer massive thread-
+level parallelism and can achieve very high throughput. In
+signal processing tasks, however, they often require substantial
+software tuning to reach peak performance. SIMT execution
+also faces warp divergence, where threads within a warp take
+different control paths, and scheduling overhead. These factors
+introduce latency variability and reduce energy efficiency.
+They also make GPUs less suitable for latency-critical real-
+time workloads.
+FPGA-based solutions provide deterministic latency and
+excellent energy efficiency. They also deliver high timing
+precision, which is essential for time-critical PHY-layer tasks.
+These benefits come with trade-offs, however, as they require
+long development cycles, reliance on proprietary toolchains,
+and limited flexibility after deployment. Such constraints re-
+duce agility and slow adaptation to evolving RAN require-
+ments, particularly in software-defined environments.
+SIMD applies uniform vector operations across aligned data
+vectors. This approach eliminates the per-thread divergence
+and unpredictable delays seen in GPUs. Its software-oriented
+design removes the need for device passthroughs or vendor-
+specific drivers and allows seamless integration within CNF-
+based vRAN deployments. Overall, SIMD presents a bal-
+anced combination of scalability, low integration overhead,
+and compatibility with standard x86-64 server platforms. This
+balance makes it attractive for near-term 5G and emerging
+6G RAN deployments, where ease of deployment, real-time
+performance, and software sustainability are crucial.
+VI. FUTURE OUTLOOK
+SIMD-based acceleration is a practical approach for scal-
+able and efficient MIMO processing in vRAN and O-RAN
+deployments. In this article, an NR-compliant, end-to-end
+link-level simulator on a COTS platform was used to em-
+ulate commercial base station operations. Results show that
+SIMD can significantly improve the performance of key PHY-
+layer functions such as matrix inversion and signal detection.
+Modern CPUs equipped with advanced SIMD instruction sets
+(e.g., AVX2 and AVX-512) provide substantial acceleration,
+reinforcing SIMD’s role as an practical enabler in software-
+defined RAN environments. Beyond demonstrating technical
+feasibility, it is essential to understand how SIMD can be
+applied in diverse use cases and what future research directions
+can extend its impact.
+A. Use cases and future research directions
+The application of SIMD goes beyond PHY-layer testing
+and extends to diverse deployment scenarios. Several repre-
+sentative examples include:
+• Distributed MIMO (D-MIMO): In D-MIMO [12], spa-
+tially distributed RUs cooperate to serve users, creating
+high fronthaul traffic and a heavy computational load on
+the DU. SIMD can accelerate both fronthaul compres-
+sion using block floating-point (BFP) quantization and
+centralized baseband processing. These support real-time
+coordination across DUs and enable efficient, scalable D-
+MIMO operation.
+• Green 6G RAN: As 6G targets sustainability and car-
+bon neutrality, energy efficiency in RAN architectures
+is a critical concern [13], [14]. SIMD-based processing
+addresses this by executing PHY-layer tasks efficiently
+on general-purpose CPUs. It reduces data movement and
+avoids the overhead of device passthrough. Its determinis-
+tic execution and tight software integration make it well-
+suited for energy-aware baseband pipelines in Green RAN
+deployments.
+• Indoor fixed wireless access (FWA): FWA is a cost-
+effective broadband alternative to fiber and delivers high-
+speed internet to fixed locations without the need for
+physical cabling [15]. It is particularly valuable in ru-
+ral areas, helping bridge the internet access gap. It is
+also well-suited for enterprise or industrial sites that
+7
+require rapid, flexible deployments. In O-RAN deploy-
+ments running on COTS servers, FWA’s high bandwidth
+and predictable traffic patterns create heavy PHY-layer
+processing demands. SIMD acceleration can handle these
+workload efficiently.
+• Artificial intelligence (AI) RAN: While AI/ML work-
+loads typically run on GPUs or tensor processing units
+(TPUs), low-level PHY tasks can be offloaded to SIMD.
+This frees the accelerators to focus on control-plane
+functions within RAN intelligent controllers (RICs), in-
+cluding resource scheduling, energy-efficient operation,
+and quality of experience (QoE) optimization. As AI
+RAN architectures evolve toward 6G, this funtional split
+between SIMD and AI accelerators is expected to become
+important for achieving both real-time performance and
+system stability.
+B. The road ahead: hybrid and heterogeneous computing
+Hybrid and heterogeneous computing techniques will play
+a critical role in future RAN architectures, combining (1)
+SIMD for deterministic, fine-grained PHY acceleration, (2)
+GPUs/TPUs for AI control plane processing, and (3) FP-
+GAs and photonic accelerators for ultra-low-latency or high-
+throughput tasks supporting macro cells. Particularly, consider-
+ing the characteristics of optical fiber and related components
+in O-RAN fronthaul, photonic accelerators can offload many
+baseband processing blocks. Their ultrafast, power-efficient
+capabilities complement electronic SIMD and FPGA solutions.
+In this broader vision, SIMD is not only an optimization but
+a cornerstone of scalable, agile, and maintainable PHY-layer
+processing. Its inherent compatibility with COTS servers and
+software stacks provides a pathway to realizing open, flexible,
+and high-performance RANs for 5G-Advanced and beyond.
+We hope this work encourages deeper exploration of SIMD-
+based acceleration strategies within the wireless research and
+communication engineering communities.
+REFERENCES
+[1] M. Polese, L. Bonati, S. D’Oro, S. Basagni, and T. Melodia, “Un-
+derstanding O-RAN: Architecture, interfaces, algorithms, security, and
+research challenges,” IEEE Commun. Surveys Tuts., vol. 25, no. 2, pp.
+1376–1411, 2023.
+[2] W. van der Mark and D. Gavrila, “Real-time dense stereo for intelligent
+vehicles,” IEEE Trans. Intell. Transp. Syst., vol. 7, no. 1, pp. 38–50,
+Mar. 2006.
+[3] A. K. Singh and K. Jamieson, “SIMD-enabled physics-inspired MIMO
+detector for uplink multi-user MIMO,” in Proc. ACM of Int. Conf. on
+Mobile Comput. and Netw., Dec. 2024, pp. 1614–1616.
+[4] J. Wang and Y. Hu, “Enabling efficient SIMD acceleration for virtual
+radio access network,” in Proc. ACM of Int. Conf. on Parallel Proc.,
+Aug. 2021, pp. 1–10.
+[5] W. Attaoui, E. Sabir, H. Elbiaze, and M. Guizani, “VNF and CNF
+placement in 5G: Recent advances and future trends,” IEEE Trans. Netw.
+Serv. Manag., vol. 20, no. 4, pp. 4698–4733, Feb. 2023.
+[6] O-RAN Alliance, “Control, user and synchronization plane specifica-
+tion,” Jan. 2025.
+[7]
+¨O. T. Demir, M. Masoudi, E. Bj¨ornson, and C. Cavdar, “Cell-free
+massive MIMO in O-RAN: Energy-aware joint Orchestration of cloud,
+fronthaul, and radio resources,” IEEE J. Sel. Areas Commun., vol. 42,
+no. 2, pp. 356–372, Feb. 2024.
+[8] H. Gupta, M. Sharma, A. Franklin A., and B. R. Tamma, “Apt-RAN:
+A flexible split-based 5G RAN to minimize energy consumption and
+handovers,” IEEE Trans. Netw. Serv. Manag., vol. 17, no. 1, pp. 473–
+487, Mar. 2020.
+[9] Intel Corporation, “Polar decoder white paper,” https://builders.intel.
+com/docs/networkbuilders/polar-decoder-white-paper.pdf, 2021.
+[10] G. H. Golub and C. F. Van Loan, Matrix Computations, 4th ed.
+Johns
+Hopkins University Press, 2013.
+[11] 3rd Generation Partnership Project (3GPP), “NR; Physical layer proce-
+dures for data (Release 18),” Jul. 2025.
+[12] J. Rodr´ıguez S´anchez, F. Rusek, O. Edfors, M. Sarajli´c, and L. Liu,
+“Decentralized massive MIMO processing exploring daisy-chain archi-
+tecture and recursive algorithms,” IEEE Trans. Sig. Proc., vol. 68, pp.
+687–700, 2020.
+[13] P. Frenger, Y. Jading, and A. Nader, “Energy performance of 6g radio
+access networks: A once in a decade opportunity,” https://www.ericsson.
+com/en/reports-and-papers/white-papers/energy-performance-6g-ran,
+Nov. 2024.
+[14] A. Sultan, “Energy efficiency in 3gpp technologies,” https://www.3gpp.
+org/technologies/deep-dive/ee-article, Jul. 2024.
+[15] Next G Alliance, “Next G alliance report: Fixed wireless access,” https:
+//nextgalliance.org/white papers/fixed-wireless-access/, Mar. 2025.
+Jaebum Park (Student Member, IEEE) received the B.S. in Electrical
+and Electronic Engineering from Yonsei University, Seoul, South Korea in
+2015 and the M.S. in Electrical and Electronic Engineering from the Korea
+Advanced Institute of Science and Technology (KAIST), Daejeon, South
+Korea in 2017. From 2017 to 2024, he worked in the 6G research team at
+Samsung Research, Seoul, South Korea. He is currently pursuing a Ph.D. in
+electrical and computer engineering at UC San Diego, CA, USA. His research
+interests include advanced MIMO transceiver algorithms, radio-over-fiber for
+distributed MIMO, wireless communications at upper-midband frequencies,
+and next-generation RAN architectures.
+Chan-Byoung Chae (Fellow, IEEE) is an Underwood Distinguished Pro-
+fessor and Lee Youn Jae Fellow (Endowed Chair Professor) with the School
+of Integrated Technology at Yonsei University, Seoul, South Korea. He is
+also the Chief Scientific Officer (CSO) of SensorView, Ltd. He is the author
+of Signal Processing Engineering: An Intuitive Approach (Springer, 2026)
+and has co-authored more than 200 journal papers. He has received several
+awards from CES, IEEE Communications Society (ComSoc), IEEE Signal
+Processing Society (SPS), and IEEE Vehicular Technology Society (VTS).
+He is an elected member of the National Academy of Engineering of Korea.
+Robert W. Heath, Jr. (Fellow, IEEE) is the Charles Lee Powell Chair of
+Wireless Communications with the Department of Electrical and Computer
+Engineering, University of California at San Diego, CA, USA. He is also the
+President and the CEO of MIMO Wireless Inc. He has authored Introduction
+to Wireless Digital Communication (Prentice Hall, 2017) and Digital Wireless
+Communication: Physical Layer Exploration Lab Using the NI USRP (Na-
+tional Technology and Science Press, 2012) and coauthored Millimeter Wave
+Wireless Communications (Prentice Hall, 2014) and Foundations of MIMO
+Communication (Cambridge University Press, 2018). He received the 2025
+IEEE/RSE James Clerk Maxwell Medal. He is an elected member of the
+National Academy of Engineering in the USA.

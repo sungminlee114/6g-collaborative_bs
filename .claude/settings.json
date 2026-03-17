@@ -16,6 +16,7 @@
       "Bash(docker compose *)",
       "Bash(docker exec *)",
       "Bash(git *)",
+      "Bash(source *)",
       "Bash(mv *)",
       "Bash(cp *)",
       "Bash(rm *)",

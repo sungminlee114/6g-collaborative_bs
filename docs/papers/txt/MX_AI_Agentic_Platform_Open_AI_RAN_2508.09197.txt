@@ -1,0 +1,768 @@
+MX-AI: Agentic Observability and Control
+Platform for Open and AI-RAN
+Ilias Chatzistefanidis
+Communications Department
+EURECOM
+Sophia Antipolis, France
+ilias.chatzistefanidis@eurecom.fr
+Andrea Leone
+AI Department
+BubbleRAN
+Sophia Antipolis, France
+andrea.leone@bubbleran.com
+Ali Yaghoubian
+Communications Department
+EURECOM
+Sophia Antipolis, France
+ali.yaghoubian@eurecom.fr
+Mikel Irazabal
+RIC Department
+BubbleRAN
+Sophia Antipolis, France
+mikel.irazabal@bubbleran.com
+Sehad Nassim
+Info & Com Engineering
+Aalto University
+Espoo, Finland
+nassim.sehad@aalto.fi
+Lina Bariah
+EECS Department
+Khalifa University
+Abu Dhabi, UAE
+lina.bariah@ku.ac.ae
+Merouane Debbah
+EECS Department
+Khalifa University
+Abu Dhabi, UAE
+merouane.debbah@ku.ac.ae
+Navid Nikaein
+Communications Department
+EURECOM
+Sophia Antipolis, France
+navid.nikaein@eurecom.fr
+Abstract—Future 6G radio access networks (RANs) will be
+artificial intelligence (AI)-native: observed, reasoned about, and
+re-configured by autonomous agents cooperating across the
+cloud-edge continuum. We introduce MX-AI, the first end-to-end
+agentic system that (i) instruments a live 5G Open RAN testbed
+based on OpenAirInterface (OAI) and FlexRIC, (ii) deploys a
+graph of Large-Language-Model (LLM)-powered agents inside
+the Service Management & Orchestration (SMO) layer, and
+(iii) exposes both observability and control functions for 6G
+RAN resources through natural-language intents. On 50 realistic
+operational queries, MX-AI attains a mean answer quality of
+4.1 / 5.0, and 100 % decision action accuracy, while incurring
+only 8.8 secs end-to-end latency when backed by GPT-4.1.
+Thus, it competes human experts performance, validating its
+practicality in real settings. We publicly release the agent
+graph, prompts, and evaluation harness to accelerate open
+research on AI-native RANs. A live demo is presented here
+https : //www.youtube.com/watch?v = CEIya7988Ug&t =
+285s&abchannel = BubbleRAN.
+Index Terms—MX-AI, Agentic AI, LLMs, Slicing, Open RAN,
+AI-RAN, 6G, observability, FlexRIC, OpenAirInterface
+I. INTRODUCTION
+Six-generation (6G) mobile networks are expected to con-
+nect on theborder of one trillion devices while simultaneously
+offering sub-millisecond latency, “six-nines” reliability, and
+a carbon-constrained energy budget. Achieving this trifecta
+with today’s largely static radio-resource managers is widely
+considered impossible: every cell, slice, and user must instead
+be steered by animble, data-driven control plane that can
+sense, reason, and act faster than human operators [1]–[3].
+The Open RAN (O-RAN) Alliance1 has therefore de-
+coupled RAN control into three temporal loops—real-time
+(RT), near-RT, and non-RT—while standardizing north-bound
+interfaces that permit third-party intelligence to plug in at each
+loop. Commercial and open-source ecosystems have quickly
+embraced the vision: disaggregated gNB/DU/CU software
+1https://www.o-ran.org/specifications (accessed 31/07/2025)
+now runs on COTS servers (OpenAirInterface (OAI)2), and
+lightweight controllers such as FlexRIC expose programmatic
+hooks to manipulate the air interface in real time [4]. Yet,
+what should occupy these hooks remains open—conventional
+reinforcement learning (RL) excel at single tasks but struggle
+to generalize across the mosaic of 6G objectives.
+Concurrently, large language models (LLMs) have demon-
+strated an emergent ability to ingest heterogeneous telemetry,
+follow human-readable intents, and decompose problems into
+tool-invocation plans—a skillset strikingly aligned with net-
+work operations [5]–[7]. Early prototypes already prompt an
+LLM to allocate spectrum slices [8] or use control algorithms
+for 6G optimization [9]. Still, existing efforts remain either
+simulator-bound, single-agent without closed-loop actuation.
+This paper presents MX-AI, the first end-to-end system in
+which a graph of cooperating LLM-based agents orchestrates
+a live 5G Open and AI-native RAN3. Our prototype runs
+on the commercial BubbleRAN MX-AI platform4, connects
+to an OAI gNB through the R1/E2 interfaces of FlexRIC,
+and handles both natural-language queries and commands. In
+doing so, it takes a concrete step toward the AI-native vision
+of 6G. This work makes the following contributions:
+• Telco Multi-agent graph. We design and release a
+reusable agent graph (Fig. 2) with dedicated routing,
+monitoring, deployment, and orchestration roles.
+• Live testbed integration. MX-AI interfaces with a real
+OAI 5G gNB, UEs, and 5G core via the R1 and E2 APIs
+of BubbleRAN service management and orchestration
+(SMO) 5 and Radio Intelligent Controller (RIC) [4].
+• Observability & control. The system answers operator
+questions and enforces slice and network blueprints in
+2https://openairinterface.org/ accessed 31/07/2025
+3https://ai-ran.org/ (accessed 31/07/2025)
+4https://bubbleran.com/products/mx-ai (accessed 31/07/2025)
+5https://bubbleran.com/products/mx-pdk (accessed 31/07/2025)
+arXiv:2508.09197v1  [cs.NI]  8 Aug 2025
+closed loop, demonstrating intent-driven RAN control.
+• Comprehensive evaluation. We benchmark different
+LLM back-ends on 50 operational queries, reporting
+answer quality, action accuracy, end-to-end latency, GPU
+footprint, and comparison with human performance.
+II. RELATED WORK
+A rich body of work explores how open-source stacks and
+software-defined controllers can expose fine-grained hooks
+into the radio access network. OpenAirInterface (OAI) de-
+livers the most complete 3GPP-compliant 4G/5G implemen-
+tation to date and has become the de-facto playground for
+experimental RAN research. Building atop OAI, the FlexRIC
+framework provides a lightweight O-RAN–compliant near-RT
+RIC and E2 agent SDK, cutting CPU usage by 83 % versus the
+reference design while preserving full standard compatibility
+[4]. More recently, EdgeRIC pushes the RIC concept to
+the sub-ms timescale by co-locating an artificial intelligence
+(AI)-enabled µRIC at the DU, demonstrating closed-loop
+scheduling with <400 µs inference latency [11]. Complemen-
+tary efforts such as dApps extend the O-RAN architecture with
+on-device micro-services able to execute control logic inside
+the RAN stack itself [15]. These apps integrate intelligence for
+dynamic slicing [16], [17]. Still, they focus on programmable
+control loops rather than on generalist reasoning agents.
+Concurrent research has begun injecting LLM cognition into
+RAN controllers. A collective roadmap from industry and
+academia outlines how LLMs can support a wide range of use
+cases across the network lifecycle [18]. LLM-xApp shows how
+a GPT-style model can be prompted to allocate PRBs across
+slices in an O-RAN testbed, boosting throughput and relia-
+bility without task-specific training [8]. LINKs turns an LLM
+into an autonomous planner that queries a digital twin and
+solves the resulting optimization for smart-city 6G networks
+[13]. A step further, Lin et al. propose a hierarchical debate
+among multiple LLMs, achieving 30% better plan quality on
+a new 6GPlan benchmark [14]. Despite their promise, all of
+these systems remain either simulator-based or single-agent
+prototypes. MAESTRO [12] is the first real prototype of multi-
+agent LLM-based network automation. Symbiotic agents [9]
+are emerged as novel paradigm for trustworthy LLM decision-
+making for artificial general intelligence (AGI) networks.
+Table I summarizes how our work compares to prior art.
+Unlike earlier efforts that either attach a single LLM to
+an xApp or remain in simulation, MX-AI wires a coop-
+erating graph of five specialized agents—planner, monitor,
+policy-synthesizer, validator, and executor—directly into the
+SMO of a live AI-RAN 5G network. This end-to-end proto-
+type shows that LLM cognition moves beyond intent parsing
+to close the control loop in real time, while quantifying both
+answer quality and overhead for cloud and edge models. Thus,
+MX-AI takes an important step toward AI-native 6G RANs.
+III. SYSTEM ARCHITECTURE
+Next-generation AI-RANs must decide where to execute
+the reasoning logic that turns raw key-performance indicators
+Fig. 1.
+Agentic Open and AI-RAN Network Architecture. Our agentic
+approach is a multi-agent system placed at the R1 interface at the SMO
+level, operating in non-real-time intervals. Human Operators query the agent
+through a new human-to-agent (H2A) interface, with observability requests
+or for real-time RAN decision-making, such as slicing reconfiguration.
+(KPIs) into closed-loop control actions and how to do so fast
+enough for the target control loop. This section (i) surveys the
+canonical 5G / O-RAN stack, (ii) explains why we embed our
+multi-agent graph in the SMO, and (iii) details the concrete
+prototype that underpins our evaluation.
+A. From 5G to AI-Native RANs
+Figure 1 recaps the logical architecture of an open and
+increasingly AI-native RAN: Radio units (RUs), distributed
+units (DUs) and central units (CUs) handle the time-critical
+PHY/MAC, transport and user-plane functions that shape cell
+throughput and latency. Near-RT RIC (latency: 10 ms–1 sec)
+hosts xApps that run scheduling, interference management or
+mobility optimization loops. It interacts with RAN nodes via
+the E2 interface and obeys higher-level policies pushed over
+A1. Non-RT RIC (latency: ≥1s) resides inside the SMO. It
+aggregates KPIs along the management interface O1, trains
+AI models and exposes them as cloud-native rApps. SMO
+provides life-cycle management, configuration databases and
+northbound APIs to slice or deploy RAN from edge to core.
+The emerging AI-RAN vision generalizes this stack by
+allowing LLMs or small language models (SLMs) to plug
+into any layer—provided the latency budget is respected. For
+sub-second loops (e.g. slicing) such models must reside at the
+Near-RT RIC; for multi-second loops, a cloud SMO suffices.
+B. Multi-Agent Graph on the R1 Interface
+Our contribution is a multi-agent system that lives on the R1
+interface between the SMO and the Non-RT RIC (highlighted
+in Figure 1). Concretely, we instantiate:
+1) an Orchestrator Agent that parses operator intents, de-
+composes them into sub-tasks and spawns
+2) Specialized Agents— monitor, planner, policy synthe-
+sizer, validator and executor—wired together as a di-
+rected acyclic agent graph.
+The graph ingests live KPIs, alarms and topology snapshots
+streamed via SMO’s and FlexRIC’s telemetry services (O1,
+TABLE I
+LLM- AND AGENT-FOCUSED RESEARCH ON RAN AUTOMATION.
+Paper
+Year
+LLM /AI
+#Agents
+Exec. Env.
+Main Idea
+OAI [10]
+2020
+–
+–
+Full 4G/5G SW
+Open reference stack
+FlexRIC [4]
+2021
+–
+–
+OAI gNB+E2
+Lightweight near-RT RIC
+EdgeRIC [11]
+2024
+DRL
+µ-apps
+srsRAN OTA
+sub-ms µRIC control
+Maestro [12]
+2024
+GPT-4o
+3+
+5G OAI testbed
+Multi-tenant intent negotiation
+LINKs [13]
+2024
+GPT-J
+1
+6G digital-twin
+Planning via twin queries
+LLM-xApp [8]
+2025
+GPT-3.5
+1
+O-RAN emu.
+PRB slicing by prompting
+DebateLLM [14]
+2025
+Llama-2
+3
+6GPlan sim.
+Hierarchical debate planner
+dApps [15]
+2025
+CNN/RL
+µ-apps
+OAI + O-RAN
+On-device control loops
+Symbiotic Agents [9]
+2025
+GPT-4 + optimizer
+2
+5G RAN testbed
+LLM / SLM symbiosis for trustworthy control
+MX-AI (this work)
+2025
+GPT-4, Llama-3,...
+5
+Live OAI+FlexRIC
+Multi-agent observability & control
+E2); intermediate nodes refine the context through RAG and
+tool use; the executor finally emits:
+• Observability answers (e.g. KPI summaries, root-cause
+analyses) returned upstream to the operator, and
+• Control artifacts (e.g. R1/AI network blueprint manage-
+ment and policy objects or E2 service-model messages)
+that the SMO and Non-RT RIC relay directly to the RAN
+or to Near-RT RIC for on-the-fly xApp reconfiguration.
+Placing the LLMs at R1 strikes a pragmatic balance:
+round-trip latency of 1–12 secs—depending on whether the
+models run in-cloud or on-prem GPUs—is operating at non-
+real-time intervals, yet fast enough competing human experts
+and allowing human operators grasp the large-context reason-
+ing. Thus, we introduce a new interface as a necessity for
+human-to-agent (H2A) communication in AI-RAN.
+C. Prototype Deployment and Use-Case Focus
+Our testbed mirrors a realistic network: An indoor OAI
+gNB and 5G core, three OAI user equipments (UEs) replaying
+enhanced mobile broadband (eMBB) and ultra reliable low la-
+tency communication (URLLC) traces, and production-grade
+BubbleRAN FlexRIC Near-RT and Non-RT RICs and SMO.
+Within this setting we investigate two agentic cases:
+a) Observability — natural-language dashboards, anomaly
+explanations and capacity forecasts produced directly
+from raw O1/E2 KPIs.
+b) Control — dynamic network blueprint management,
+PRB share and power-cap policies generated in response
+to intent prompts such as “guarantee 10 Mb/s for the
+URLLC slice from 6–7 pm”.
+Although this paper concentrates on the R1 instantiation,
+the modular agent graph can be re-deployed closer to the RAN
+edge once trimmed SLMs or distilled tool-agents meet the
+tighter latency targets of the Near-RT domain. Exploring that
+design space is left to future work; here we demonstrate that
+even at the SMO, LLM agents already enable intent-driven
+observability and closed-loop control on a live 5G network.
+D. Agent Design
+The agent graph in Fig. 2 follows the LLM planning and
+tool-execution paradigm. The Routing Agent classifies each in-
+coming prompt as monitoring, deployment, or retrieval, lever-
+aging a telecom-tuned LLM. The Monitoring Agent triggers
+Fig. 2. Agent graph at the SMO R1 interface. The routing node classifies
+each prompt and dispatches it to either the monitoring or deployment branch.
+Monitoring consults the vector store via retrieve and polls KPIs via monitor-
+ing tools. Deployment plans and enforces changes through deployment tools.
+Dotted edges denote iterative planning/validation and context refresh. Both
+branches write outcomes to save answer before termination.
+the monitoring tools (custom Python scripts on MX-AI) to
+pull KPIs via R1, returning JSON which is then summarized
+by the LLM. The Deployment Agent converts high-level in-
+tents into FlexRIC policy objects, invoking deployment tools
+to push actions through the O1/A1 interfaces. Finally, the
+Save Answer Agent logs responses to a time-series database,
+enabling longitudinal benchmarking of answer quality.
+1) Retrieval and Live Context (Push/ Pull): LLM planning
+with tool execution only works if the model sees fresh context.
+Our system therefore couples RAG with an event-driven data
+plane that keeps the vector index aligned with network reality.
+a) Push path—resource watchers: We attach lightweight
+watchers to Kubernetes resources—including native objects
+and custom resource definitions (CRDs) that carry RAN
+policies and slice descriptors—via the API’s watch semantics
+and client informers. Watchers also subscribe to O-RAN
+application state (xApps/rApps) and to external telemetry
+endpoints such as Prometheus exporters when appropriate. On
+each change, the watcher serializes a compact delta (the fields
+that changed), embeds it, and upserts it into a dense vector
+index. This push-based path keeps the store synchronized with
+configuration drift and KPI excursions without periodic full
+scans or high-volume polling.
+Fig. 3.
+Agent Graphical User Interface and Interaction with the Human
+Operator (H2A Interface) on Observability and Control of RAN Slicing. The
+questions are independent and introduced with a time delay between each
+other. The last question answers correctly after a manual policy enforcement
+by the user to increase slice throughput to 30 Mbps.
+b) Pull path—agent queries: At query time (e.g., “What
+is the current headroom on DU-7?”) the Monitoring Agent
+decides whether the vector store suffices or whether to fetch
+fresh counters via monitoring tools. It first retrieves top-k se-
+mantically indexed snapshots from the vector DB (RAG) [7].
+If finer granularity is needed (e.g., per-UE or per-PRB), it
+invokes live collectors (Prometheus) or kernel-level probes
+(eBPF) to obtain up-to-the-second metrics. Retrieved facts
+and fresh measurements are then serialized into typed JSON
+and injected into the prompt context; the agent may iterate
+retrieval, tool, reason until emitting a STOP token.
+c) Why this is novel: Prior works on telco LLMs and
+O-RAN highlight RAG and tool use in principle, but (to
+our knowledge) do not describe a push-based, delta-aware
+watcher pipeline that streams CRD/xApp updates directly into
+the retrieval index used by the agent [19], [20]. This proved
+decisive: observability quality depended more on retrieval/tool
+engineering than model size, as the agent consistently rea-
+soned over current state rather than stale snapshots.
+2) Agentic Network Observability: Operators can query
+now the network in natural language, e.g., “How close is slice
+#2 to its latency SLA over the last hour?”. The Monitoring
+Agent fetches the latency histogram from FlexRIC, the LLM
+summarizes deviations, and a bar chart is stored for audit.
+3) Agentic Network Blueprint Management: Blueprints are
+JSON schemas capturing desired network slice topology,
+Quality of Service (QoS), and RIC policies. A user prompt
+such as ”Increase VPN slice reliability to 99.999% until
+18:00” is parsed by the Deployment Agent, which synthesizes
+an updated A1 policy instructing the Near-RT RIC to pre-empt
+bandwidth from best-effort slices.
+Figure 3 illustrates a snapshot of the interaction between
+the agent framework and the human operator through the H2A
+interface. Based on human intents, the agentic assistant pro-
+vides observability answers and moreover, drives the real-time
+decision-making by creating or updating slice configurations.
+IV. EVALUATION RESULTS
+We evaluate the agent at the R1 interface on the live AI-
+RAN testbed (Sec. III) (sample prompts in Table III). The
+suite comprises 50 operator questions: 10 control actions (we
+currently support 10 actions such as UE lifecycle, blueprint
+deploy/delete, and slice PRB changes) and 40 observability
+queries spanning KPIs, policies, slices, CRDs, and logs.
+For each back-end we report four metrics: (i) observability
+coherence on a 0–5 scale—scored with an LLM-assisted
+evaluator (GPTScore [21]) configured with transparent rubrics
+and aspects, and known to correlate well with humans in
+natural language generation (NLG) tasks—together with three
+expert annotators who adjudicate disagreements and sanity-
+check edge cases; (ii) action accuracy, computed per action
+as a Boolean ground truth on whether the enforced change
+matches the intent and then aggregated as a percentage; (iii)
+end-to-end latency from prompt to action completion; and
+(iv) GPU footprint. Prior work shows GPTScore and related
+methods [22] align closely with human evaluations when
+criteria are explicit—though bias must be monitored—which
+motivates our hybrid human and LLM scoring protocol.
+a) Action execution is reliable when tools are under-
+stood: Across the limited but representative set of 10 control
+actions, capable LLMs reached 100% action accuracy (Ta-
+ble II). Once the agent correctly interprets the tool schema
+and pre-flight checks pass, execution is deterministic: failures
+stemmed from tool misuse rather than stochastic generation.
+Only mistral:7b failed to reach on our toolset, underscor-
+ing that tool grounding dominates raw language capability.
+b) Observability is harder than control:
+No model
+achieved perfect 5/5 coherence. Unlike actions—where
+schemas
+and
+validator/rollback
+fences
+constrain
+outputs—observability answers require navigating a large,
+heterogeneous evidence set (O1/E2 KPIs, CRDs, logs,
+topology) and performing synthesis and disambiguation. In
+ablations, retrieval and tool engineering mattered more than
+model size alone: schema-aware retrieval, typed tool outputs,
+and context pruning consistently lifted scores.
+c) Latency and deployment footprint.: Local 70–72B
+models
+(llama3.3:70b-q4,
+qwen2:72b)
+delivered
+strong coherence with end-to-end latencies around 12–14 secs
+on
+40
+GB VRAM, offering a viable on-prem option with
+full data control. Cloud GPT variants were somewhat faster
+(∼8–9 secs) but require off-prem execution. The fastest is
+a local llama3.2:3b-q4 at 1.3 secs, trading coherence
+for speed—useful to illustrate the headroom if we fine-tune
+small models and strengthen retrieval.
+d) Coherence–latency frontier.: Fig. 4 plots observabil-
+ity coherence (higher is better) against end-to-end latency
+(lower is better), with marker size proportional to VRAM
+Model
+Observe Coherence ↓
+Action Accuracy
+E2E Latency (s)
+Inference (ms)
+Steps
+VRAM (GB)
+GPT-4.1 (API)
+4.1 ± 0.5
+100 %
+8.8
+1100
+8.0
+cloud
+GPT-4.1-mini (API)
+3.9 ± 0.6
+100 %
+8.0
+1000
+8.0
+cloud
+llama3.3:70b-q4
+3.8 ± 0.4
+100 %
+12.2
+1525
+8.0
+42.0
+qwen2:72b
+3.8 ± 0.7
+100 %
+13.5
+1810
+8.0
+41.0
+llama3.1:8b-q4
+2.7 ± 0.3
+100 %
+2.8
+350
+8.0
+4.9
+llama3.2:3b-q4
+1.9 ± 0.6
+100 %
+1.3
+160
+8.0
+2.0
+mistral:7b
+1.0 ± 0.7
+0 %
+5.2
+640
+8.0
+4.4
+llama3.2:1b-q4
+-
+-
+-
+-
+-
+1.3
+TABLE II
+AGENTIC OBSERVABILITY & NETWORK BLUEPRINT MANAGEMENT: OBSERVABILITY COHERENCE SCORE (0–5 SCALE), ENFORCE AN ACTION
+ACCURACY, END-TO-END LATENCY, AND GPU FOOTPRINT.
+TABLE III
+LLM EVALUATION PROMPTS BY CATEGORY
+Category
+Example queries
+Observability
+Is there any access network? Tell me the name of the available
+access and core networks. Based on the current context, give
+me an overview of the gnb2 access network cells and radio
+configuration. Check the current network status: is the gnb1
+element working properly? How many UEs are available in the
+current deployment? What are their names? What are the max
+and guaranteed throughput in the PolicyJob CRD of VPN slice?
+Control Action
+Create a network with name agora with 1 access network called
+parthenon and 1 RIC. Create a terminal with name plato
+and connect it to the parthenon.agora access network.
+Delete the terminal with name plato. Delete the network
+blueprint with name agora. Change the bubbleran VPN slice
+to 10 Mbps guaranteed and maximum throughput.
+and shape indicating deployment (local vs cloud). The dashed
+curve shows the non-dominated (Pareto) frontier. Two local
+models—llama3.3:70b-q4 and qwen2:72b—sit on the
+efficient set near 12–14 secs, pairing strong coherence with
+on-prem deployment. Cloud GPT models occupy a different
+efficient region with lower latency at similar coherence. The
+llama3.2:3b-q4 point anchors the extreme low-latency
+end at 1.3 secs, clarifying what may be reachable as SLMs
+are fine-tuned and backed by stronger RAG. This single
+figure makes the trade-space explicit: if operators require on-
+prem and high coherence today, 70B-class local models are
+attractive; if the latency budget is tight, small models plus
+upgraded retrieval are the path forward.
+e) Time-to-action (TTA): humans vs agents: Fig. 5 com-
+pares the empirical cumulative distribution function (CDF)
+of time-to-action—from trigger to action start—for human
+beginners, experts, and the agent. In our process, humans must
+locate the right CRD/JSON, craft a valid patch, and issue the
+correct command; experts are faster but still incur context-
+gathering and validation delays. The agent short-circuits this
+by retrieving context, planning, validating, and executing
+through tools. With a 70B local back-end, the agent’s median
+TTA lands in the low-teens of seconds—already competitive
+with experts. The optimized SLM approaches 1.3 secs, point-
+ing to near-RT actuation once retrieval and toolchains are
+optimized. The gap on the CDF’s left side indicates where
+automation removes cognitive and search overhead; the right-
+tail compression shows reduced variance across incidents.
+Fig. 4.
+Coherence–latency trade-off with Pareto frontier. Circles are local
+deployments (size of VRAM), squares are cloud. Stars highlight the two
+recommended local models and the fastest local small model.
+f) What drives observability quality: Our largest gains
+came from engineering the retrieval and tools, not sim-
+ply swapping models. Indexing CRDs and logs with typed
+schemas, aligning tool outputs to compact JSON, and adding
+delta watchers that push into agent’s context reduced misref-
+erences and stale views. To our knowledge, this is the first
+demonstration of live observability at R1 where streaming
+watchers continuously update the agent’s network view and
+the same agent can act through A1/E2 tools.
+g) Takeaways and outlook.: (1) Control today: with a
+constrained action set, once tools are understood the agent
+executes with 100% accuracy and competitive latency. (2)
+Observability headroom: perfect 5/5 coherence is unlikely
+without better evidence plumbing; the bottleneck is re-
+trieval/tooling rather than decoding. (3) Scaling down: 70B lo-
+cal models provide the best coherence under data-sovereignty
+constraints, but 8B-class models already deliver excellent
+latency. We expect fine-tuning, distillation, and advanced
+RAG/tooling to close most of the quality gap, unlocking sub-
+second closed-loop control. Overall, the results indicate that
+agentic control at R1 matches expert operators today and, with
+improved retrieval and tool design, surpass human speed and
+reliability by an order of magnitude on common workflows.
+V. CHALLENGES AND FUTURE OUTLOOK
+Latency Budgeting: Even with Non-RT placement, LLM
+inference may bottleneck emergency procedures (e.g., cell
+Fig. 5. Time-to-action CDF for agents and humans. The agent removes search
+and command-crafting overhead, compressing both the median and tail.
+outage recovery). Model distillation and on-chip acceleration
+are urgent research fronts.
+Agent Alignment and Safety: Ensuring agents do not issue
+unsafe RAN commands requires guardrails and human in the
+loop review, echoing broader AI safety concerns.
+Open Agent Ecosystems: Proprietary APIs impede repro-
+ducibility. Initiatives such as MX-AI’s open agent SDK are
+a promising direction, but standardized “agent marketplaces”
+akin to xApp stores are needed.
+Scalability to 6G: Heterogeneous spectrum (sub-THz), in-
+tegrated sensing, and joint communication-compute will mul-
+tiply observability data by orders of magnitude; techniques
+like RAG and hierarchical agent graphs will be vital.
+VI. CONCLUSION
+We have presented MX-AI, the first live demonstration
+of an LLM-driven, multi-agent control graph operating a
+5G Open RAN. Our architecture, validated on an OAI and
+FlexRIC testbed, answers complex operator questions with
+high fidelity and paves the way for intent-driven RAN con-
+trol. Future work will close the loop on real-time actuation,
+explore edge-resident micro-agents, and cultivate an open,
+interoperable agent ecosystem for 6G networks. A live demo
+is presented here https : //www.youtube.com/watch?v =
+CEIya7988Ug&t = 285s&abchannel = BubbleRAN.
+ACKNOWLEDGMENT
+This work was supported by the European Commission as
+part the Horizon Europe 2022 6Green and Adroit-6G Projects
+under Grant 101096925 and Grant 101095363.
+REFERENCES
+[1] ITU-R, “Recommendation itu-r m.2160-0: Imt-2030 framework,”
+International
+Telecommunication
+Union,
+Tech.
+Rep.,
+Nov.
+2023.
+[Online].
+Available:
+https://www.itu.int/dms pubrec/itu-r/rec/
+m/R-REC-M.2160-0-202311-I!!PDF-E.pdf
+[2] NGMN Alliance, “6g drivers and vision,” NGMN, Tech. Rep.,
+2021. [Online]. Available: https://www.ngmn.org/wp-content/uploads/
+NGMN-6G-Drivers-and-Vision-V1.0 final.pdf
+[3] M. Benedetto et al., “Key drivers and research challenges for 6g
+ubiquitous wireless intelligence,” 6G Flagship, Tech. Rep., 2019.
+[Online]. Available: https://jultika.oulu.fi/files/isbn9789526223544.pdf
+[4] R.
+Schmidt,
+M.
+Irazabal,
+and
+N.
+Nikaein,
+“Flexric:
+An
+sdk
+for
+next-generation
+sd-rans,”
+in
+Proceedings
+of
+CoNEXT
+2021,
+2021. [Online]. Available: https://www.eurecom.fr/publication/6737/
+download/comsys-publi-6737.pdf
+[5] S. Yao, J. Zhao, D. Yu, N. Du, I. Shafran, K. Narasimhan, and Y. Cao,
+“React: Synergizing reasoning and acting in language models,” in
+ICLR, 2023. [Online]. Available: https://arxiv.org/pdf/2210.03629
+[6] T. Schick, J. Dwivedi-Yu et al., “Toolformer: Language models can
+teach themselves to use tools,” arXiv preprint arXiv:2302.04761, 2023.
+[Online]. Available: https://arxiv.org/pdf/2302.04761
+[7] P.
+Lewis,
+E.
+Perez,
+A.
+Piktus
+et
+al.,
+“Retrieval-augmented
+generation
+for
+knowledge-intensive
+nlp
+tasks,”
+in
+NeurIPS,
+2020. [Online]. Available: https://proceedings.neurips.cc/paper/2020/
+file/6b493230205f780e1bc26945df7481e5-Paper.pdf
+[8] X. Wu, J. Farooq, Y. Wang, and J. Chen, “LLM-xApp: A large language
+model empowered radio resource management xApp for 5G O-RAN,”
+in Proc. NDSS Symposium, 2025.
+[9] I. Chatzistefanidis and N. Nikaein, “Symbiotic agents: A novel
+paradigm
+for
+trustworthy
+agi-driven
+networks,”
+2025.
+[Online].
+Available: https://arxiv.org/abs/2507.17695
+[10] F. Kaltenberger, A. P. Silva, A. Gosain, L. Wang, and T.-T. Nguyen,
+“OpenAirInterface: Democratizing innovation in the 5G era,” Computer
+Networks, vol. 176, p. 107284, 2020.
+[11] W. Ko, U. Ghosh, U. Dinesha, R. Wu, S. Shakkottai, and D. Bharadia,
+“EdgeRIC: Empowering realtime intelligent optimization and control in
+nextg cellular networks,” in Proc. USENIX NSDI, 2024, pp. 1315–1330.
+[12] I. Chatzistefanidis, A. Leone, and N. Nikaein, “Maestro: Llm-driven
+collaborative automation of intent-based 6g networks,” IEEE Network-
+ing Letters, vol. 6, no. 4, pp. 227–231, 2024.
+[13] S. Jiang, B. Lin, Y. Wu, and Y. Gao, “LINKs: Large language model
+integrated management for 6G empowered digital twin networks,” arXiv
+preprint arXiv:2412.19811, 2024, accepted VTC2024-Fall.
+[14] Y. Lin, H. Zhou, C. Hu, X. Liu, H. Chen, Y. Xin, and J. Zhang, “Hier-
+archical debate-based large language model for complex task planning
+of 6G network management,” arXiv preprint arXiv:2506.06519, 2025,
+iCML 2025 Workshop on ML4Wireless.
+[15] A. Lacava, L. Bonati, N. Mohamadi, R. Gangula, F. Kaltenberger,
+P. Johari, S. D’Oro, F. Cuomo, M. Polese, and T. Melodia, “dapps:
+Enabling real-time AI-based open RAN control,” arXiv preprint
+arXiv:2501.16502, 2025.
+[16] W. Wu, N. Chen, C. Zhou, M. Li, X. Shen, W. Zhuang, and X. Li,
+“Dynamic ran slicing for service-oriented vehicular networks via con-
+strained learning,” IEEE Journal on Selected Areas in Communications,
+vol. 39, no. 7, pp. 2076–2089, 2020.
+[17] T. Tsourdinis, I. Chatzistefanidis, N. Makris, T. Korakis, N. Nikaein,
+and S. Fdida, “Service-aware real-time slicing for virtualized beyond
+5g networks,” Computer Networks, vol. 247, p. 110445, 2024.
+[Online]. Available: https://www.sciencedirect.com/science/article/pii/
+S1389128624002779
+[18] A. Shahid, A. Kliks, A. Al-Tahmeesschi, A. Elbakary, A. Nikou,
+A. Maatouk, A. Mokh, A. Kazemi, A. De Domenico, A. Karapan-
+telakis et al., “Large-scale ai in telecom: Charting the roadmap for
+innovation, scalability, and enhanced digital experiences,” arXiv preprint
+arXiv:2503.04184, 2025.
+[19] C. Liu, X. Xie, X. Zhang, and Y. Cui, “Large language models
+for networking: Workflow, advances and challenges,” arXiv preprint
+arXiv:2404.12901,
+2024.
+[Online].
+Available:
+https://arxiv.org/pdf/
+2404.12901
+[20] G. O. Boateng, H. Sami, A. Alagha, H. Elmekki, A. Hammoud,
+R. Mizouni, A. Mourad, H. Otrok, J. Bentahar, S. Muhaidat,
+C. Talhi, Z. Dziong, and M. Guizani, “A survey on large language
+models
+for
+communication,
+network,
+and
+service
+management,”
+arXiv preprint arXiv:2412.19823, 2024. [Online]. Available: https:
+//arxiv.org/abs/2412.19823
+[21] J. Fu, S.-K. Ng, Z. Jiang, and P. Liu, “Gptscore: Evaluate as you
+desire,” arXiv preprint arXiv:2302.04166, 2023. [Online]. Available:
+https://arxiv.org/abs/2302.04166
+[22] H.
+Li,
+Y.
+Zhang
+et
+al.,
+“A
+survey
+on
+llm-as-a-judge,”
+arXiv
+preprint arXiv:2411.15594, 2024. [Online]. Available: https://arxiv.org/
+abs/2411.15594

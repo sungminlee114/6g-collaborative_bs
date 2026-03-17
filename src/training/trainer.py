@@ -1,14 +1,13 @@
 """Common training utilities with proper optimization and regularization."""
-import json
 from pathlib import Path
 
 import torch
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
-from src.data.utils import nmse
+from src.dataset_operation.utils import nmse
 
 
-CHECKPOINTS_DIR = Path("checkpoints")
+CHECKPOINTS_DIR = Path(__file__).resolve().parent.parent.parent / "assets" / "checkpoints"
 
 
 def save_checkpoint(model, name: str, meta: dict = None):
@@ -99,7 +98,9 @@ def evaluate_per_snr(model, dataset_cls, data_dir, bs_ids, snr_list,
 def train_local(model, train_loader, val_loader=None, epochs=200,
                 lr=1e-3, weight_decay=1e-4, patience=25, device="cuda",
                 verbose=True, grad_clip=1.0, warmup_epochs=5,
-                use_cosine=True, save_as: str = None):
+                use_cosine=True, save_as: str = None,
+                tqdm_desc: str = "Training", tqdm_position: int = None,
+                tracker=None):
     """Full local training loop with proper optimization.
 
     Features:
@@ -139,7 +140,8 @@ def train_local(model, train_loader, val_loader=None, epochs=200,
     train_losses = []
     val_losses = []
 
-    pbar = tqdm(range(epochs), desc="Training", disable=not verbose)
+    pbar = tqdm(range(epochs), desc=tqdm_desc, disable=not verbose,
+                 position=tqdm_position, leave=tqdm_position is None)
     for epoch in pbar:
         t_loss = train_epoch(model, train_loader, optimizer, device, grad_clip)
         train_losses.append(t_loss)
@@ -167,6 +169,10 @@ def train_local(model, train_loader, val_loader=None, epochs=200,
             pbar.set_postfix(train=f"{t_loss:.4f}", val_db=f"{v_db:.1f}",
                              best=f"{best_db:.1f}", lr=f"{cur_lr:.1e}", wait=wait)
 
+            if tracker is not None:
+                tracker.log(epoch=epoch, train_loss=t_loss,
+                            val_nmse_db=v_db, best_db=best_db, lr=cur_lr)
+
             if wait >= patience:
                 pbar.set_description(f"Early stop @ {epoch+1}")
                 break
@@ -174,6 +180,8 @@ def train_local(model, train_loader, val_loader=None, epochs=200,
             val_losses.append(t_loss)
             t_db = 10 * torch.log10(torch.tensor(t_loss)).item()
             pbar.set_postfix(train_db=f"{t_db:.1f}")
+            if tracker is not None:
+                tracker.log(epoch=epoch, train_loss=t_loss, train_db=t_db)
 
     if best_state is not None:
         model.load_state_dict(best_state)
@@ -185,12 +193,21 @@ def train_local(model, train_loader, val_loader=None, epochs=200,
         "best_val": best_val,
     }
 
+    if tracker is not None:
+        tracker.set_result(
+            best_epoch=best_epoch, best_val=best_val,
+            best_val_db=10 * torch.log10(torch.tensor(best_val)).item(),
+            epochs_run=len(train_losses),
+        )
+
     if save_as:
         save_checkpoint(model, save_as, meta={
             "best_epoch": best_epoch,
             "best_val": best_val,
             "best_val_db": 10 * torch.log10(torch.tensor(best_val)).item(),
             "epochs_run": len(train_losses),
+            "train_losses": train_losses,
+            "val_losses": val_losses,
         })
 
     return result

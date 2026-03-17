@@ -1,0 +1,1549 @@
+Splitwise: Collaborative Edge–Cloud Inference for
+LLMs via Lyapunov-Assisted DRL
+Abolfazl Younesi
+Abolfazl.Younesi@uibk.ac.at
+University of Innsbruck
+Innsbruck, Austria
+Abbas Shabrang Maryan
+abbas.shabrang81@sharif.edu
+Sharif University of Technology
+Tehran, Iran
+Elyas Oustad
+elyas.oustad23@sharif.edu
+Sharif University of Technology
+Tehran, Iran
+Zahra Najafabadi Samani
+Zahra.Najafabadi-
+Samani@uibk.ac.at
+University of Innsbruck
+Innsbruck, Austria
+Mohsen Ansari
+ansari@sharif.edu
+Sharif University of Technology
+Tehran, Iran
+Thomas Fahringer
+Thomas.Fahringer@uibk.ac.at
+University of Innsbruck
+Innsbruck, Austria
+Abstract
+Deploying large language models (LLMs) on edge devices
+is challenging due to their limited memory and power re-
+sources. Cloud-only inference reduces device burden but
+introduces high latency and cost. Static edge–cloud par-
+titions optimize a single metric and struggle when band-
+width fluctuates. We propose Splitwise, a novel Lyapunov-
+assisted deep reinforcement learning (DRL) framework for
+fine-grained, adaptive partitioning of LLMs across edge and
+cloud environments. Splitwise decomposes transformer
+layers into attention heads and feed-forward sub-blocks, ex-
+posing exponentially more partition choices than layer-wise
+schemes. A hierarchical DRL policy, guided by Lyapunov op-
+timization, jointly minimizes latency, energy consumption,
+and accuracy degradation while guaranteeing queue stability
+under stochastic workloads and variable network bandwidth.
+Splitwise also guarantees robustness via partition check-
+points with exponential backoff recovery in case of commu-
+nication failures. Experiments on Jetson Orin NX, Galaxy
+S23, and Raspberry Pi 5 with GPT-2 (1.5B), LLaMA-7B, and
+LLaMA-13B show that Splitwise reduces end-to-end la-
+tency by 1.4×–2.8× and cuts energy consumption by up
+to 41% compared with existing partitioners. It lowers the
+95th-percentile latency by 53–61% relative to cloud-only ex-
+ecution, while maintaining accuracy and modest memory
+requirements.
+CCS Concepts: • Computing methodologies →Rein-
+forcement learning; • Computer systems organization
+→Cloud computing; • Information systems →Lan-
+guage models.
+Please use nonacm option or ACM Engage class to enable CC li-
+censes
+This work is licensed under a Creative Commons Attribution 4.0 Interna-
+tional License.
+UCC ’25, December 1–4, 2025, France, France
+© 2025 Copyright held by the owner/author(s).
+ACM ISBN 979-8-4007-2285-1/2025/12
+https://doi.org/10.1145/3773274.3774267
+Keywords: Large Language Model, Edge-Cloud Inference,
+Lyapunov Optimization, Deep Reinforcement Learning
+ACM Reference Format:
+Abolfazl Younesi, Abbas Shabrang Maryan, Elyas Oustad, Zahra
+Najafabadi Samani, Mohsen Ansari, and Thomas Fahringer. 2025.
+Splitwise: Collaborative Edge–Cloud Inference for LLMs via Lyapunov-
+Assisted DRL. In 2025 IEEE/ACM 18th International Conference on
+Utility and Cloud Computing (UCC ’25), December 1–4, 2025, France,
+France. ACM, New York, NY, USA, 11 pages. https://doi.org/10.1145/
+3773274.3774267
+1
+Introduction
+The deployment of Large Language Models (LLMs) has rev-
+olutionized numerous applications, from intelligent assis-
+tants to code generation [2, 12, 32]. However, their compu-
+tational demands often exceed billions of parameters, pos-
+ing significant challenges for resource-constrained edge de-
+vices. While cloud-based inference offers abundant computa-
+tional resources, it introduces substantial latency (50-200ms),
+cost, and raises privacy concerns for sensitive applications
+[7, 18, 29]. This latency is prohibitive for the next generation
+of interactive edge applications. For example, real-time con-
+versational agents and augmented reality (AR) assistants all
+require a "perceived-as-instant" response (ideally sub-100ms)
+to maintain a fluid user experience. A 50-200ms network
+round-trip makes this target impossible before inference
+computation even begins. Furthermore, many use cases in-
+volve processing sensitive data, such as private messages
+and medical transcriptions, where offloading to the cloud
+is non-viable due to privacy constraints. These applications
+must run at least partially on-device, creating the exact re-
+source bottleneck that collaborative inference aims to solve.
+Edge-only deployment, conversely, suffers from limited mem-
+ory (4-8GB) and computational capacity, resulting in either
+model quality degradation through aggressive compression
+or prohibitive energy consumption [21, 23].
+This gap highlights a collaborative edge-cloud inference
+paradigm that strategically utilizes both edge proximity and
+cloud capacity [18, 21, 24, 34]. These scenarios frequently
+arXiv:2512.23310v1  [cs.LG]  29 Dec 2025
+UCC ’25, December 1–4, 2025, France, France
+Younesi et al.
+exhibit rapid variations in both wireless bandwidth (10–100
+Mbps) and bursty request arrivals caused by interactive user
+behavior. Under such dynamics, a static partition quickly be-
+comes suboptimal or even unstable, leading to queue buildup
+and tail latency violations. Thus, dynamic partitioning is
+essential for maintaining responsiveness and resource effi-
+ciency in practical deployments of LLM-based services.
+Limitations of existing works. Current approaches to
+edge-cloud collaborative inference exhibit three fundamen-
+tal limitations. First, static partitioning strategies [4, 14, 16]
+pre-determine the split point between edge and cloud, failing
+to adapt to dynamic network conditions and varying work-
+load characteristics. For instance, when network bandwidth
+fluctuates from 10 to 100 Mbps, which is common in mo-
+bile scenarios, static approaches either underutilize available
+bandwidth or suffer from severe bottlenecks [17, 32]. Sec-
+ond, existing methods typically partition models at coarse
+granularities (e.g., entire transformer layers), missing oppor-
+tunities for fine-grained optimization [9, 18]. This coarse
+partitioning limits the ability to optimize resource allocation
+at a sub-layer level, reducing efficiency in heterogeneous
+edge environments [31]. Third, prior work often optimizes
+for single objectives, such as latency or energy, overlooking
+the complex interplay between latency, energy consumption,
+and model accuracy that characterizes real-world deploy-
+ments [5, 7, 28]. This single-objective focus fails to address
+the multi-dimensional trade-offs required for practical edge-
+cloud systems [20].
+Proposed approach. We present Splitwise, a novel
+framework that dynamically partitions LLMs between edge
+devices and cloud servers using Lyapunov-assisted Deep
+Reinforcement Learning (DRL). Unlike existing approaches,
+Splitwise formulates the partitioning problem as a con-
+strained Markov Decision Process (MDP) where actions de-
+termine fine-grained partition points at the attention head
+and FFN sub-layer level. The Lyapunov optimization frame-
+work provides theoretical guarantees on queue stability, en-
+suring bounded latency even under stochastic arrivals and
+time-varying network conditions. Our DRL agent learns to
+balance immediate performance metrics (latency, energy)
+with long-term system stability by incorporating Lyapunov
+drift into the reward function.
+We demonstrate some critical tradeoffs that define the
+edge-cloud inference landscape for our Splitwise based on
+our observations in Figure 1. Figure 1a highlights the oper-
+ational costs of various inference strategies. As model size
+grows from 1.5 billion (B) to 13B parameters, the cost per
+million requests for cloud-only execution increases dramati-
+cally, surpassing $150 for the largest model. This is due to the
+need for robust cloud infrastructure. In contrast, edge-only
+execution remains cost-effective but is limited by memory
+constraints for larger models. Splitwise significantly re-
+duces costs, keeping them below $25 (6× lower than cloud
+only) even for the 13B parameter model by utilizing edge
+(a) Operational Cost Analysis
+(b) Memory Requirements
+(c) performance scaling compared to cloud-only execution
+Figure 1. Illustration of key experimental metrics, highlighting variations in (a) op-
+erational cost, (b) memory requirements, and (c) performance scaling compared to
+cloud-only execution. (Details of setup are in Section 5)
+and cloud resources. Figure 1b shows the memory footprint
+on edge devices. The 13B parameter model requires over 50
+GB, exceeding the 8 GB limit of typical mobile devices and
+the 16 GB limit of most edge gateways, making large-scale
+inference difficult. Splitwise addresses this by reducing the
+required edge memory to 10 GB through effective computa-
+tion offloading. Finally, Figure 1c illustrates the performance
+gains from collaborative inference, achieving up to a 3×
+speedup for the 13B parameter model. Overall, these results
+underscore the advantages of Splitwise. They show that
+traditional approaches are often too costly and inefficient.
+Insights. We have two key insights based on our obser-
+vations. First, the computational cost and data transfer re-
+quirements vary significantly across different components
+of LLMs. Attention mechanisms in LLMs require quadratic
+computation but produce compact representations, while
+feed-forward networks (FFNs) exhibit opposite characteris-
+tics [18, 23]. This heterogeneity suggests that optimal parti-
+tion points differ based on runtime conditions. Second, edge-
+cloud systems inherently exhibit queue dynamics, where
+request arrivals and processing rates create complex stability
+challenges that pure optimization approaches fail to address.
+Contributions. This paper makes the following contri-
+butions:
+C1) To the best of our knowledge, we propose the first
+Lyapunov-assisted DRL framework called Splitwise for
+dynamic LLM partitioning that guarantees system stability
+while jointly optimizing latency and energy consumption in
+the edge-cloud collaborative inference (see Section 3).
+Splitwise: Collaborative Edge–Cloud Inference for LLMs via Lyapunov-Assisted DRL
+UCC ’25, December 1–4, 2025, France, France
+C2) We provide a fault-tolerance method that uses partition-
+boundary checkpoints to recover from communication fail-
+ures, resuming execution with exponential backoff.
+C3) We introduce a hierarchical partitioning scheme that
+operates at the level of attention heads and feed-forward sub-
+blocks, exposing hundreds of times more partition points
+than traditional layer-wise approaches (see Section 2.1). This
+fine granularity enables Splitwise to adapt effectively un-
+der fluctuating bandwidth and workload conditions.
+C4) We demonstrate through extensive evaluation on real
+edge devices (NVIDIA Jetson, mobile phones) and various
+LLMs (1B-13B parameters) that Splitwise reduces latency
+by 1.4×–2.8× while saving energy by up to 41% compared
+to state-of-the-art baselines. Moreover, Splitwise reduces
+operational inference costs by up to 6× compared to a cloud-
+only deployment (see Section 5).
+Paper structure. The remainder of this paper is organized
+as follows. Section II presents our system model and problem
+formulation. Section III details the Lyapunov-assisted DRL
+framework. Section IV describes implementation optimiza-
+tions. Section V evaluates Splitwise. Section VI reviews
+related work. Section VII concludes the paper.
+2
+System Model and Problem Formulation
+We first present our system model for edge-cloud collabo-
+rative LLM inference, followed by the problem formulation.
+Table 1 summarizes the key notations used in this paper.
+2.1
+Edge-Cloud Architecture
+System components. We consider an edge–cloud collabora-
+tive system consisting of a set of edge devices E = {𝐸1, 𝐸2, . . . , 𝐸𝑁𝑒},
+each with limited computational resources, and a set of cloud
+servers C = {𝐶1,𝐶2, . . . ,𝐶𝑁𝑐} with abundant capacity. Each
+edge device 𝐸𝑖∈E is characterized by its compute capability
+𝐶𝐶𝑖
+𝑒(FLOPs), memory capacity 𝑀𝑖
+𝑒(GB), and power bud-
+get 𝑃𝑖
+𝑒(W). The cloud servers provide substantially higher
+aggregate resources, i.e., 𝐶𝐶𝑗
+𝑐≫𝐶𝐶𝑖
+𝑒for most 𝑗,𝑖, but are
+accessible only through network links with time-varying
+bandwidth 𝐵𝑖(𝑡) and latency 𝑙𝑛,𝑖(𝑡) associated with each
+edge–cloud connection [32].
+LLM architecture. We consider transformer-based LLMs
+consisting of 𝐿sequential layers. Each layer ℓ∈{1, ..., 𝐿}
+processes input tensor 𝑋(ℓ) ∈R𝑛×𝑑𝑚𝑜𝑑𝑒𝑙where 𝑛denotes
+sequence length and 𝑑𝑚𝑜𝑑𝑒𝑙is the model dimension. The
+layer computation follows:
+𝑋(ℓ+1) = FFN(ℓ) (MHA(ℓ) (𝑋(ℓ))+𝑋(ℓ))+MHA(ℓ) (𝑋(ℓ))+𝑋(ℓ)
+(1)
+The Multi-Head Attention (MHA) module decomposes into
+𝐻parallel attention heads:
+MHA(ℓ) (𝑋) = Concat(head(ℓ)
+1 , ..., head(ℓ)
+𝐻)𝑊(ℓ)
+𝑂
+(2)
+Table 1. Summary of key notations used throughout the paper
+Notation
+Description
+System Architecture
+E, C
+Edge device and cloud server
+𝐶𝐶𝑒,𝐶𝐶𝑐, 𝑀𝑒, 𝑃𝑒
+Compute (FLOPS), memory (GB), and power (W) of edge/cloud
+𝐵(𝑡), 𝑙𝑛(𝑡)
+Network bandwidth and latency at time 𝑡
+Model Architecture
+𝐿, 𝐻
+Number of transformer layers and attention heads per layer
+𝑑𝑚𝑜𝑑𝑒𝑙
+Model hidden dimension
+𝑑ℎ
+Attention head dimension (𝑑𝑚𝑜𝑑𝑒𝑙/𝐻)
+𝑑𝑓𝑓
+Feed-forward network dimension
+𝜃𝑖
+Parameters of layer 𝑖
+𝑋(ℓ)
+Input tensor to layer ℓ
+Partitioning
+𝜋
+Complete partitioning strategy across all layers
+𝜋(ℓ)
+Partition decision for layer ℓ
+𝜋(ℓ)
+ℎ
+Placement of head ℎin layer ℓ(0: edge, 1: cloud)
+𝜋(ℓ)
+𝐹𝐹𝑁
+FFN partition mode (0: edge, 1: cloud, 2: split)
+E (ℓ)
+ℎ, C(ℓ)
+ℎ
+Set of heads assigned to edge and cloud in layer ℓ
+B(𝜋)
+Set of partition boundaries
+Performance Metrics
+𝑇(𝜋,𝑡)
+End-to-end inference latency under partition 𝜋
+𝑇𝑒
+𝑐𝑜𝑚𝑝, 𝑇𝑐
+𝑐𝑜𝑚𝑝
+Computation time on edge and cloud
+𝑇𝑐𝑜𝑚𝑚(𝜋,𝑡), 𝐸(𝜋)
+Communication time and Energy consumption for partition 𝜋
+Δ𝑎𝑐𝑐(𝜋)
+Accuracy degradation from partitioning
+𝑄𝑏(·)
+Quantization function at boundary 𝑏
+Queue Dynamics
+𝑄(𝑡)
+Queue backlog at time 𝑡
+𝜆(𝑡),𝜇(𝜋,𝑡)
+Request arrival rate, Service rate under partition 𝜋
+𝐴(𝑡)
+New arrivals in time slot 𝑡
+𝐿(𝑄(𝑡)), Δ(𝑄(𝑡))
+Lyapunov function, Conditional Lyapunov drift
+Reinforcement Learning
+𝑠𝑡, 𝑎𝑡
+System state and action (partition decision) at time 𝑡
+𝑟(𝑠𝑡,𝑎𝑡)
+Reward function
+𝜋𝜃
+Policy network with parameters 𝜃
+𝑉𝑝𝑒𝑟𝑓
+𝜙
+, 𝑉𝑠𝑡𝑎𝑏
+𝜓
+Performance and Stability critic network
+𝑉
+Lyapunov control parameter
+𝑔(𝑠𝑡,𝑎𝑡)
+Immediate cost function
+𝛾
+Discount factor
+𝜏𝑡𝑒𝑚𝑝
+Temperature for Gumbel-softmax
+where each head ℎ∈{1, ..., 𝐻} independently computes:
+head(ℓ)
+ℎ
+= Attention(𝑋𝑊(ℓ)
+𝑄,ℎ,𝑋𝑊(ℓ)
+𝐾,ℎ,𝑋𝑊(ℓ)
+𝑉,ℎ)
+(3)
+with projection matrices 𝑊(ℓ)
+𝑄,ℎ,𝑊(ℓ)
+𝐾,ℎ,𝑊(ℓ)
+𝑉,ℎ∈R𝑑𝑚𝑜𝑑𝑒𝑙×𝑑ℎ
+where 𝑑ℎ= 𝑑𝑚𝑜𝑑𝑒𝑙/𝐻. The Feed-Forward Network (FFN)
+consists of two linear transformations with activation:
+FFN(ℓ) (𝑋) = max(0,𝑋𝑊(ℓ)
+1
++ 𝑏(ℓ)
+1 )𝑊(ℓ)
+2
++ 𝑏(ℓ)
+2
+(4)
+where 𝑊(ℓ)
+1
+∈R𝑑𝑚𝑜𝑑𝑒𝑙×𝑑𝑓𝑓and 𝑊(ℓ)
+2
+∈R𝑑𝑓𝑓×𝑑𝑚𝑜𝑑𝑒𝑙with
+intermediate dimension 𝑑𝑓𝑓= 4𝑑𝑚𝑜𝑑𝑒𝑙typically.
+Partitioning granularity. We introduce a hierarchical
+partitioning scheme that enables flexible distribution of com-
+putation. Let 𝜋= {𝜋(1), ..., 𝜋(𝐿)} denote the complete parti-
+tioning strategy, where each layer’s partition 𝜋(ℓ) is defined
+as:
+𝜋(ℓ) = (𝜋(ℓ)
+𝑀𝐻𝐴, 𝜋(ℓ)
+𝐹𝐹𝑁)
+(5)
+The MHA partition 𝜋(ℓ)
+𝑀𝐻𝐴= [𝜋(ℓ)
+ℎ1 , ..., 𝜋(ℓ)
+ℎ𝐻] ∈{0, 1}𝐻spec-
+ifies the placement of each attention head, where 𝜋(ℓ)
+ℎ𝑖
+= 0
+indicates edge execution and 𝜋(ℓ)
+ℎ𝑖
+= 1 indicates cloud exe-
+cution. The FFN partition 𝜋(ℓ)
+𝐹𝐹𝑁∈{0, 1, 2} supports three
+modes:
+• 𝜋(ℓ)
+𝐹𝐹𝑁= 0: Entire FFN executes on edge
+UCC ’25, December 1–4, 2025, France, France
+Younesi et al.
+• 𝜋(ℓ)
+𝐹𝐹𝑁= 1: Entire FFN executes on cloud
+• 𝜋(ℓ)
+𝐹𝐹𝑁= 2: Split execution with 𝑊(ℓ)
+1
+on edge and 𝑊(ℓ)
+2
+on
+cloud
+This formulation enables 2𝐻× 3 possible configurations
+per layer, yielding a total action space of (2𝐻×3)𝐿partitions.
+For a 24-layer model with 16 heads, this creates approxi-
+mately 1031 possible configurations, necessitating intelligent
+exploration strategies [13].
+Data flow formalization. Given partition 𝜋(ℓ), the data
+flow through layer ℓinvolves potential edge-cloud transi-
+tions. Let E (ℓ)
+ℎ
+= {ℎ: 𝜋(ℓ)
+ℎ
+= 0} and C(ℓ)
+ℎ
+= {ℎ: 𝜋(ℓ)
+ℎ
+= 1}
+denote edge and cloud head assignments [32]. The computa-
+tion proceeds as:
+𝑌(ℓ)
+𝑒𝑑𝑔𝑒=
+∑︁
+ℎ∈E (ℓ)
+ℎ
+head(ℓ)
+ℎ(𝑋(ℓ))𝑊(ℓ)
+𝑂,ℎ
+(6)
+𝑌(ℓ)
+𝑐𝑙𝑜𝑢𝑑=
+∑︁
+ℎ∈C(ℓ)
+ℎ
+head(ℓ)
+ℎ(𝑋(ℓ))𝑊(ℓ)
+𝑂,ℎ
+(7)
+The aggregation requires communication if |E (ℓ)
+ℎ| > 0 and
+|C(ℓ)
+ℎ
+| > 0, transferring partial results of size O(𝑛× 𝑑𝑚𝑜𝑑𝑒𝑙)
+across the network [32].
+2.2
+Performance Metrics
+Latency model. The end-to-end inference latency 𝑇(𝜋,𝑡)
+for partition 𝜋at time 𝑡comprises three components:
+𝑇(𝜋,𝑡) = 𝑇𝑒
+𝑐𝑜𝑚𝑝(𝜋) +𝑇𝑐𝑜𝑚𝑚(𝜋,𝑡) +𝑇𝑐
+𝑐𝑜𝑚𝑝(𝜋)
+(8)
+where 𝑇𝑒
+𝑐𝑜𝑚𝑝(𝜋) = Í𝐿
+𝑖=1
+Í
+𝑗∈H𝑒
+𝑖
+𝐹𝑖𝑗
+𝐶𝑒represents edge compu-
+tation time for heads H𝑒
+𝑖assigned to edge with 𝐹𝑖𝑗FLOPs,
+𝑇𝑐𝑜𝑚𝑚(𝜋,𝑡) = Í𝐾(𝜋)
+𝑘=1
+𝐷𝑘(𝜋)
+𝐵(𝑡) + 𝑙𝑛(𝑡) captures communication
+overhead for 𝐾(𝜋) edge-cloud transitions with data volume
+𝐷𝑘(𝜋), and 𝑇𝑐
+𝑐𝑜𝑚𝑝(𝜋) denotes cloud computation time.
+Energy consumption. The edge device energy consump-
+tion combines computation and communication costs [30]:
+𝐸(𝜋) =
+𝐿
+∑︁
+𝑖=1
+∑︁
+𝑗∈H𝑒
+𝑖
+𝑃𝑐𝑜𝑚𝑝
+𝑒
+· 𝑡𝑖𝑗+
+𝐾(𝜋)
+∑︁
+𝑘=1
+𝑃𝑐𝑜𝑚𝑚
+𝑒
+· 𝐷𝑘(𝜋)
+𝐵(𝑡)
+(9)
+where 𝑃𝑐𝑜𝑚𝑝
+𝑒
+and 𝑃𝑐𝑜𝑚𝑚
+𝑒
+denote power consumption for com-
+putation and communication respectively, and 𝑡𝑖𝑗is the exe-
+cution time for component 𝑗in layer 𝑖[30].
+Accuracy preservation. Partitioning introduces quanti-
+zation at boundaries to reduce communication. Let 𝑄𝑏de-
+note the quantization function at boundary 𝑏. The accuracy
+degradation is modeled as:
+Δ𝑎𝑐𝑐(𝜋) =
+∑︁
+𝑏∈B(𝜋)
+𝛼𝑏· ∥𝑥𝑏−𝑄𝑏(𝑥𝑏)∥2
+2
+(10)
+where B(𝜋) represents partition boundaries, 𝑥𝑏is the acti-
+vation tensor at boundary 𝑏, and 𝛼𝑏weights the importance
+of each boundary based on gradient flow analysis.
+2.3
+Queue Dynamics and Stability
+Request queue model. Inference requests arrive according
+to a stochastic process with rate 𝜆(𝑡). We model the queue
+backlog 𝑄(𝑡), representing the number of unprocessed re-
+quests at time 𝑡. The queue evolution follows:
+𝑄(𝑡+ 1) = max[𝑄(𝑡) −𝜇(𝜋,𝑡), 0] + 𝐴(𝑡)
+(11)
+where 𝜇(𝜋,𝑡) = 1/𝑇(𝜋,𝑡) is the service rate under partition
+𝜋, and 𝐴(𝑡) represents new arrivals in slot 𝑡[1].
+Lyapunov function. To ensure queue stability, we define
+the Lyapunov function:
+𝐿(𝑄(𝑡)) = 1
+2𝑄(𝑡)2
+(12)
+The conditional Lyapunov drift Δ(𝑄(𝑡)) measures expected
+change in queue backlog:
+Δ(𝑄(𝑡)) = E[𝐿(𝑄(𝑡+ 1)) −𝐿(𝑄(𝑡))|𝑄(𝑡)]
+(13)
+2.4
+Problem Formulation
+Objective function. We formulate the dynamic partitioning
+problem as minimizing a weighted combination of latency,
+energy, and accuracy loss while maintaining queue stability:
+min
+𝜋(𝑡) E
+" ∞
+∑︁
+𝑡=0
+𝛾𝑡(𝑤𝑇𝑇(𝜋(𝑡),𝑡) + 𝑤𝐸𝐸(𝜋(𝑡)) + 𝑤𝐴Δ𝑎𝑐𝑐(𝜋(𝑡)))
+#
+(14)
+subject to:
+lim sup
+𝑡→∞
+1
+𝑡
+𝑡−1
+∑︁
+𝜏=0
+E[𝑄(𝜏)] < ∞
+(queue stability)
+(15)
+∑︁
+𝑗∈H𝑒
+𝑖
+𝑚𝑖𝑗≤𝑀𝑒,
+∀𝑖
+(memory constraint)
+(16)
+𝐸(𝜋(𝑡)) ≤𝑃𝑒· 𝑇(𝜋(𝑡),𝑡)
+(power constraint)
+(17)
+where 𝛾∈(0, 1) is the discount factor, 𝑤𝑇, 𝑤𝐸, 𝑤𝐴are
+importance weights, and 𝑚𝑖𝑗denotes memory requirement
+for component 𝑗in layer 𝑖.
+Constrained MDP formulation. We cast this optimiza-
+tion as a constrained Markov Decision Process (MDP) with:
+• State space S:𝑠𝑡= (𝑄(𝑡), 𝐵(𝑡), 𝜆(𝑡), R(𝑡)) capturing queue
+backlog, network bandwidth, arrival rate, and resource
+availability (see details in Section 3.1)
+• Action space A: 𝑎𝑡= 𝜋(𝑡) representing partitioning deci-
+sions (see details in Section 3.1)
+• Transition dynamics: 𝑃(𝑠𝑡+1|𝑠𝑡,𝑎𝑡) governed by queue evo-
+lution and stochastic network/workload changes
+• Reward function: Combining immediate cost and Lyapunov
+drift as detailed in Section 3.2
+The challenge lies in solving this constrained MDP with
+continuous state space, exponentially large action space,
+and stability requirements, which we address through our
+Lyapunov-assisted RL framework.
+Splitwise: Collaborative Edge–Cloud Inference for LLMs via Lyapunov-Assisted DRL
+UCC ’25, December 1–4, 2025, France, France
+3
+Splitwise Design Overview
+Splitwise framework combines deep reinforcement learn-
+ing with Lyapunov optimization theory to achieve both op-
+timal performance and guaranteed stability. The framework
+consists of three key components: (i) a policy network 𝜋𝜃
+that learns partitioning decisions, (ii) a Lyapunov critic that
+evaluates long-term stability, and (iii) a drift-plus-penalty
+reward function that balances immediate performance with
+queue stability. Unlike standard RL methods that may con-
+verge to unstable policies, Splitwise explicitly incorporates
+stability constraints into the learning process (cf. Fig. 2).
+3.1
+State and Action Representation
+State encoding. We encode the system state 𝑠𝑡as a compre-
+hensive feature vector capturing both instantaneous condi-
+tions and temporal dynamics:
+𝑠𝑡= [𝑄(𝑡), ¯𝑄𝜏
+|   {z   }
+queue
+, 𝐵(𝑡), ¯𝐵𝜏, 𝜎𝐵
+|       {z       }
+network
+, 𝜆(𝑡), ¯𝜆𝜏
+|  {z  }
+workload
+,𝐶𝑎𝑣𝑎𝑖𝑙
+𝑒
+, 𝑀𝑎𝑣𝑎𝑖𝑙
+𝑒
+|          {z          }
+resources
+,
+ℎ𝑡
+|{z}
+history
+]
+(18)
+where ¯𝑄𝜏= 1
+𝜏
+Í𝑡
+𝑖=𝑡−𝜏𝑄(𝑖) represents the moving average
+queue length over window𝜏,𝜎𝐵captures network bandwidth
+variance, and ℎ𝑡∈R𝑑ℎis a learned history embedding from
+an LSTM that encodes past partitioning decisions and their
+outcomes [6].
+Hierarchical action decomposition. To handle the ex-
+ponentially large action space (2𝐻× 3)𝐿, we decompose
+actions hierarchically. Instead of selecting from all possible
+partitions, we structure the action as:
+𝑎𝑡= 𝜋𝜃(𝑠𝑡) = [𝛼(1), ..., 𝛼(𝐿)]
+(19)
+where each layer action 𝛼(ℓ) is generated by:
+𝛼(ℓ) = softmax(𝑓(ℓ)
+𝜃
+(𝑠𝑡,𝑒(ℓ−1)))
+(20)
+Here, 𝑓(ℓ)
+𝜃
+is a layer-specific sub-network and 𝑒(ℓ−1) encodes
+decisions from previous layers to capture inter-layer depen-
+dencies. Each 𝛼(ℓ) ∈[0, 1]𝐻+1 represents continuous prob-
+abilities for placing each attention head and FFN on the
+cloud, which are discretized during execution using Gumbel-
+softmax:
+𝜋(ℓ)
+ℎ
+= Gumbel-Softmax(𝛼(ℓ)
+ℎ,𝜏𝑡𝑒𝑚𝑝)
+(21)
+where 𝜏𝑡𝑒𝑚𝑝is a temperature parameter annealed during
+training to transition from exploration to exploitation.
+3.2
+Lyapunov-Guided Reward Design
+Drift-plus-penalty formulation. Traditional RL optimizes
+expected cumulative reward without stability guarantees.
+We incorporate Lyapunov drift to ensure queue stability
+while optimizing performance. The reward function com-
+bines immediate cost with drift penalty:
+𝑟(𝑠𝑡,𝑎𝑡) = −[𝑉· Δ(𝑄(𝑡)) + 𝑔(𝑠𝑡,𝑎𝑡)]
+(22)
+(a) Training Stability
+(b) Learning Efficiency
+Figure 2. Comparison of model training dynamics, showing (a) training stability and
+(b) learning efficiency across different settings.
+where𝑉> 0 is a control parameter and𝑔(𝑠𝑡,𝑎𝑡) represents
+the immediate cost:
+𝑔(𝑠𝑡,𝑎𝑡) = 𝑤𝑇𝑇(𝜋𝑡,𝑡) + 𝑤𝐸𝐸(𝜋𝑡) + 𝑤𝐴Δ𝑎𝑐𝑐(𝜋𝑡)
+(23)
+Lyapunov drift computation. The one-step Lyapunov
+drift under action 𝑎𝑡is:
+Δ(𝑄(𝑡)) = E[𝐿(𝑄(𝑡+ 1)) −𝐿(𝑄(𝑡)) | 𝑄(𝑡),𝑎𝑡]
+≤𝐵+ 𝑄(𝑡) E[𝐴(𝑡) −𝜇(𝜋𝑡,𝑡)]
+(24)
+where 𝐵is a finite constant bounding the second moment of
+arrivals and service. This upper bound provides a tractable
+optimization target while maintaining guarantees.
+Adaptive weight adjustment. The control parameter
+𝑉balances performance optimization against stability. We
+adaptively adjust 𝑉based on the queue backlog:
+𝑉(𝑡) = 𝑉𝑚𝑖𝑛+ (𝑉𝑚𝑎𝑥−𝑉𝑚𝑖𝑛) · exp
+
+−𝑄(𝑡)
+𝑄𝑟𝑒𝑓
+
+(25)
+where 𝑄𝑟𝑒𝑓is a reference queue length. This ensures ag-
+gressive performance optimization when queues are stable,
+while prioritizing stability when the backlog increases.
+3.3
+Policy Learning Algorithm
+Actor-critic architecture. We employ a Proximal Policy
+Optimization (PPO) algorithm [26] with dual critics to sepa-
+rately evaluate performance and stability:
+• Performance critic 𝑉𝑝𝑒𝑟𝑓
+𝜙
+(𝑠): Estimates expected cumu-
+lative performance cost
+• Stability critic 𝑉𝑠𝑡𝑎𝑏
+𝜓
+(𝑠): Estimates expected queue back-
+log evolution
+The combined value function is:
+𝑉(𝑠) = 𝑉𝑝𝑒𝑟𝑓
+𝜙
+(𝑠) + 𝑉· 𝑉𝑠𝑡𝑎𝑏
+𝜓
+(𝑠)
+(26)
+Policy gradient with stability constraints. The pol-
+icy gradient incorporates both performance and stability
+objectives:
+∇𝜃𝐽= E𝜏∼𝜋𝜃
+"∑︁
+𝑡
+∇𝜃log 𝜋𝜃(𝑎𝑡|𝑠𝑡)𝐴𝑡𝑜𝑡𝑎𝑙
+𝑡
+#
+(27)
+where the total advantage function combines both critics:
+𝐴𝑡𝑜𝑡𝑎𝑙
+𝑡
+= 𝐴𝑝𝑒𝑟𝑓
+𝑡
++ 𝑉· 𝐴𝑠𝑡𝑎𝑏
+𝑡
+(28)
+with advantages computed using Generalized Advantage
+Estimation (GAE) for variance reduction.
+UCC ’25, December 1–4, 2025, France, France
+Younesi et al.
+Algorithm overview. Our training procedure combines
+Lyapunov optimization with deep reinforcement learning to
+jointly optimize performance and guarantee stability. Algo-
+rithm 1 presents the core training loop with detailed expla-
+nations of each component. Lines 2-4 (Trajectory collection):
+Algorithm 1: Lyapunov-Assisted DRL Training
+Input: Policy network 𝜋𝜃, critics 𝑉𝑝𝑒𝑟𝑓
+𝜙
+, 𝑉𝑠𝑡𝑎𝑏
+𝜓
+Output: Optimized policy 𝜋∗
+𝜃
+1 Initialize: 𝜋𝜃, critics 𝑉𝑝𝑒𝑟𝑓
+𝜙
+, 𝑉𝑠𝑡𝑎𝑏
+𝜓
+, D ←∅, 𝑄(0) = 0, 𝜏𝑡𝑒𝑚𝑝= 1.0,
+𝑉= 𝑉𝑖𝑛𝑖𝑡;
+2 for episode 𝑘= 1, 2, ..., 𝐾do
+3
+𝑠0,𝜏𝑘←GetInitialState(), ∅;
+4
+for step 𝑡= 0, 1, ...,𝑇𝑚𝑎𝑥do
+5
+𝑎𝑡∼𝜋𝜃(𝑎|𝑠𝑡) ;
+// Sample action from policy
+6
+𝑠𝑡+1,𝑐𝑡←ExecutePartition(𝑎𝑡) ;
+// Execute partition
+// Compute Lyapunov drift
+7
+𝜇𝑡←1/𝑇(𝜋𝑡,𝑡) ;
+// Service rate
+8
+Δ(𝑄(𝑡)) ←𝑄(𝑡) · (𝜆(𝑡) −𝜇𝑡) ;
+// Calculate shaped reward
+9
+𝑟𝑡←−[𝑉(𝑡) · Δ(𝑄(𝑡)) + 𝑤𝑇𝑐𝑇
+𝑡+ 𝑤𝐸𝑐𝐸
+𝑡+ 𝑤𝐴𝑐𝐴
+𝑡] ;
+// Update queue dynamics
+10
+𝑄(𝑡+ 1) ←max[𝑄(𝑡) −𝜇𝑡· 𝛿𝑡, 0] + 𝐴(𝑡) ;
+11
+𝜏𝑘←𝜏𝑘∪{(𝑠𝑡,𝑎𝑡,𝑟𝑡,𝑠𝑡+1)};
+12
+𝑠𝑡←𝑠𝑡+1;
+13
+StoreTrajectory(D,𝜏𝑘) ;
+// Add to replay buffer
+14
+if |D| ≥𝐵𝑚𝑖𝑛and 𝑘mod 𝑈𝑓𝑟𝑒𝑞= 0 then
+// Update critics
+15
+B ←SampleBatch(D, 𝐵𝑠𝑖𝑧𝑒) ;
+16
+L𝑝𝑒𝑟𝑓←
+1
+|B|
+Í
+(𝑠,𝑟) ∈B (𝑉𝑝𝑒𝑟𝑓
+𝜙
+(𝑠) −𝑅𝑝𝑒𝑟𝑓)2;
+17
+L𝑠𝑡𝑎𝑏←
+1
+|B|
+Í
+(𝑠,𝑄) ∈B (𝑉𝑠𝑡𝑎𝑏
+𝜓
+(𝑠) −𝑄𝑡𝑎𝑟𝑔𝑒𝑡)2;
+18
+𝜙←𝜙−𝛼𝜙∇𝜙L𝑝𝑒𝑟𝑓;
+19
+𝜓←𝜓−𝛼𝜓∇𝜓L𝑠𝑡𝑎𝑏;
+// Update policy using PPO
+20
+for PPO epoch 𝑒= 1, ..., 𝐸𝑝𝑝𝑜do
+21
+𝐴𝑡𝑜𝑡𝑎𝑙←ComputeAdvantage(B,𝑉𝑝𝑒𝑟𝑓
+𝜙
+,𝑉𝑠𝑡𝑎𝑏
+𝜓
+);
+22
+𝜌←𝜋𝜃(𝑎|𝑠)/𝜋𝑜𝑙𝑑(𝑎|𝑠) ;
+// Importance ratio
+23
+𝐽𝑃𝑃𝑂←min(𝜌𝐴𝑡𝑜𝑡𝑎𝑙, clip(𝜌, 1 −𝜖, 1 + 𝜖)𝐴𝑡𝑜𝑡𝑎𝑙);
+24
+𝜃←𝜃+ 𝛼𝜃∇𝜃𝐽𝑃𝑃𝑂;
+// Adapt control parameters
+25
+𝑉(𝑡) ←UpdateControlParam(𝑄𝑎𝑣𝑔,𝑉) ;
+26
+𝜏𝑡𝑒𝑚𝑝←𝛽· 𝜏𝑡𝑒𝑚𝑝;
+// Anneal exploration
+27 return 𝜋𝜃
+Each episode simulates a sequence of inference requests un-
+der varying network conditions. The policy 𝜋𝜃generates
+partitioning decisions based on current system state, includ-
+ing queue backlog, network bandwidth, and resource avail-
+ability. Line 6 (Partition execution): The selected partition 𝑎𝑡
+is executed across edge and cloud, returning the next state
+and immediate costs 𝑐𝑡= (𝑐𝑇
+𝑡,𝑐𝐸
+𝑡,𝑐𝐴
+𝑡) for latency, energy, and
+accuracy. Lines 7-8 (Lyapunov drift computation): The drift
+captures the expected change in queue backlog. A positive
+drift indicates growing queues (instability), while negative
+drift indicates draining queues. This is the key innovation
+that ensures stability. Line 9 (Reward shaping): The reward
+combines immediate performance costs with the Lyapunov
+drift penalty. The control parameter 𝑉(𝑡) dynamically bal-
+ances performance optimization against stability based on
+current queue state. Line 10 (Queue evolution): The queue
+dynamics follow the Lindley recursion, where 𝛿𝑡is the time
+slot duration and 𝐴(𝑡) represents new arrivals following
+a Poisson process. Lines 15-19 (Critic updates): Two sepa-
+rate critics learn to predict performance costs and queue
+evolution. The performance critic estimates cumulative la-
+tency/energy costs, while the stability critic predicts future
+queue backlogs. Both methods utilize temporal difference
+learning with target networks to enhance stability. Lines 20-
+24 (PPO policy update): The policy is updated using Proximal
+Policy Optimization with a clipped surrogate objective to pre-
+vent destructive updates. The advantage function combines
+both critics’ predictions weighted by 𝑉(𝑡).
+Line 25 (Control parameter adaptation): The control param-
+eter𝑉is adjusted based on average queue length to maintain
+stability while maximizing performance.
+3.4
+Convergence and Stability Analysis
+Theoretical guarantees. Under our framework, we estab-
+lish two key theoretical results:
+Theorem 1 (Queue Stability): If the arrival rate 𝜆< 𝜇𝑚𝑎𝑥
+where 𝜇𝑚𝑎𝑥is the maximum achievable service rate, then
+the Lyapunov-assisted RL policy ensures:
+lim sup
+𝑇→∞
+1
+𝑇
+𝑇−1
+∑︁
+𝑡=0
+E[𝑄(𝑡)] ≤𝐵+ 𝑉· 𝑔∗
+𝜖
+(29)
+where 𝑔∗is the optimal performance cost and 𝜖= 𝜇𝑚𝑎𝑥−𝜆
+is the capacity margin.
+Proof sketch: By adding Lyapunov drift into the reward,
+the policy learns to take actions that minimize drift when
+queues grow large, ensuring bounded time-average backlog.
+Theorem 2 (Performance Bound): The time-average perfor-
+mance cost under our policy satisfies:
+lim sup
+𝑇→∞
+1
+𝑇
+𝑇−1
+∑︁
+𝑡=0
+E[𝑔(𝑠𝑡,𝑎𝑡)] ≤𝑔∗+ 𝐵
+𝑉
+(30)
+This shows that performance approaches optimal as 𝑉→
+∞, with a tradeoff against queue backlog.
+3.5
+Online Adaptation
+Fast adaptation mechanism. During deployment, network
+conditions and workloads may differ from training. We im-
+plement online adaptation through:
+𝜃𝑎𝑑𝑎𝑝𝑡𝑒𝑑= 𝜃𝑏𝑎𝑠𝑒+ 𝛼𝑎𝑑𝑎𝑝𝑡∇𝜃𝐽𝑜𝑛𝑙𝑖𝑛𝑒
+(31)
+where 𝐽𝑜𝑛𝑙𝑖𝑛𝑒is computed from recent deployment expe-
+rience with a higher weight on stability to prevent system
+degradation during adaptation.
+4
+Implementation
+4.1
+System Architecture
+Runtime components. Splitwise consists of four main
+runtime components deployed across edge and cloud as
+shown in Figure 3: (1) Partition Controller on the edge device
+that executes the learned policy and coordinates execution,
+Splitwise: Collaborative Edge–Cloud Inference for LLMs via Lyapunov-Assisted DRL
+UCC ’25, December 1–4, 2025, France, France
+Figure 3. System architecture of Splitwise. The framework consists of four main
+runtime components (see Section 4.1): (1) Partition Controller, (2) Profiling Engine, (3)
+Communication Manager, and (4) Execution Runtime.
+(2) Profiling Engine that collects performance metrics with
+minimal overhead, (3) Communication Manager that handles
+data serialization and transmission with adaptive compres-
+sion, and (4) Execution Runtime on both edge and cloud that
+manages model shard execution. The controller maintains a
+lightweight state machine to track partition decisions and
+synchronize edge-cloud execution.
+Model preparation. To enable fine-grained partitioning,
+we modify the model architecture at deployment time with-
+out retraining. Each transformer layer is decomposed into
+independently executable components [14]:
+Layerℓ= {Head(ℓ)
+1 , ..., Head(ℓ)
+𝐻, FFN(ℓ)
+1 , FFN(ℓ)
+2 }
+(32)
+We implement custom CUDA kernels that allow individual
+attention heads to execute independently while maintain-
+ing numerical equivalence to the original model. The de-
+composition adds negligible overhead (<0.3%) compared to
+monolithic execution.
+We use an experience buffer of the 1000 most recent mea-
+surements [22] and update the predictor every 100 inferences
+to adapt to changing system conditions.
+Asynchronous pipeline execution. We implement a
+three-stage pipeline to hide communication latency [3]: 1)
+Edge computes partition 𝜋(ℓ)
+𝑒𝑑𝑔𝑒for layer ℓthen 2) While trans-
+mitting results to the cloud, the edge begins layer ℓ+ 1 com-
+putation if 𝜋(ℓ+1)
+𝑒𝑑𝑔𝑒≠∅then 3) Cloud processes received data
+in parallel with edge execution. This pipeline reduces effec-
+tive latency by up to 35% for balanced partitions where both
+the edge and cloud have substantial workloads.
+Dynamic model loading. Edge devices cannot hold en-
+tire models in memory. We implement a dynamic loading
+scheme that maintains only active partitions:
+𝑀𝑎𝑐𝑡𝑖𝑣𝑒=
+𝐿
+∑︁
+ℓ=1
+∑︁
+ℎ∈E (ℓ)
+ℎ
+𝑚(ℓ)
+ℎ
++
+∑︁
+ℓ:𝜋(ℓ)
+𝐹𝐹𝑁∈{0,2}
+𝑚(ℓ)
+𝐹𝐹𝑁
+(33)
+Model shards are loaded from flash storage with prefetching
+based on predicted future partitions, achieving <5ms loading
+latency for individual components.
+Partition checkpointing. We maintain checkpoints at
+partition boundaries to enable recovery from communication
+failures:
+Checkpoint𝑏= {𝑋𝑏, 𝜋𝑏,𝑡𝑏}
+(34)
+If transmission fails, execution resumes from the last check-
+point with exponential backoff.
+5
+Performance Evaluation
+5.1
+Experimental Setup
+Hardware platforms. We evaluate Splitwise across di-
+verse edge devices representing different deployment sce-
+narios, from mobile phones to IoT gateways. Table 2 summa-
+rizes our hardware configurations. The edge devices span a
+wide range of computational capabilities from the powerful
+Jetson Orin NX, designed for AI workloads, to the resource-
+constrained Raspberry Pi 5, which represents IoT scenarios.
+For cloud infrastructure, we utilize a university cluster, which
+is similar to an AWS EC2 p4d.24xlarge instance, equipped
+with 8 NVIDIA A100 GPUs, providing 640GB of GPU mem-
+ory and 2.4TB/s of memory bandwidth. This setup reflects re-
+alistic edge-cloud deployments where resource-constrained
+devices collaborate with powerful cloud servers.
+Network conditions. We emulate realistic network envi-
+ronments using Linux traffic control (tc) to shape bandwidth
+and latency between edge and cloud devices. Table 3 presents
+our network configurations, derived from real-world 5G and
+WiFi measurements collected over 3 days in the university.
+The configurations capture typical scenarios from excellent
+WiFi connectivity to degraded cellular conditions.
+Models and datasets. Table 4 details the LLM architec-
+tures used in our evaluation. We select models spanning
+three orders of magnitude in size to demonstrate Splitwise’s
+scalability. Each model presents unique challenges: GPT-2
+1.5B [25] fits entirely in edge memory but requires optimiza-
+tion for latency, LLaMA-7B1 necessitates careful memory
+management and partitioning, while LLaMA-13B2 cannot
+run on edge without our partitioning approach. The varying
+1https://huggingface.co/dfurman/LLaMA-7B
+2https://huggingface.co/dfurman/LLaMA-13B
+Table 2. Hardware platforms used in evaluation
+Type
+Device
+Memory
+Compute
+Power
+Use Case
+Edge
+NVIDIA Jetson Orin NX
+8GB
+100 TOPS
+25W
+AI Gateway
+Samsung Galaxy S23
+12GB
+Snapdragon 8G2
+8W
+Mobile
+Raspberry Pi 5 + NPU
+8GB
+13 TOPS
+12W
+IoT Device
+Cloud
+AWS p4d.24xlarge
+1.1TB
+8×A100 GPUs
+-
+Server
+UCC ’25, December 1–4, 2025, France, France
+Younesi et al.
+Table 3. Network conditions for evaluation.
+Scenario
+Bandwidth
+Latency
+Jitter
+Loss Rate
+Wifi
+100 Mbps
+10ms
+2ms
+0.01%
+5G-(Good)
+50 Mbps
+20ms
+5ms
+0.1%
+5G-(Average)
+25 Mbps
+40ms
+10ms
+0.5%
+4G
+10 Mbps
+80ms
+20ms
+1%
+Variable (Var) [15]
+10-100 Mbps
+10-100ms
+2-20ms
+0.01-1%
+Table 4. Model configurations and characteristics
+Model
+Parameters
+Layers
+Heads
+Hidden
+Memory
+GPT-2 [25]
+1.5B
+24
+16
+1,600
+6GB
+LLaMA-7B
+7B
+32
+32
+4,096
+28GB
+LLaMA-13B
+13B
+40
+40
+5,120
+52GB
+Table 5. Splitwise hyperparameter configurations and training settings
+Category
+Hyperparameter
+Value
+RL Training
+Learning rate (actor)
+3 × 10−4
+Learning rate (critics)
+1 × 10−3
+Discount factor 𝛾
+0.99
+GAE parameter 𝜆
+0.95
+PPO clip range
+0.2
+Entropy coefficient
+0.01
+Lyapunov Control
+V range
+[0.1, 10.0]
+V adaptation rate
+0.1
+Reference queue 𝑄𝑟𝑒𝑓
+10 requests
+Critical queue 𝑄𝑐𝑟𝑖𝑡𝑖𝑐𝑎𝑙
+50 requests
+Drift bound 𝐵
+100
+Experience Replay
+Replay buffer size
+1,000 transitions
+Batch size
+256
+Priority exponent 𝛼
+0.6
+Update frequency
+Every 100 steps
+Training Process
+Episodes
+2,500
+Warm-up episodes
+100
+Evaluation frequency
+Every 50 episodes
+headcounts (16-40) and layer depths (24-40) test our frame-
+work’s ability to handle diverse architectural patterns. We
+utilize the LMSYS-Chat-1M dataset [33], which comprises
+one million real-world conversations from the Vicuna demo
+and ChatGPT interactions. This is a realistic inference work-
+load with sequence lengths ranging from 50 to 2048 tokens.
+Baselines. To ensure fair comparison, we implement all
+baselines using their optimal reported configurations. All
+methods share identical hardware platforms and network
+conditions during evaluation. We use the authors’ official
+implementations where available or reproduce following
+published specifications. All experiments use identical seeds.
+Table 5 details the specific settings for Splitwise.
+Edge-only: Entire model on edge with 4-bit quantization,
+Cloud-only: Full model on cloud with network transmis-
+sion, Edgeshard: Fixed partition at layer 𝐿/2 [32], PipeEdge:
+Pipeline parallelism with static optimization [10], CE-LSLM:
+Dynamic execution with early exit [34].
+Metrics. We measure: (i) end-to-end latency (P50, P95,
+P99), (ii) energy consumption on edge device, (iii) model ac-
+curacy on dataset, and (iv) partitioning in various networks.
+5.2
+Experimental Results
+Ablation Study and Scaling Analysis. The ablation study
+in Table 6 and the scaling analysis in Table 7 collectively
+Table 6. Ablation Study: component contributions
+Configuration
+Latency (ms)
+Stability
+Full Splitwise
+87
+Stable at 8.5 req/s
+w/o Lyapunov drift
+91
+Unstable at 6 req/s
+w/o Pipeline exec.
+118
+Stable at 8.5 req/s
+Fixed V parameter
+95
+Stable at 7.2 req/s
+demonstrate the effectiveness, robustness, and scalability of
+the Splitwise framework. Table 6 evaluates the contribu-
+tion of key components by measuring end-to-end latency
+and system stability under varying configurations. The full
+Splitwise system achieves a latency of 87 ms while main-
+taining stability at a request rate of 8.5 requests per second.
+The latency increases by 4.6% when we remove the Lyapunov
+drift from the reward function. More critically, system insta-
+bility at just 6 requests per second underscores the crucial
+role of Lyapunov optimization in ensuring queue stability
+under dynamic workloads. Disabling adaptive𝑉significantly
+degrades performance, increasing latency by 9% to 95 ms,
+as the system loses its ability to minimize communication
+overhead at partition boundaries.
+Table 7 illustrates how Splitwise scales with increasing
+model size, enabling efficient inference of large LLMs on
+edge devices. As the model grows from 1.5B to 13B parame-
+ters, Splitwise achieves increasing speedups (on average
+from 1.4× to 2.8×) by offloading computationally intensive
+components to the cloud while keeping memory and com-
+munication demands within feasible limits for edge devices.
+The required edge memory increases from 2.1 GB to 5.8
+GB, remaining below the capacity of modern edge hardware
+while communication volume scales sublinearly with model
+size. As shown in Table 7, the accuracy degradation is small
+(less than 4% from GPT-2 1.5B to LLaMA-13B). This decrease
+mainly comes from two factors: (i) lightweight activation
+quantization used only at edge-cloud boundaries to lower
+transmission costs, and (ii) minor numerical variance in-
+troduced during distributed recomposition of multi-head
+attention outputs.
+Energy Consumption. Figure 4 presents a comprehen-
+sive analysis of the energy efficiency of Splitwise com-
+pared to state-of-the-art baselines across three diverse edge
+devices with varying computational capabilities: the power-
+ful NVIDIA Jetson Orin NX (designed for AI workloads), the
+mobile Samsung Galaxy S23, and the resource-constrained
+Raspberry Pi 5. The evaluation is conducted using three
+LLMs of increasing size to assess scalability.
+The results consistently show that Splitwise achieves
+lower energy consumption than all competing approaches.
+On the Jetson Orin (Figure 4a), Splitwise reduces energy
+by up to 41% compared to Edgeshard and PipeEdge, and by
+Table 7. Performance scaling with model size
+Model Size
+Speedup
+Memory (GB)
+Comm. (GB)
+Accuracy
+1.5B
+1.4×
+2.1
+0.8
+91.2%
+7B
+2.3×
+4.2
+2.1
+90.5%
+13B
+2.8×
+5.8
+3.5
+87.8%
+Splitwise: Collaborative Edge–Cloud Inference for LLMs via Lyapunov-Assisted DRL
+UCC ’25, December 1–4, 2025, France, France
+(a) Jetson Orin energy
+(b) Galaxy s23 energy
+(c) Raspberry energy
+Figure 4. Energy consumption comparison across different edge devices and LLM
+models on variable network conditions. Energy per request (a) on the NVIDIA Jetson
+Orin NX, (b) on the Samsung Galaxy S23 smartphone, and (c) on the Raspberry Pi 5.
+Figure 5. Mobile device battery life with 600 inference requests/hour.
+over 77% compared to the Edge-only baseline for the LLaMA-
+7B model. This substantial improvement is attributed to its
+intelligent partitioning strategy, which offloads computation-
+ally intensive components to the cloud, thereby reducing the
+load on the edge device. The Cloud-only approach exhibits
+low energy consumption due to minimal local computation.
+It is impractical for sensitive applications due to privacy con-
+cerns and high latency. The Edge-only baseline, particularly
+for larger models like LLaMA-7B and LLaMA-13B, incurs
+very high energy costs because it must execute the entire
+model locally without using the cloud’s superior computa-
+tional resources. On the Galaxy S23 (Figure 4b), the trend
+is similar, with Splitwise consuming less energy than all
+other methods. Notably, the energy savings are even more
+pronounced for the larger models, highlighting the benefits
+of collaborative inference for power-efficient execution on
+mobile devices. The Raspberry Pi 5 (Figure 4c) represents
+the most challenging scenario due to its limited memory
+and processing power. The Edge-only approach fails to run
+LLaMA-7B and LLaMA-13B entirely, as indicated by "OOM"
+(Out of Memory) errors. While Splitwise can successfully
+run these large models, it does so with significantly higher
+energy consumption compared to smaller models. This is
+(a) Poor Network (10 Mbps)
+(b) Good Network (100 Mbps)
+(c) Variable Network
+Figure 6. Dynamic and fine-grained partitioning strategies learned by Splitwise under
+(a) poor, (b) good, and (c) variable network conditions. Each heatmap illustrates the
+placement of transformer attention heads across layers, where blue indicates edge
+execution and red denotes cloud execution.
+because the dynamic loading and partitioning process intro-
+duces additional overhead, and the system must frequently
+swap model shards between flash storage and RAM.
+Figure 5 demonstrates the impact of different inference
+strategies on mobile device battery longevity, a critical factor
+for user experience and practical deployment. Under a con-
+tinuous workload of 600 requests per hour, the Cloud-only
+baseline achieves the longest battery life of 3.4 hours. This is
+because it offloads all computation to the cloud, minimizing
+local CPU and GPU usage on the edge device [27]. However,
+this approach introduces significant latency and cost.
+Network. The heatmaps in Figure 6 illustrate the fine-
+grained partitioning policies learned by Splitwise across
+different network scenarios, highlighting its dynamic adap-
+tation capabilities. In the poor network condition with 10
+Mbps bandwidth (Figure 6a), the policy exhibits a strong bias
+towards edge execution, as evidenced by the prevalence of
+blue pixels. This conservative strategy minimizes communi-
+cation overhead, which is critical when network bandwidth
+is limited. By keeping computation local, Splitwise priori-
+tizes low latency and reduces energy consumption associated
+with data transmission, effectively mitigating the significant
+delays that would otherwise be incurred by offloading work
+to the cloud. Conversely, under good network conditions
+with 100 Mbps bandwidth (Figure 6b), the partitioning be-
+comes significantly more balanced and flexible. The complex
+interplay of red and blue regions indicates that the agent
+leverages the high-bandwidth link to offload computationally
+intensive components to the powerful cloud infrastructure
+while retaining less demanding computations on the edge.
+This approach optimizes overall system performance by ex-
+ploiting the complementary strengths of both environments.
+UCC ’25, December 1–4, 2025, France, France
+Younesi et al.
+(a) P50 Latency
+(b) P95 Latency
+(c) P99 Latency
+(d) Latency Reduction vs Cloud-only
+Figure 7. Performance evaluation of Splitwise under diverse network conditions. (a)
+and (c) compare the median (P50) and 99th percentile (P99) end-to-end inference latency
+of Splitwise against state-of-the-art baselines across different network scenarios. (b)
+presents the P95 latency results. (d) quantifies the percentage reduction in P95 latency
+achieved by Splitwise compared to the Cloud-only baseline.
+Finally, in the variable network scenario (Figure 6c), which
+simulates real-world fluctuations in connectivity, the parti-
+tioning pattern reflects a cautious strategy that favors edge
+execution. This behavior is driven by the Lyapunov assis-
+stance in Splitwise, which incorporates stability guaran-
+tees into the reward function. The agent learns to prioritize
+queue stability, ensuring bounded latency even during peri-
+ods of poor network quality.
+Latency. Figure 7 shows the effectiveness of Splitwise
+in minimizing latency while maintaining system stability.
+In both the P50 (median) and P99 (99th percentile) latency
+metrics shown in Figures 7a and 7b, Splitwise consistently
+outperforms all competing baselines across all network sce-
+narios. The cloud-only approach, which incurs significant
+communication overhead, exhibits the highest latency, par-
+ticularly under poor network conditions like 4G and VAR,
+where it can exceed 500 ms. In contrast, edge-only execution,
+while avoiding network delays, suffers from high computa-
+tional latency due to the limited processing power of edge
+devices. Static partitioning methods such as Edgeshard and
+PipeEdge perform better than these extremes but still fail
+to adapt to dynamic network fluctuations, resulting in sub-
+optimal performance. The superiority of Splitwise is most
+shown in its ability to maintain low and stable latency even
+under challenging conditions. This is achieved through its
+dynamic, fine-grained partitioning strategy that employs the
+Lyapunov optimization framework to balance immediate
+performance with long-term queue stability. By intelligently
+allocating computation between the edge and cloud based
+on network quality, Splitwise minimizes the impact of net-
+work bottlenecks. Figure 7d demonstrates that Splitwise
+achieves a 53.1% to 61.3% reduction in P95 latency compared
+to the cloud-only baseline across all network types.
+6
+Related Work
+Static model partitioning. Early work on DNN partition-
+ing [14, 17] pioneered layer-wise splitting between edge and
+cloud. Neurosurgeon [14] profiles per-layer latency and en-
+ergy costs offline and selects a single optimal split point.
+DADS [9] extends this by considering multiple DNNs simul-
+taneously but remains limited to static partitioning. These
+approaches fundamentally assume stable network conditions
+and uniform workload assumptions, which fail in real-world
+deployments where bandwidth varies the day [8]. More-
+over, existing methods partition at layer granularity, missing
+opportunities for finer-grained optimization within trans-
+former blocks.
+Edge-cloud collaborative inference. Collaborative in-
+ference systems [5, 7, 11, 12, 16, 19, 34] distribute computa-
+tion across edge and cloud resources. SPINN [16] progres-
+sively refines predictions using early exits, but this approach
+is incompatible with autoregressive LLMs, where each token
+depends on complete model execution. CoDL [11] dynami-
+cally adjusts partition points for CNNs but relies on heuristic
+policies that fail to generalize across model architectures.
+Splitwise Features. Our work differs from prior litera-
+ture in 3 ways. First, we enable fine-grained partitioning at
+sub-layer granularity, exposing an order of magnitude more
+partition points. Second, we provide theoretical guarantees
+on queue stability through Lyapunov analysis while simul-
+taneously optimizing multiple objectives. Third, we handle
+the combinatorial explosion of the action space through hi-
+erarchical decomposition and learned embeddings, making
+the approach tractable for large models.
+7
+Conclusion
+Splitwise demonstrates that fine-grained partitioning with
+queue-stability guarantees enables efficient edge–cloud LLM
+inference. It decomposes transformer layers into attention
+heads and feed-forward blocks and uses a hierarchical policy
+with Lyapunov-assisted rewards to assign components to ei-
+ther the edge or the cloud. This design exposes far more split
+options than layer-wise methods while remaining tractable
+through action decomposition. It adapts to fluctuating net-
+work links, delivering latency reductions of 1.4×–2.8×, up to
+41% energy savings, and 53–61% lower P95 latency compared
+with static and cloud-only baselines. It balances immediate
+performance with long-term queue stability. Future work
+includes integrating early exits and compression to further
+cut communication and broaden applicability.
+Acknowledgments
+This paper is funded by the Recovery and Resilience Plan of
+the Slovak Republic, within the “Transformation and Inno-
+vation Consortia” call (project code: 09I02-03-V01-00012).
+Splitwise: Collaborative Edge–Cloud Inference for LLMs via Lyapunov-Assisted DRL
+UCC ’25, December 1–4, 2025, France, France
+References
+[1] Sohee Bae, Seungyul Han, and Youngchul Sung. 2020. A reinforce-
+ment learning formulation of the Lyapunov optimization: Applica-
+tion to edge computing systems with queue stability. arXiv preprint
+arXiv:2012.07279 (2020).
+[2] Gordon Owusu Boateng et al. 2025. A survey on large language models
+for communication, network, and service management: Application
+insights, challenges, and future directions. IEEE Commun. Surv. Tutor.
+(2025).
+[3] Branden Butler, Sixing Yu, Arya Mazaheri, and Ali Jannesari. 2024.
+Pipeinfer: Accelerating llm inference using asynchronous pipelined
+speculation. In SC24: International Conference for High Performance
+Computing, Networking, Storage and Analysis. IEEE, 1–19.
+[4] Barbara M. Chapman, Thomas Fahringer, and Hans P. Zima. 1994.
+Automatic support for data distribution on distributed memory multi-
+processor systems. In Languages and Compilers for Parallel Computing,
+Utpal Banerjee, David Gelernter, Alex Nicolau, and David Padua (Eds.).
+Springer Berlin Heidelberg, Berlin, Heidelberg, 184–199.
+[5] Yuxuan Chen, Rongpeng Li, Xiaoxue Yu, Zhifeng Zhao, and Honggang
+Zhang. 2025. Adaptive layer splitting for wireless large language model
+inference in edge computing: a model-based reinforcement learning
+approach. Front. Inf. Technol. Electron. Eng. 26, 2 (2025), 278–292.
+[6] David Ha and Jürgen Schmidhuber. 2018. World models. arXiv preprint
+arXiv:1803.10122 2, 3 (2018).
+[7] Ying He, Jingcheng Fang, F Richard Yu, and Victor C Leung. 2024.
+Large language models (LLMs) inference offloading and resource allo-
+cation in cloud-edge computing: An active inference approach. IEEE
+Transactions on Mobile Computing (2024).
+[8] Andrew G. Howard et al. 2017. MobileNets: Efficient Convolutional
+Neural Networks for Mobile Vision Applications. arXiv:1704.04861
+[9] Chuang Hu, Wei Bao, Dan Wang, and Fengming Liu. 2019. Dynamic
+Adaptive DNN Surgery for Inference Acceleration on the Edge. In Proc.
+IEEE Int. Conf. Comput. Commun. (INFOCOM). 1423–1431.
+[10] Yang Hu, Connor Imes, Xuanang Zhao, Souvik Kundu, Peter A. Beerel,
+Stephen P. Crago, and John Paul Walters. 2022. PipeEdge: Pipeline
+Parallelism for Large-Scale Model Inference on Heterogeneous Edge
+Devices. In 2022 25th Euromicro Conference on Digital System Design
+(DSD). 298–307. https://doi.org/10.1109/DSD57027.2022.00048
+[11] Fucheng Jia et al. 2022. CoDL: efficient CPU-GPU co-execution for
+deep learning inference on mobile devices. In Proceedings of the 20th
+Annual International Conference on Mobile Systems, Applications and
+Services (Portland, Oregon) (MobiSys ’22). Association for Computing
+Machinery, New York, NY, USA, 209–221.
+[12] Hongpeng Jin and Yanzhao Wu. 2024. Ce-collm: Efficient and adap-
+tive large language models through cloud-edge collaboration. arXiv
+preprint arXiv:2411.02829 (2024).
+[13] Dimitrios Kafetzis, Ramin Khalili, and Iordanis Koutsopoulos. 2025.
+Large Language Model partitioning for low-latency inference at the
+edge. arXiv preprint arXiv:2505.02533 (2025).
+[14] Yiping Kang et al. 2017. Neurosurgeon: Collaborative Intelligence Be-
+tween the Cloud and Mobile Edge. In Proceedings of the Twenty-Second
+International Conference on Architectural Support for Programming Lan-
+guages and Operating Systems (Xi’an, China) (ASPLOS ’17). Association
+for Computing Machinery, New York, NY, USA, 615–629.
+[15] Almudena Konrad, Ben Y Zhao, Anthony D Joseph, and Reiner Ludwig.
+2001. A Markov-based channel model algorithm for wireless networks.
+In Proceedings of the 4th ACM international workshop on Modeling,
+analysis and simulation of wireless and mobile systems. 28–36.
+[16] Stefanos Laskaridis, Stylianos I. Venieris, Mario Almeida, Ilias Leon-
+tiadis, and Nicholas D. Lane. 2020. SPINN: synergistic progressive
+inference of neural networks over device and cloud. In Proceedings
+of the 26th Annual International Conference on Mobile Computing and
+Networking (MobiCom ’20). ACM, 1–15.
+[17] En Li, Liekang Zeng, Zhi Zhou, and Xu Chen. 2019. Edge AI: On-
+Demand Accelerating Deep Neural Network Inference via Edge Com-
+puting. arXiv:1910.05316 [cs.NI] https://arxiv.org/abs/1910.05316
+[18] Senyao Li et al. 2025. Collaborative Inference and Learning between
+Edge SLMs and Cloud LLMs: A Survey of Algorithms, Execution, and
+Open Challenges. arXiv preprint arXiv:2507.16731 (2025).
+[19] May Malka, Erez Farhan, Hai Morgenstern, and Nir Shlezinger. 2022.
+Decentralized Low-Latency Collaborative Inference via Ensembles on
+the Edge. arXiv:2206.03165 [cs.LG] https://arxiv.org/abs/2206.03165
+[20] Avanika Narayan, Dan Biderman, Sabri Eyuboglu, Avner May, Scott
+Linderman, James Zou, and Christopher Re. 2025. Minions: Cost-
+efficient collaboration between on-device and cloud language models.
+arXiv preprint arXiv:2502.15964 (2025).
+[21] Hyeonho Noh, Byonghyo Shim, and Hyun Jong Yang. 2025. Adap-
+tive resource allocation optimization using large language models in
+dynamic wireless environments. IEEE Trans. Veh. Technol. (2025).
+[22] Elyas Oustad and Others. 2025. DIST: Distributed Learning-Based
+Energy-Efficient and Reliable Task Scheduling and Resource Allocation
+in Fog Computing. IEEE Trans. Serv. Comput. 18, 3 (2025), 1336–1351.
+[23] Xiurui Pan et al. 2025. InstAttention: In-Storage Attention Offloading
+for Cost-Effective Long-Context LLM Inference. In Proc. IEEE Int. Symp.
+High Perform. Comput. Archit. (HPCA). IEEE, 1510–1525.
+[24] Thanh-Phuong Pham, Sasko Ristov, and Thomas Fahringer. 2018. Per-
+formance and Behavior Characterization of Amazon EC2 Spot In-
+stances. In 2018 IEEE 11th International Conference on Cloud Computing
+(CLOUD). 73–81. https://doi.org/10.1109/CLOUD.2018.00017
+[25] Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei,
+Ilya Sutskever, et al. 2019. Language models are unsupervised multitask
+learners. OpenAI blog 1, 8 (2019), 9.
+[26] John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, and
+Oleg Klimov. 2017. Proximal policy optimization algorithms. arXiv
+preprint arXiv:1707.06347 (2017).
+[27] Peter Thoman, Philip Salzmann, Biagio Cosenza, and Thomas
+Fahringer. 2019. Celerity: High-Level C++ for Accelerator Clusters.
+In Euro-Par 2019: Parallel Processing, Ramin Yahyapour (Ed.). Springer
+International Publishing, Cham, 291–303.
+[28] Chunlin Tian, Xinpeng Qin, Kahou Tam, Li Li, Zijian Wang, Yuanzhe
+Zhao, Minglei Zhang, and Chengzhong Xu. 2025. CLONE: Customizing
+LLMs for Efficient Latency-Aware Inference at the Edge. arXiv preprint
+arXiv:2506.02847 (2025).
+[29] Shengyuan Ye et al. 2025. Jupiter: Fast and resource-efficient collabo-
+rative inference of generative llms on edge devices. In Proc. IEEE Int.
+Conf. Comput. Commun. (INFOCOM). IEEE, 1–10.
+[30] Xingyu Yuan, He Li, Kaoru Ota, and Mianxiong Dong. 2024. Generative
+Inference of Large Language Models in Edge Computing: An Energy
+Efficient Approach. In Proc. Int. Wireless Commun. Mobile Comput.
+Conf. (IWCMC). IEEE, 244–249.
+[31] Bowen Zhang, Junyang Zhang, Jiahui Hou, and Yixin Wang. 2025.
+TensAllo: Adaptive Deployment of LLMs on Resource-Constrained
+Heterogeneous Edge Devices. In Proc. IEEE Int. Conf. Comput. Commun.
+(INFOCOM). IEEE, 1–10.
+[32] Mingjin Zhang, Xiaoming Shen, Jiannong Cao, Zeyang Cui, and Shan
+Jiang. 2024. Edgeshard: Efficient llm inference via collaborative edge
+computing. IEEE Internet of Things Journal (2024).
+[33] Lianmin Zheng et al. 2023. Lmsys-chat-1m: A large-scale real-world
+llm conversation dataset. arXiv preprint arXiv:2309.11998 (2023).
+[34] Pengyan Zhu and Tingting Yang. 2025. CE-LSLM: Efficient Large-
+Small Language Model Inference and Communication via Cloud-Edge
+Collaboration. arXiv preprint arXiv:2505.14085 (2025).

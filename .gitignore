@@ -9,7 +9,11 @@ build/
 *.so
 .env
 .venv/
-data/channels/
 *.pt
 *.pth
 wandb/
+assets/data/
+assets/runs/
+assets/checkpoints/
+assets/results/
+assets/backlog.json
