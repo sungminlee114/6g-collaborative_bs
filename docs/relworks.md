@@ -1,6 +1,6 @@
 # Related Works: 6G O-RAN + On-device AI for Collaborative Base Stations
 
-> 99편 논문 목록 및 요약 (2023–2026.03). 연구 갭 분석/연구 방향 제안은 `research_and_experiments.md` §9-11 참조.
+> 105편 논문 목록 및 요약 (2023–2026.03). 연구 갭 분석/연구 방향 제안은 `research_and_experiments.md` §9-12 참조.
 
 ---
 
@@ -17,6 +17,7 @@
 10. [UE Feature Vector / Representation 추출 관련 연구](#5-ue-feature-vector--representation-추출-관련-연구)
 11. [Site-Adaptive Channel Estimation & Attention in FL](#6-site-adaptive-channel-estimation--attention-in-fl-8편)
 12. [Cluster J: 6G ELAA / XL-MIMO 채널 추정](#cluster-j-6g-elaa--xl-mimo-채널-추정)
+13. [Cluster K: Differentiable Ray Tracing & Physics-Informed Optimization](#cluster-k-differentiable-ray-tracing--physics-informed-optimization)
 
 ---
 
@@ -62,6 +63,12 @@ Cluster J: 6G ELAA / XL-MIMO 채널 추정 (11편)
   ├─ J3: Near-field 빔 훈련 (Ning-TMC)
   ├─ J4: 분산/구조적 CE (Decentralized BB, Sub-array)
   └─ J5: ISAC + ELAA (Wang-UESTC)
+
+Cluster K: Differentiable RT & Physics-Informed Optimization (6편)
+  ├─ K1: Diff RT 핵심 기법 (Implicit diff, Discontinuity smoothing)
+  ├─ K2: Sim-to-Real 캘리브레이션 (VLM+DiffRT, RIS deployment)
+  ├─ K3: Diff RT vs DL 비교 (13도시 실측)
+  └─ K4: ELAA + Diff Radiomap (U6G Beam Map)
 ```
 
 **스토리라인 흐름:**
@@ -1009,6 +1016,81 @@ Cluster J: 6G ELAA / XL-MIMO 채널 추정 (11편)
 
 ---
 
+## Cluster K: Differentiable Ray Tracing & Physics-Informed Optimization
+
+> Differentiable RT(미분 가능 레이 트레이싱)를 이용한 물리 기반 최적화 — Sim-to-Real 캘리브레이션, site-specific 배치 최적화, implicit differentiation. 기존 P61 (Hoydis et al., Learning Radio Environments)의 확장. 2025-2026년 6G 연구에서 "Diff" 기술이 핵심 enabler로 부상.
+
+### K1: Differentiable RT 핵심 기법
+
+#### [P100] Fast, Differentiable, GPU-Accelerated Ray Tracing via Implicit Differentiation ⭐
+- **저자**: Eertmans, Lequeu, Legat, Jacques, Oestges (UCLouvain, ICTEAM)
+- **연도**: 2025, EuCAP 2026 채택 / arXiv:2510.16172
+- **PDF**: `papers/Fast_Diff_GPU_RT_Implicit_2510.16172.pdf`
+- **핵심 기여**: **Implicit Differentiation으로 솔버 반복을 직접 미분하지 않고 그래디언트 계산**. Fermat 원리 기반 경로 길이 최소화 → reflection + diffraction 통합 처리. 기존 AD(자동 미분) 대비 압도적 메모리/속도 이점.
+- **방법론**: 경로 탐색을 총 경로 길이 최소화 문제로 정형화 → GPU 병렬 실행 → implicit diff로 그래디언트 효율 계산
+- **주요 결과**: Newton 방법 수준 수렴 + 대규모 확장성 우수. JAX/DrJIT 통합, 오픈소스.
+- **강점**: **Sionna RT의 핵심 한계 (반사/회절 분리 처리) 해결. ELAA 수천 안테나 환경에서 실시간 최적화 가능성.**
+- **관련도**: ★★★★★ — **프로젝트의 Sionna RT 파이프라인에 implicit diff 통합 시, 재질/안테나 파라미터 역전파 최적화 속도 대폭 개선. dApp 실시간성의 핵심 enabler.**
+
+#### [P101] Fully Differentiable Ray Tracing via Discontinuity Smoothing for Radio Network Optimization
+- **저자**: Eertmans et al. (UCLouvain)
+- **연도**: 2024, arXiv:2401.11882
+- **PDF**: `papers/Fully_Diff_RT_Discontinuity_2401.11882.pdf`
+- **핵심 기여**: RT의 불연속점 (ray obstruction에 의한 급격한 변화)을 smoothing function으로 처리하여 **모든 scene parameter에 대해 미분 가능한 loss function** 제공. 기존 diff RT의 gradient=0 문제 해결.
+- **관련도**: ★★★★☆ — P100의 선행 연구. 불연속 처리는 site-specific 환경에서 건물 가림 등에 필수.
+
+### K2: Sim-to-Real 캘리브레이션
+
+#### [P102] VLM-Guided Differentiable RT for Multi-Material RF Parameter Estimation ⭐
+- **저자**: (arXiv:2601.18242)
+- **연도**: 2026, arXiv:2601.18242
+- **PDF**: `papers/VLM_Guided_Diff_RT_RF_Param_2601.18242.pdf`
+- **핵심 기여**: **Vision-Language Model (VLM)로 씬 이미지에서 재질 추론 → ITU-R 테이블 기반 초기값 설정 → Differentiable RT로 gradient-based refinement**. VLM이 TX/RX 배치도 최적화 (material-discriminative paths 선택).
+- **주요 결과**: 2-4x 빠른 수렴, 10-100x 낮은 최종 파라미터 오류 (random init 대비). Sionna 기반 실험.
+- **강점**: **AI (VLM) + Physics (Diff RT) 결합의 최신 사례. 프로젝트의 Sionna 데이터셋 정당성 방어에 직접 활용 가능 ("단순 시뮬이 아니라 VLM + diff RT로 캘리브레이션").**
+- **관련도**: ★★★★★ — **Sim-to-Real gap 해소의 최신 방법론. 리뷰어의 "시뮬레이션 데이터 신뢰성" 공격 방어 논거.**
+
+#### [P103] Site-Specific RIS Deployment via Calibrated Ray Tracing
+- **저자**: (arXiv:2510.09478)
+- **연도**: 2025, arXiv:2510.09478
+- **PDF**: `papers/Site_Specific_RIS_Calibrated_RT_2510.09478.pdf`
+- **핵심 기여**: Sionna RT + 실측 데이터 캘리브레이션 기반 RIS 배치 최적화. RIS 위치/방향/구성 + BS 빔포밍을 joint optimization. 4G/5G/6G 주파수에서 검증.
+- **관련도**: ★★★★☆ — Calibrated RT → site-specific optimization 파이프라인. 프로젝트의 디지털 트윈 활용 방향과 일치.
+
+### K3: Differentiable RT vs Deep Learning 비교
+
+#### [P104] Radio Propagation Modelling: To Differentiate or To Deep Learn?
+- **저자**: (arXiv:2509.19337)
+- **연도**: 2025, arXiv:2509.19337
+- **PDF**: `papers/Diff_vs_DL_Radio_Propagation_2509.19337.pdf`
+- **핵심 기여**: **Diff RT vs DL 실세계 대규모 비교** — 13개 도시, 10,000+ 안테나 실측 데이터. DL이 diff RT 대비 최대 3 dB 정확도 우위 + 빠른 적응. Diff RT는 대규모 일반화에서 한계.
+- **주요 결과**: DL > Diff RT (정확도, 적응 속도) in production-scale. 단, diff RT는 물리 해석 가능성에서 우위.
+- **강점**: **냉정한 현실 확인 — diff RT가 만능이 아님. DL과의 결합이 필요하다는 논거 (= 프로젝트의 DL + Sionna RT 접근이 정당).**
+- **관련도**: ★★★★★ — **"Diff RT만으로는 부족, DL과 결합해야" → 프로젝트의 "Sionna RT 데이터 + DL 채널 추정" 접근의 정당성 직접 뒷받침.**
+
+### K4: ELAA + Differentiable Radiomap
+
+#### [P105] U6G XL-MIMO Radiomap Prediction: Multi-Config Dataset and Beam Map Approach
+- **저자**: Li et al.
+- **연도**: 2026, arXiv:2603.06401
+- **PDF**: `papers/U6G_XL_MIMO_Radiomap_BeamMap_2603.06401.pdf`
+- **핵심 기여**: **최초 XL-MIMO radiomap 데이터셋** — 78,400 radiomaps, 800 도시 씬, 5개 주파수대 (1.8-6.7 GHz), 9개 array config (최대 32x32 UPA). **Beam Map 접근**: array 구성을 scalar가 아닌 beam radiation pattern으로 입력 → **재학습 없이 새 array config에 일반화**.
+- **주요 결과**: Beam map이 기존 scalar encoding 대비 unseen array config에서 대폭 성능 향상
+- **강점**: **미분 가능한 beam map → 빔 최적화 알고리즘에 즉시 통합 가능. Array config가 바뀌어도 재학습 불필요 = O-RAN 다벤더 환경의 핵심 요구.**
+- **관련도**: ★★★★★ — **ELAA + differentiable 접근의 최신 사례. HW 이질성 (P41) 문제에 대한 해법 방향. 프로젝트의 ELAA 확장 시 radiomap 기반 사전학습 데이터로 활용 가능.**
+
+### K 종합: 프로젝트에 주는 시사점
+
+**Differentiable RT 기술의 3가지 역할:**
+
+1. **Sim-to-Real 캘리브레이션** (P61, P102, P103): Sionna RT의 재질 파라미터를 실측 데이터로 역전파 최적화 → 리뷰어의 "시뮬 데이터 신뢰성" 질문에 대한 방어 논거
+2. **Site-specific 배치 최적화** (P100, P101): Implicit diff로 BS/안테나 위치/방향을 gradient-based 최적화 → dApp의 실시간 빔 제어에 필수
+3. **Retraining-free 일반화** (P105): Beam map 입력으로 array config 변경 시 재학습 불필요 → O-RAN 다벤더 환경 지원
+
+**냉정한 현실** (P104): Diff RT 단독으로는 production-scale에서 DL에 뒤짐 → **DL + Physics (Diff RT) 결합이 최적** = 프로젝트의 접근 방향이 정당.
+
+---
+
 ## 7. 미분류 추가 논문 (PDF 보유, 본문 미정리)
 
 #### [P87] Distributed AI Platform for the 6G RAN
@@ -1030,4 +1112,4 @@ Cluster J: 6G ELAA / XL-MIMO 채널 추정 (11편)
 
 ---
 
-*Updated: 2026-03-18 | 99 papers (88 previous + 11 ELAA/XL-MIMO) + 1 duplicate analyzed*
+*Updated: 2026-03-18 | 105 papers (88 + 11 ELAA/XL-MIMO + 6 Diff RT) + 1 duplicate analyzed*
