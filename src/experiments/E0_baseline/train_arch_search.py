@@ -26,7 +26,7 @@ from src.config import SceneConfig, DatasetConfig
 from src.dataset_operation.dataset import ChannelEstimationDataset
 from src.models.estimator import BLOCK_REGISTRY
 from src.models.adapters import make_adapter
-from src.training.trainer import train_epoch, evaluate
+from src.training.trainer import train_epoch, evaluate, evaluate_per_snr
 from src.tracker import Tracker
 
 # ── Defaults ──
@@ -293,7 +293,8 @@ def fl_aggregate(models: dict, shared_keys: set) -> dict:
 
 def train_config(config_name: str, gpu: int,
                  fl_rounds: int = FL_ROUNDS, local_epochs: int = LOCAL_EPOCHS,
-                 lr: float = LR, dataset: str = DATASET):
+                 lr: float = LR, dataset: str = DATASET,
+                 eval_per_snr: bool = False):
     """Train one configuration with FL."""
     cfg = CONFIGS[config_name]
     device = f"cuda:{gpu}" if torch.cuda.is_available() else "cpu"
@@ -465,6 +466,39 @@ def train_config(config_name: str, gpu: int,
             _, v_db = evaluate(models[bs], val_loaders[bs], device)
             final_db[str(bs)] = v_db
 
+        # ── Per-SNR evaluation (sanity check style) ──
+        per_snr_data = None
+        avg_per_snr = {}
+        avg_test_per_snr = {}
+        if eval_per_snr:
+            SNR_LIST = [0, 5, 10, 15, 20, 25, 30]
+            per_snr_results = {}  # {bs_id: {snr: nmse_db}}
+            for bs in ALL_BS:
+                per_snr_results[str(bs)] = evaluate_per_snr(
+                    models[bs], ChannelEstimationDataset, DATA_DIR, [bs],
+                    SNR_LIST, batch_size=batch_size, device=device,
+                )
+            # Aggregate: avg over all BS per SNR
+            avg_pretrain_per_snr = {}
+            for snr in SNR_LIST:
+                avg_per_snr[snr] = float(np.mean([per_snr_results[str(bs)][snr] for bs in ALL_BS]))
+                avg_pretrain_per_snr[snr] = float(np.mean([per_snr_results[str(bs)][snr] for bs in PRETRAIN_BS]))
+                avg_test_per_snr[snr] = float(np.mean([per_snr_results[str(bs)][snr] for bs in TEST_BS]))
+
+            print(f"\n  Per-SNR NMSE (avg over all BS):")
+            print(f"  {'SNR':>5s} | {'All':>8s} | {'Pretrain':>8s} | {'Test':>8s}")
+            print(f"  {'-'*40}")
+            for snr in SNR_LIST:
+                print(f"  {snr:5d} | {avg_per_snr[snr]:8.2f} | {avg_pretrain_per_snr[snr]:8.2f} | {avg_test_per_snr[snr]:8.2f}")
+
+            per_snr_data = {
+                "snr_list": SNR_LIST,
+                "per_bs": {str(bs): {str(s): per_snr_results[str(bs)][s] for s in SNR_LIST} for bs in ALL_BS},
+                "avg_all": {str(s): avg_per_snr[s] for s in SNR_LIST},
+                "avg_pretrain": {str(s): avg_pretrain_per_snr[s] for s in SNR_LIST},
+                "avg_test": {str(s): avg_test_per_snr[s] for s in SNR_LIST},
+            }
+
         # ── Save ──
         SAVE_DIR.mkdir(parents=True, exist_ok=True)
         for bs in ALL_BS:
@@ -486,6 +520,7 @@ def train_config(config_name: str, gpu: int,
             "best_round": best_round,
             "total_rounds": total_rounds,
             "early_stopped": total_rounds < fl_rounds,
+            **({"per_snr": per_snr_data} if per_snr_data else {}),
             "history": {
                 "round": history["round"],
                 "val_nmse_db": {str(k): v for k, v in history["val_nmse_db"].items()},
@@ -494,11 +529,15 @@ def train_config(config_name: str, gpu: int,
         with open(SAVE_DIR / f"{config_name}_result.json", "w") as f:
             json.dump(result, f, indent=2)
 
-        run.set_result(
-            avg_nmse_db=result["avg_nmse_db"],
-            avg_pretrain_bs=result["avg_pretrain_bs"],
-            avg_test_bs=result["avg_test_bs"],
-        )
+        result_kwargs = {
+            "avg_nmse_db": result["avg_nmse_db"],
+            "avg_pretrain_bs": result["avg_pretrain_bs"],
+            "avg_test_bs": result["avg_test_bs"],
+        }
+        if avg_per_snr:
+            result_kwargs["nmse_snr20_all"] = avg_per_snr[20]
+            result_kwargs["nmse_snr20_test"] = avg_test_per_snr[20]
+        run.set_result(**result_kwargs)
 
         print(f"\n  Final: avg={result['avg_nmse_db']:.2f} dB, "
               f"pretrain={result['avg_pretrain_bs']:.2f}, "
@@ -514,7 +553,8 @@ def train_config(config_name: str, gpu: int,
 # ═══════════════════════════════════════════════════════════════════════
 
 def launch_parallel(config_names: list, gpus: list, fl_rounds: int,
-                    local_epochs: int, lr: float, dataset: str = DATASET):
+                    local_epochs: int, lr: float, dataset: str = DATASET,
+                    eval_per_snr: bool = False):
     """Launch in batches — max 1 job per GPU at a time."""
     n_gpus = len(gpus)
     failed = []
@@ -535,7 +575,7 @@ def launch_parallel(config_names: list, gpus: list, fl_rounds: int,
                 "--local_epochs", str(local_epochs),
                 "--lr", str(lr),
                 "--dataset", dataset,
-            ]
+            ] + (["--eval-per-snr"] if eval_per_snr else [])
             print(f"  {name} -> GPU {gpu}")
             p = subprocess.Popen(cmd)
             processes.append((name, gpu, p))
@@ -568,6 +608,8 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=LR)
     parser.add_argument("--dataset", type=str, default=DATASET, choices=list(PRESETS.keys()),
                         help="Dataset to use: uma (8BS) or umi (16BS)")
+    parser.add_argument("--eval-per-snr", action="store_true",
+                        help="Run per-SNR NMSE evaluation after training")
     args = parser.parse_args()
 
     # Apply dataset selection (re-derive from chosen preset)
@@ -591,8 +633,10 @@ if __name__ == "__main__":
 
     if args.gpus and len(config_names) > 1:
         launch_parallel(config_names, args.gpus, args.fl_rounds,
-                        args.local_epochs, args.lr, args.dataset)
+                        args.local_epochs, args.lr, args.dataset,
+                        args.eval_per_snr)
     else:
         for name in config_names:
             train_config(name, args.gpu, args.fl_rounds,
-                         args.local_epochs, args.lr, args.dataset)
+                         args.local_epochs, args.lr, args.dataset,
+                         args.eval_per_snr)

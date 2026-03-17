@@ -6,6 +6,7 @@ let activeTab = localStorage.getItem('dash_tab') || 'dashboard';
 let metricsCache = {};
 let selectedExp = localStorage.getItem('dash_exp') || null;
 let selectedRunId = localStorage.getItem('dash_run') || null;
+let expandedRunGroups = new Set(JSON.parse(localStorage.getItem('dash_expanded_groups') || '[]'));
 let backlogItems = [];
 let metricsXAxis = 'epoch'; // 'epoch' | 'time'
 let _expDragging = false;
@@ -360,6 +361,21 @@ async function renderDashboard() {
 // EXPERIMENTS TAB — List + Detail
 // ════════════════════════════════════
 
+function _runDot(r) {
+  const s = r.info.status;
+  return s === 'running' && r.alive ? 'running' : s === 'done' ? 'done' : s === 'failed' ? 'failed' : 'stale';
+}
+function _runDate(r) {
+  const d = r.info.started_at ? new Date(r.info.started_at) : new Date(r.mtime * 1000);
+  return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function toggleRunGroup(exp, name) {
+  const key = `${exp}/${name}`;
+  if (expandedRunGroups.has(key)) expandedRunGroups.delete(key);
+  else expandedRunGroups.add(key);
+  localStorage.setItem('dash_expanded_groups', JSON.stringify([...expandedRunGroups]));
+  renderExpListOnly();
+}
 function _buildExpSidebarHtml() {
   const groups = {};
   allRuns.forEach(r => { const exp = r.info.experiment || 'unknown'; (groups[exp] = groups[exp] || []).push(r); });
@@ -367,18 +383,45 @@ function _buildExpSidebarHtml() {
   return exps.map(exp => {
     const rs = groups[exp].sort((a,b) => b.mtime - a.mtime);
     const isOpen = selectedExp === exp;
-    const runs = isOpen ? rs.map(r => {
-      const name = r.info.name.split('/').pop();
-      const s = r.info.status;
-      const dot = s === 'running' && r.alive ? 'running' : s === 'done' ? 'done' : s === 'failed' ? 'failed' : 'stale';
-      const isActive = selectedRunId === r.info.id;
-      return `<div class="exp-run${isActive ? ' active' : ''}" onclick="event.stopPropagation(); selectRun('${r.info.id}')">
-        <span class="exp-run-dot ${dot}"></span>${name}</div>`;
-    }).join('') : '';
-    return `<div class="exp-group${isOpen ? ' open' : ''}">
-      <div class="exp-item${isOpen && !selectedRunId ? ' active' : ''}" onclick="selectExp('${exp}')">
-        <span class="exp-arrow">${isOpen ? '▾' : '▸'}</span>${exp}<span class="exp-item-count">${rs.length}</span>
-      </div>${runs}</div>`;
+    if (!isOpen) {
+      return `<div class="exp-group">
+        <div class="exp-item" onclick="selectExp('${exp}')">
+          <span class="exp-arrow">▸</span>${exp}<span class="exp-item-count">${rs.length}</span>
+        </div></div>`;
+    }
+    // Sub-group by display name
+    const byName = {};
+    rs.forEach(r => { const n = r.info.name.split('/').pop(); (byName[n] = byName[n] || []).push(r); });
+    let runsHtml = '';
+    for (const [name, nameRuns] of Object.entries(byName)) {
+      if (nameRuns.length === 1) {
+        const r = nameRuns[0];
+        const isActive = selectedRunId === r.info.id;
+        runsHtml += `<div class="exp-run${isActive ? ' active' : ''}" onclick="event.stopPropagation(); selectRun('${r.info.id}')">
+          <span class="exp-run-dot ${_runDot(r)}"></span>${name}</div>`;
+      } else {
+        const groupKey = `${exp}/${name}`;
+        const isGroupOpen = expandedRunGroups.has(groupKey);
+        const anyActive = nameRuns.some(r => selectedRunId === r.info.id);
+        runsHtml += `<div class="exp-run-group${isGroupOpen ? ' open' : ''}">
+          <div class="exp-run exp-run-header${anyActive && !isGroupOpen ? ' active' : ''}" onclick="event.stopPropagation(); toggleRunGroup('${exp}','${name}')">
+            <span class="exp-run-arrow">${isGroupOpen ? '▾' : '▸'}</span>
+            <span class="exp-run-dot ${_runDot(nameRuns[0])}"></span>${name}<span class="exp-run-count">${nameRuns.length}</span>
+          </div>`;
+        if (isGroupOpen) {
+          runsHtml += nameRuns.map(r => {
+            const isActive = selectedRunId === r.info.id;
+            return `<div class="exp-run exp-run-child${isActive ? ' active' : ''}" onclick="event.stopPropagation(); selectRun('${r.info.id}')">
+              <span class="exp-run-dot ${_runDot(r)}"></span>${_runDate(r)}</div>`;
+          }).join('');
+        }
+        runsHtml += '</div>';
+      }
+    }
+    return `<div class="exp-group open">
+      <div class="exp-item${!selectedRunId ? ' active' : ''}" onclick="selectExp('${exp}')">
+        <span class="exp-arrow">▾</span>${exp}<span class="exp-item-count">${rs.length}</span>
+      </div>${runsHtml}</div>`;
   }).join('') || '<div class="empty" style="padding:20px">No experiments</div>';
 }
 
