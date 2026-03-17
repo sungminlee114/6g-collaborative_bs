@@ -262,6 +262,115 @@ src/
 
 ---
 
+## 9. Cross-Cluster 분석 & 연구 갭
+
+> relworks.md 논문 군집 간 연결 관계 및 연구 갭 분석 (2026-03-04 작성)
+
+### 9.1 논문 간 연결 관계
+
+```
+핵심 스토리라인 1: "O-RAN에서의 on-device AI 배포"
+  [P02:dApps] → [P34:SSBA] → [P36:MAB] → [P41:HW-Hetero]
+  실시간 제어 메커니즘 → 사이트별 빔 AI → 초경량 추론 → 일반화 한계
+  ⟹ 갭: dApp으로 배포 가능한 빔 관리 AI가 HW 이질성에서도 동작하는 방법?
+
+핵심 스토리라인 2: "분산/협력 학습으로 다중 BS 지능"
+  [P14:Edge-LAM] → [P30:SL-6G] → [P09:D2D-FL] → [P10:Robust-FL]
+  Edge LAM 채널 예측 → Split Learning → 동적 FL+MAC → FL 보안
+  ⟹ 갭: Federated channel prediction에서 동적 환경 + 보안을 동시에 보장하는 통합 프레임워크?
+
+핵심 스토리라인 3: "LLM/SLM의 6G PHY 적용"
+  [P19:Multi-task PHY] → [P22:TinyLM-6G] → [P21:Push-LLM] → [P31:SLIDE]
+  LLM PHY 다중과제 → 적정 크기 → Edge 배포 → 모델 전달
+  ⟹ 갭: 1-3B 규모 SLM을 on-device PHY 과제에 fine-tune하고 O-RAN으로 전달하는 end-to-end 시스템?
+
+핵심 스토리라인 4: "시뮬레이션 → 실제 배포 브릿지"
+  [P43:Sionna] → [P44:DeepTelecom] → [P34:SSBA] → [P06:China-Mobile]
+  Ray-tracing 시뮬레이터 → 디지털 트윈 데이터셋 → DL 빔 정렬 → 5000+ BS 필드 트라이얼
+  ⟹ 갭: Sionna 기반 디지털 트윈에서 학습 → 실제 배포 transfer learning의 체계적 방법론?
+```
+
+### 9.2 주요 연구 갭 종합
+
+| 갭 ID | 설명 | 관련 논문 | 난이도 |
+|-------|------|----------|-------|
+| G1 | On-device AI (dApp/xApp)의 HW 이질성 강건한 빔 관리 | P02,P34,P36,P41 | ★★★★★ |
+| G2 | 동적 채널 + 보안 + FL 통합 채널 예측 | P09,P10,P14 | ★★★★☆ |
+| G3 | SLM (1-3B) on-device PHY 다중과제 + O-RAN 배포 | P19,P22,P21,P31 | ★★★★★ |
+| G4 | 디지털 트윈 → 실세계 전이학습 체계 | P43,P44,P34,P06 | ★★★★☆ |
+| G5 | Edge LAM의 마이크로서비스 기반 협력 추론 + 무선 최적화 | P14,P26,P30 | ★★★★☆ |
+| G6 | 모델 버전 관리 + 동적 업데이트의 안정성-성능 트레이드오프 | P08,P41 | ★★★☆☆ |
+| G7 | ISCC 기반 센싱 지원 협력 빔 관리 | P16,P32 | ★★★★☆ |
+| G8 | SE/attention block의 FL aggregation 시 site-specific adaptation 손실 메커니즘 분석 | P78, P80 |
+| G9 | Site-adaptive CE에서 FL vs Transfer Learning vs Continual Learning 체계적 비교 | P82, P83, P86 |
+| G10 | 경량 모델 (O-DU급)에서 collaborative learning의 이점이 커지는 현상의 이론적 분석 | P78, P85 |
+
+---
+
+## 10. Nature Communications 연구주제 후보
+
+### 후보 1: **"Heterogeneity-Resilient On-Device AI for Cooperative Beam Management in 6G O-RAN"**
+> **HW 이질성에 강건한 협력 기지국 빔 관리 on-device AI**
+
+- **근거**: P41(Zeulin)이 HW 이질성 문제를 식별했으나 해법 미제시. P34(SSBA), P36(MAB)은 단일 BS 솔루션. 다벤더 O-RAN 환경에서 이질적 BS들이 협력하여 빔 관리를 수행하는 프레임워크는 부재.
+- **방법론**: Sionna RT(P43)로 15GHz 다중 BS 데이터셋 생성 → domain-invariant feature (beamspace/angular-delay profile) 학습 → meta-learning/continual learning으로 HW 변화에 적응 → dApp(P02) 또는 near-RT RIC으로 배포 → FL(P32)로 다중 BS 협력
+- **노벨티**: (1) HW 이질성 문제 + 다중 BS 협력의 최초 결합, (2) 디지털 트윈 기반 사전학습 → 실세계 fine-tuning 파이프라인
+- **임팩트**: O-RAN Alliance의 다벤더 비전과 직결. 실용적 6G 배포의 핵심 장벽 해결.
+- **Nature Comms 적합성**: ★★★★★ — 이질적 시스템의 협력 지능이라는 broad impact, 물리/ML/시스템 crossover
+
+### 후보 2: **"Foundation Model-Enabled Collaborative Intelligence at the 6G Radio Edge"**
+> **6G Radio Edge에서의 파운데이션 모델 기반 협력 지능**
+
+- **근거**: P14(Edge LAM), P19(Multi-task PHY LLM), P22(TinyLM-6G)가 각각 edge LAM, PHY 다중과제, 스케일링을 다루지만 통합 없음. P45(SpectrumFM)은 스펙트럼만. **채널 예측 + 빔포밍 + 간섭 관리를 통합하는 6G PHY 파운데이션 모델은 부재**.
+- **방법론**: Sionna RT로 다양한 환경/주파수/배열 데이터 대규모 생성 → self-supervised pre-training (masked CIR reconstruction + next-slot CFR prediction, P45 영감) → LoRA fine-tuning per BS → split federated fine-tuning (P14, P30) across collaborative BSs → 1-3B 모델 (P22 가이드라인)
+- **노벨티**: (1) 최초 PHY-layer FM 사전학습 + 다중 BS FL fine-tuning, (2) 채널/빔/간섭 통합 과제, (3) 디지털 트윈 생성 데이터 → 실 데이터 bridging
+- **임팩트**: AI-native 6G의 핵심 비전 구현. 범용 무선 FM이 특정 환경에 적응하는 패러다임.
+- **Nature Comms 적합성**: ★★★★★ — "Foundation model for physical layer"라는 새 패러다임. AI + 통신 + 물리의 crossover.
+
+### 후보 3: **"Split Inference with Simultaneous Model Delivery for Real-Time Cooperative Base Station Intelligence"**
+> **실시간 협력 BS 지능을 위한 동시적 모델 전달 + 분할 추론**
+
+- **근거**: P31(SLIDE)이 모델 다운로드+추론 동시화를 제안했으나 단일 BS. P30(SL)이 multi-edge 분할 학습을 다루지만 추론 시 모델 전달 미고려. P26(Splitwise)이 sub-layer 분할을 제안했으나 BS 협력 없음. **다중 BS가 협력하여 UE에 모델을 전달하면서 동시에 분할 추론하는 프레임워크는 부재**.
+- **방법론**: CoMP-style 다중 BS 동시 모델 전달 (각 BS가 모델의 다른 부분 전송) → UE에서 수신된 레이어부터 즉시 추론 시작 → Lyapunov 기반 안정성 보장 (P26) → O-RAN near-RT RIC으로 BS 간 모델 파티션 조율
+- **노벨티**: (1) CoMP + model delivery + split inference의 최초 통합, (2) 다중 BS 동시 전달로 다운로드 시간 1/N 감소
+- **Nature Comms 적합성**: ★★★★☆ — 시스템 수준 혁신, 그러나 이론적 깊이가 충분해야 함
+
+### 후보 4: **"Digital Twin-Aided Self-Evolving Beam Management for 6G O-RAN"**
+> **디지털 트윈 기반 자기 진화 빔 관리**
+
+- **근거**: P34(SSBA)가 디지털 트윈 파이프라인을 제안했으나 미구현. P43(Sionna) + P44(DeepTelecom)이 시뮬레이션 도구/데이터셋 제공. P08이 모델 버전 관리 제안. **디지털 트윈으로 지속적으로 모델을 진화시키고, 실세계 피드백으로 calibration하는 closed-loop 시스템은 부재**.
+- **방법론**: Sionna RT 디지털 트윈 → 초기 빔 관리 모델 학습 → on-device 배포 → 실세계 RSS/CIR 피드백으로 모델 drift 감지 → 디지털 트윈 자동 업데이트 → 모델 재학습 → RL 기반 업데이트 정책 (P08)으로 안정성 보장 배포
+- **노벨티**: (1) Sim-to-real-to-sim 순환 학습, (2) 자율적 모델 진화 (human-out-of-the-loop)
+- **Nature Comms 적합성**: ★★★★☆ — 자율 시스템의 self-evolution은 광범위한 관심, 그러나 기존 digital twin 연구와의 차별화 필요
+
+### 후보 5: **"Sensing-Aided Cooperative Channel Prediction via Federated On-Device AI in 6G Networks"**
+> **6G에서 센싱 보조 협력 채널 예측을 위한 연합 on-device AI**
+
+- **근거**: P16(ISCC)이 센싱+통신+컴퓨팅 통합을 제안. P32(Beam Survey)가 ISAC 빔 관리 정리. P14(Edge LAM)이 federated 채널 예측. **센싱 데이터 (radar/LiDAR)를 활용한 federated cooperative channel prediction은 미탐구**.
+- **방법론**: 다중 BS가 각각 로컬 센싱 (radar) + 파일럿 기반 채널 추정 → 멀티모달 fusion (P37 VBS 영감) → federated learning으로 global prediction model → on-device 추론으로 proactive handover/beam switching
+- **노벨티**: (1) ISAC + FL + 채널 예측의 최초 결합, (2) 센싱이 채널 예측 정확도 상한을 높이는 메커니즘 (P16 이론 확장)
+- **Nature Comms 적합성**: ★★★★☆ — ISAC은 6G 핵심이나, 실험 검증의 깊이 필요
+
+---
+
+## 11. PACE-Net 실험 발견 & 해석
+
+### 실험적 발견 (E0 Architecture Search에서)
+
+- PACE-Net에서 FL aggregation 시 SE의 implicit site adaptation이 평균화되어 성능 저하 관찰
+  - Independent: -18.34 dB vs Ours (FL+LoRA): -17.37 dB
+  - ResNet/DWS-ResNet에서는 Ours가 Independent를 이김
+- → **SE와 FL의 충돌은 PACE-Net 원논문(P78)에서 미다룸 — 새로운 finding**
+
+### 해석 (P80 ANFR 기반)
+
+- SE의 channel attention은 **입력에 따라 feature를 adaptive하게 re-weight** (P78 PACE-Net)
+- FL aggregation은 이 adaptive weight의 기반이 되는 Linear layer를 평균화
+- P80 (ANFR)은 channel attention이 FL heterogeneity를 **완화**할 수 있음을 보였으나, 이는 attention을 **shared feature의 일관성 필터**로 쓸 때
+- 우리 경우 SE는 **site-specific feature amplifier** 역할 → FL 평균화와 목적이 상충
+
+---
+
 ## Notes
 - "비판적으로" -- push back hard, thesis-antithesis-synthesis
 - "collaborative BS가 아니어도 됨" -- relaxed project scope
