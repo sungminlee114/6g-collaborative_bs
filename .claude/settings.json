@@ -24,5 +24,18 @@
       "WebSearch(*)",
       "WebFetch(*)"
     ]
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"\nimport json, sys, os, hashlib, glob\ntry:\n    # Session ID: TTY hash or PPID (no /proc walking)\n    env_id = os.environ.get('CLAUDE_SESSION_ID', '')\n    if env_id:\n        key = env_id\n    else:\n        try:\n            key = hashlib.md5(os.ttyname(0).encode()).hexdigest()[:8]\n        except Exception:\n            key = str(os.getppid())\n    sf = f'/tmp/claude_task_session_{key}'\n    session = None\n    try:\n        session = open(sf).read().strip() or None\n    except (FileNotFoundError, OSError):\n        pass\n    # Read backlog safely\n    try:\n        with open('assets/backlog.json') as f:\n            items = json.load(f)\n    except (FileNotFoundError, json.JSONDecodeError, OSError):\n        items = []\n    in_progress = [i for i in items if i.get('status') == 'in_progress']\n    mine = [i for i in in_progress if session and i.get('session') == session]\n    others = [i for i in in_progress if session and i.get('session') != session]\n    parts = []\n    if mine:\n        parts.append('MY ACTIVE TASK: ' + ', '.join(i['name'] for i in mine) + '. Run /task done when finished.')\n    if others:\n        parts.append('Other panels: ' + ', '.join(i['name'] + '(' + i.get('session','?') + ')' for i in others))\n    if not mine and not others:\n        parts.append('No active task. If doing meaningful work, run /task start first.')\n    msg = 'TASK REMINDER: ' + ' '.join(parts)\n    if session:\n        msg += f' [session={session}]'\n    json.dump({'hookSpecificOutput': {'hookEventName': 'UserPromptSubmit', 'additionalContext': msg}}, sys.stdout)\nexcept Exception as e:\n    # Fail silently with valid empty output so hook doesn't crash the session\n    json.dump({'hookSpecificOutput': {'hookEventName': 'UserPromptSubmit', 'additionalContext': ''}}, sys.stdout)\n\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
   }
 }
