@@ -21,6 +21,7 @@ import sys
 import uuid as _uuid
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from socketserver import ThreadingMixIn
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -512,9 +513,13 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(data, default=str).encode())
 
 
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+    daemon_threads = True
+
+
 def main():
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
-    server = HTTPServer(("0.0.0.0", port), Handler)
+    server = ThreadedHTTPServer(("0.0.0.0", port), Handler)
     print(f"\n  Dashboard: http://localhost:{port}")
     print(f"  Backlog: {BACKLOG_FILE}")
     print(f"  Press Ctrl+C to stop\n")
