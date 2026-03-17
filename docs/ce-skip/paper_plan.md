@@ -1,0 +1,402 @@
+# When Not to Estimate: Event-Triggered CE Inference Scheduling for Software-Defined Base Stations
+
+> 최종 정리 (2026.03.18 대화 기반)
+
+---
+
+## 0. 확정된 결정 사항
+
+| 항목 | 결정 | 근거 |
+|------|------|------|
+| 도구 | Sionna RT only (pyAerial 안 씀) | NF 미지원, 인터페이스 비용 대비 이득 없음 |
+| Case | 5G FF (8×8, 3.5GHz) + 6G NF (32×32, 15/28GHz) | 일반성 + NF-specific finding 둘 다 확보 |
+| 데이터 | temporal trajectory 새로 생성 | independent drops로는 skip 정의 불가 |
+| CE 구현 | LS + Genie-LMMSE + DL-CE (3종) | CE-agnostic 프레임워크 증명, Polar-OMP 생략 |
+| 기존 데이터 | DL-CE 학습용으로 활용 | independent drops는 CE 정확도 학습에 적합 |
+| Contribution | CE scheduling (wrapper), CE 알고리즘 아님 | 어떤 CE든 위에 올릴 수 있음 |
+
+---
+
+## 1. Introduction
+
+### 1.1 배경: CE 비용의 증가
+
+6G ELAA는 수백~수천 개의 안테나 소자를 배치한다. Near-field에서는 구형파(spherical wavefront) 전파로 인해 채널이 각도뿐 아니라 거리에도 의존하며, CE의 탐색 차원이 1D(angle)에서 2D(angle+distance)로 증가한다 [Cui & Dai, TWC 2022]. Polar-domain OMP, Bayesian sparse recovery, DL 기반 refiner 등이 제안되었으나, 이 방법들은 모두 연산 비용이 far-field CE 대비 크게 증가한다.
+
+한편 5G massive MIMO에서도 DL 기반 CE(CNN, Transformer, Diffusion)의 도입으로 CE inference의 연산 비용이 전통적 LS/MMSE 대비 수십~수백 배 증가하는 추세다.
+
+### 1.2 배경: CE가 소프트웨어로 전환되었다
+
+전통적 기지국에서 CE는 ASIC 고정 파이프라인의 일부로, FFT 출력 후 자동 실행되는 하드웨어 블록이었다. Skip 분기가 파이프라인에 존재하지 않았으므로, "CE를 수행할지 말지"는 결정 가능한 변수가 아니었다.
+
+NVIDIA Aerial cuPHY는 CE를 포함한 모든 L1 기능을 GPU CUDA 커널로 구현한다 [NVIDIA, 2025]. NTT DOCOMO는 이를 상용 배포하여 50% 기지국 전력 절감을 보고했다. O-RAN dApp 아키텍처는 DU 내부에서 PHY 데이터에 직접 접근하며 sub-ms 제어 루프를 구현한다 [Lacava et al., Computer Networks 2025]. CE는 더 이상 ASIC의 고정 공정이 아니라 GPU에서 스케줄링 가능한 소프트웨어 태스크가 되었다.
+
+### 1.3 아무도 안 한 질문
+
+> 채널이 충분히 유사한 연속 슬롯에서, 매번 full CE inference를 수행해야 하는가?
+
+### 1.4 이 질문이 정의될 수 없었던 구조적 이유
+
+1. **하드웨어 고정**: ASIC 기반 수신기에서 CE는 FFT→DMRS추출→LS/MMSE가 하드웨어 파이프라인으로 연결되어 있으며, skip 분기가 물리적으로 존재하지 않았다.
+2. **표준의 암묵적 가정**: 3GPP TS 38.211은 CE 알고리즘을 규정하지 않지만, antenna port 정의에서 "the channel over which a PDSCH symbol on one antenna port is conveyed can be inferred from the channel over which a DM-RS symbol on the same antenna port is conveyed only if the two symbols are within the same slot"이라고 명시한다. Coherent demodulation의 전제로 per-slot CE를 암묵적으로 요구한다.
+3. **평가 프레임의 폐쇄성**: CE 논문의 성능 지표가 per-slot NMSE로 고정되어, "CE를 skip한 슬롯"의 평가 방법 자체가 프레임 안에 존재하지 않았다. 모든 pilot overhead 연구(compressed sensing, superimposed pilot, pilot selection 등)는 "한 번 CE를 수행할 때 파일럿을 줄이는" 문제만 다루며, "CE 수행 빈도를 줄이는" 문제를 다루지 않았다.
+4. **커뮤니티 분리**: "CE를 언제 할지"는 본질적으로 자원 스케줄링 문제이나, CE는 Signal Processing 커뮤니티가, 스케줄링은 Networking 커뮤니티가 각각 다룬다. 교차 영역 문제를 다룰 주체가 없었다.
+
+### 1.5 이제 가능한 이유
+
+GPU-native RAN에서 CE는 CUDA 커널이다. 실행 여부를 런타임에 결정할 수 있다. 핵심 구분: **DMRS 수신(3GPP 의무)과 full CE inference(구현 재량)의 분리(decoupling)**. DMRS는 매 슬롯 수신되지만, 수신된 DMRS로부터 full channel reconstruction을 수행하는 것은 표준이 아닌 구현자의 결정이다. GPU에서 CE 커널의 실행 여부를 dApp이 제어할 수 있다.
+
+### 1.6 기존 연구와의 관계
+
+- **ICENet [IEEE 2025]**: CE inference의 depth (반복 횟수)를 적응적으로 조절. 하지만 매 슬롯 반드시 inference를 수행. 우리는 inference **frequency** (수행 여부)를 조절. 직교하는 차원.
+- **Temporal prediction (CsiNet-LSTM, CNN-GPT2)**: "다음 슬롯의 채널을 예측"하되 매 슬롯 prediction을 수행. 우리는 "예측이 필요 없을 만큼 채널이 안 변했으면 아예 skip". Prediction의 상위 레이어.
+- **Elbir FL-based NF CE [arXiv:2302.04802]**: CE 알고리즘의 학습을 분산화. 우리는 CE 수행 자체의 스케줄링을 최적화. CE 알고리즘에 agnostic — Elbir의 방법 위에도 우리의 scheduling을 적용 가능.
+
+---
+
+## 2. Core Idea
+
+### 2.1 DMRS 수신 ≠ CE Inference
+
+파일럿 수신과 full CE를 분리한다.
+
+- **LS estimate** (매 슬롯 항상 수행): DMRS 위치에서 Y/X. O(N_pilot) 곱셈. 비용 극히 낮음.
+- **Full CE inference** (조건부 수행): LS를 입력으로 LMMSE/DL/CS 등을 돌려 전체 채널 복원. 비용 높음.
+
+Skip 대상은 full CE inference이지, 파일럿 수신이 아니다.
+
+### 2.2 3-Tier Adaptive Scheduling
+
+```
+매 슬롯 t:
+  (1) h_LS(t) ← Y_pilot(t) / X_pilot          [항상 수행, ~O(N)]
+
+  (2) δ(t) ← ‖h_LS(t) − h_LS(t−1)‖ / ‖h_LS(t−1)‖   [Monitor, ~O(N)]
+
+  (3) 분기:
+      δ(t) ≤ τ_low      → T0 Skip:   ĥ(t) ← ĥ(t−1)
+      τ_low < δ(t) ≤ τ_high → T1 Delta:  ĥ(t) ← ĥ(t−1) + α·(h_LS(t) − h_LS(t−1))
+      δ(t) > τ_high      → T2 Full:   ĥ(t) ← FullCE(h_LS(t))
+
+  (4) Safety: 누적 슬롯 > N_max이면 강제 T2
+```
+
+### 2.3 CE-Agnostic Framework
+
+이 scheduling wrapper는 Full CE가 무엇이든 동작한다. 논문에서는 3종의 CE로 검증:
+
+| CE | 역할 | 비용 | 비고 |
+|----|------|------|------|
+| LS | Lower bound | ~0.01ms | Skip 이득 작음 → "이것도 되나?" |
+| Genie-LMMSE | Oracle bound | ~0.5ms | 완벽한 통계 정보 가정 → 이론적 한계 |
+| DL-CE (ResNet) | Practical | ~2ms | 현실적 DL CE → 실용적 이득 |
+
+**Polar-OMP 생략 이유**: 구현 2주 + dictionary 메모리 문제(1024 ant × 65K atoms). 우리 contribution은 CE 알고리즘이 아니라 scheduling. CE가 비쌀수록 skip 이득이 크다는 것을 3종 비교로 충분히 보여줌.
+
+---
+
+## 3. Hypotheses
+
+### H1: Temporal Persistence (전제 조건 — go/no-go)
+
+> NF ELAA 채널의 연속 스냅샷 간 normalized LS difference δ(t)는 저속/정적 환경에서 대부분의 시간 동안 threshold 이하이다.
+
+이것이 성립하지 않으면 전체 방향 폐기.
+
+### H2: CE-Agnostic Effectiveness
+
+> Skip scheduling은 CE 알고리즘(LS, LMMSE, DL-CE)에 무관하게 일관된 computation-rate tradeoff를 제공한다. CE가 비쌀수록 skip의 절대적 이득이 크다.
+
+### H3: Distance-Dependent Threshold (NF-specific)
+
+> NF 채널의 temporal persistence는 UE-BS 거리에 의존한다. 가까운 UE(NF 내)는 구형파 curvature로 인해 위상 변화가 빠르고, 먼 UE(FF)는 변화가 느리다. 따라서 최적 threshold τ*(d)는 거리의 증가 함수이다.
+
+이것이 NF에서만 나타나는 고유한 현상. FF case와 비교하여 차별화.
+
+### H4: Beamforming Robustness
+
+> Stale channel (skip한 슬롯)로 beamforming하더라도, rate loss가 full CE 대비 5% 이내인 operating point가 존재한다.
+
+---
+
+## 4. Experimental Design
+
+### 4.0 환경
+
+```
+Hardware:  NVIDIA A100 (CC 8.0, 80GB)
+Software:  Sionna RT 1.x, PyTorch 2.x
+Scene:     Munich UMi, 8 BS
+
+[Primary configs — 논문 본문 Figure/Table]
+  Config A: 15 GHz FR3, 1024 ant (32×32), 1024 SC, 400 MHz BW   (R_Rayleigh ≈ 20.5m)
+  Config B: 28 GHz FR2, 1024 ant (32×32), 4096 SC, 1.6 GHz BW   (R_Rayleigh ≈ 10.9m)
+  Config C: 3.5 GHz FR1, 64 ant (8×8), 256 SC, 100 MHz BW       (R_Rayleigh ≈ 0.5m, 전원 FF)
+
+[Extended configs — generality 검증, appendix 또는 추가 분석]
+  18 ELAA presets: {s,m,l} × {1k,2k,4k} × {15g,28g}
+    - 안테나 수 (s=8×8, m=16×16, l=32×32) → Rayleigh distance 변화
+    - 대역폭 (1k/2k/4k SC) → CE 비용 스케일링
+    - 주파수 (15/28 GHz) → coherence time 차이
+  1 5G preset: munich_5g_mimo_3g5
+
+  모든 preset에 대해 independent + temporal 데이터 생성됨 (run_all_datagen.sh).
+  Primary configs 외 preset은 일반성 주장 강화에 활용.
+
+UE distance: 10m – 150m
+BS split: train {0,5} / val {2,4} / test {1,3,6,7}
+Mobility: 0 m/s (static), 1 m/s (pedestrian), 8.3 m/s (30km/h low vehicle)
+  — 33 m/s (120km/h) 제외: NF ELAA 주요 use case에 해당하지 않음
+```
+
+### 4.1 데이터 생성 (Phase 0)
+
+기존 independent drops: DL-CE 학습용으로 유지.
+신규 temporal trajectory: CE scheduling 평가용.
+
+```python
+# generate.py 수정 핵심
+# 초기 위치: 한 번 샘플링
+if snapshot_idx == 0:
+    ue_pos_init = sample_positions(num_ue, dist_min, dist_max)
+    ue_direction = random_unit_vectors(num_ue)
+
+# 매 snapshot: 이동
+ue_pos[t] = ue_pos_init + velocity * dt * t * ue_direction
+# 경계 처리: 씬 밖으로 나가면 방향 반전
+```
+
+Mobility 세트:
+
+| 시나리오 | 속도 | dt | 용도 |
+|----------|------|-----|------|
+| Static | 0 m/s | 10ms | FWA, 공장 센서 — skip 최대 |
+| Pedestrian | 1 m/s | 10ms | 실내, 캠퍼스 |
+| Low vehicle | 8.3 m/s (30km/h) | 10ms | 도심 |
+| High vehicle | 33 m/s (120km/h) | 10ms | 고속도로 — skip 최소/불가 예상 |
+
+- **Pilot data** (go/no-go용): 20 UE × 200 snapshots × 3 mobility × primary configs = 9세트
+- **Full data** (논문용): 100 UE × 1000 snapshots × 3 mobility × 19 presets (run_all_datagen.sh로 일괄 생성)
+
+### 4.2 Exp 1 — Temporal Persistence Profiling (H1, go/no-go)
+
+```python
+for config in [A, B, C]:
+    for mobility in [static, ped, low_veh, high_veh]:
+        for ue in all_ues:
+            for t in range(1, T):
+                delta[t] = norm(h_true[t] - h_true[t-1]) / norm(h_true[t-1])
+
+        plot_cdf(delta)                    # 전체 CDF
+        plot_cdf_by_distance(delta, dist)  # 거리 구간별 CDF
+        plot_delta_vs_distance(delta, dist) # scatter
+```
+
+**Kill criterion**: pedestrian에서 delta median > 0.5 → 방향 재검토.
+
+### 4.3 Exp 2 — CE 구현 + A100 프로파일링
+
+3개 CE 구현 후 비용 측정:
+
+```python
+import torch.cuda
+
+for ce_method in [ls, genie_lmmse, dl_ce]:
+    start = torch.cuda.Event(enable_timing=True)
+    end = torch.cuda.Event(enable_timing=True)
+
+    start.record()
+    h_hat = ce_method(h_ls)
+    end.record()
+    torch.cuda.synchronize()
+
+    time_ms = start.elapsed_time(end)
+
+    # + NMSE 측정
+    nmse = (norm(h_hat - h_true)**2 / norm(h_true)**2).mean()
+```
+
+측정: wall-clock time (ms), NMSE, GPU memory.
+
+**DL-CE 학습**: independent drops 데이터 사용.
+- Input: h_ls (SNR별 noise 추가)
+- Target: h_true
+- Loss: MSE, 학습 epochs: ~100
+
+### 4.4 Exp 3 — Threshold Sweep + Pareto Front (H2)
+
+```python
+for ce_method in [ls, lmmse, dl_ce]:
+    for config in [A, B, C]:
+        for tau in np.linspace(0.01, 1.0, 100):
+            h_hat, stats = adaptive_ce_scheduling(
+                H_true, snr, tau, ce_method
+            )
+
+            skip_rate = stats['skip'] / T
+            nmse = compute_nmse(h_hat, H_true)
+            rate = compute_achievable_rate(h_hat, H_true, snr)
+            cost = stats['full'] * t_full + stats['delta'] * t_delta + stats['skip'] * t_monitor
+
+            record(config, ce_method, tau, skip_rate, nmse, rate, cost)
+```
+
+핵심 Figure: X=Computation Ratio, Y=Rate Preservation Ratio. 3 CE × 3 config = 9 curves. Knee point가 recommended τ.
+
+### 4.5 Exp 4 — Distance-Dependent Threshold (H3, NF contribution)
+
+```python
+# UE를 거리 구간으로 나눔
+zones = {
+    'NF':         (dist_min, R_rayleigh),
+    'Transition': (R_rayleigh, 3 * R_rayleigh),
+    'FF':         (3 * R_rayleigh, dist_max)
+}
+
+for zone_name, (d_min, d_max) in zones.items():
+    ue_mask = (distances >= d_min) & (distances < d_max)
+    optimal_tau[zone_name] = sweep_tau(H_true[ue_mask])
+```
+
+기대: τ\*\_NF < τ\*\_Transition < τ\*\_FF
+
+NF vs FF 비교: Config A/B (NF 존재)에서는 τ가 거리 의존적, Config C (전원 FF)에서는 τ가 상수 → "distance-dependent threshold는 NF에서만 필요하다"
+
+### 4.6 Exp 5 — Delta Update Ablation
+
+Skip(reuse) vs Delta update 3종 비교:
+
+```
+(a) Pure skip:  ĥ(t) = ĥ(t-1)
+(b) EMA:        ĥ(t) = α·h_LS(t) + (1-α)·ĥ(t-1)
+(c) LS-delta:   ĥ(t) = ĥ(t-1) + β·(h_LS(t) - h_LS(t-1))
+```
+
+### 4.7 Exp 6 — Beamforming Rate Impact (H4)
+
+```python
+# MRT beamformer with estimated channel
+w = h_hat / norm(h_hat)
+rate = log2(1 + snr * abs(w.conj() @ h_true)**2)
+rate_oracle = log2(1 + snr * norm(h_true)**2)  # perfect CSI
+rate_loss = 1 - rate / rate_oracle
+```
+
+CDF of rate_loss. Target: P(rate\_loss > 5%) < 10%.
+
+### 4.8 Exp 7 — Multi-BS Generalization
+
+Train BS {0,5}에서 학습한 τ\* → Test BS {1,3,6,7}에서 성능 측정.
+Generalization gap 분석.
+
+---
+
+## 5. Metrics
+
+### 5.1 기존 metric (baseline 보고용)
+
+- **NMSE** = E[‖ĥ−h‖²] / E[‖h‖²] — per-slot, CE 커뮤니티 표준
+
+### 5.2 새로운 metrics (이 논문의 프레임워크)
+
+| Metric | 정의 | 의미 |
+|--------|------|------|
+| Skip Rate (SR) | N\_skip / N\_total | CE inference 절감률 |
+| Rate Preservation Ratio (RPR) | R\_adaptive / R\_fullCE | Throughput 보존율 (1에 가까울수록 좋음) |
+| Computation Ratio (CR) | Cost\_adaptive / Cost\_fullCE | 연산 비용 비율 (낮을수록 좋음) |
+| Efficiency Score (ES) | RPR / CR | 단위 연산당 throughput (높을수록 좋음) |
+| Skip Miss Rate (SMR) | P(skip 했는데 rate\_loss > 10%) | 안전성 지표 |
+
+여기서 Cost는 각 CE의 A100 측정 wall-clock time 기반:
+
+```
+Cost_adaptive = N_full × t_full + N_delta × t_delta + N_skip × t_monitor
+Cost_fullCE   = N_total × t_full
+CR = Cost_adaptive / Cost_fullCE
+```
+
+### 5.3 핵심 Figure 목록
+
+| Fig # | 내용 | 검증 대상 |
+|-------|------|-----------|
+| 1 | System model diagram (dApp + GPU L1 + 3-tier) | — |
+| 2 | Temporal delta CDF (mobility별, config별) | H1 |
+| 3 | Delta vs distance scatter plot | H3 예비 |
+| 4 | Pareto front: CR vs RPR (3 CE × 3 config) | H2 핵심 |
+| 5 | Optimal τ\* vs distance (NF/Transition/FF) | H3 핵심 |
+| 6 | Pareto front 비교: Config A/B vs Config C | NF vs FF |
+| 7 | Delta update ablation (skip vs EMA vs LS-delta) | T1 tier |
+| 8 | Rate loss CDF | H4 |
+| 9 | Multi-BS generalization | Exp 7 |
+
+### 5.4 핵심 Table 목록
+
+| Table # | 내용 |
+|---------|------|
+| 1 | CE 알고리즘별 A100 프로파일링 (time, memory, NMSE) |
+| 2 | Sweet spot 요약: 각 (config, CE, mobility)에서의 (SR, RPR, CR) |
+| 3 | Distance-dependent τ\* 값 |
+
+---
+
+## 6. Expected Contributions
+
+| # | Contribution | 유형 | 검증 |
+|---|-------------|------|------|
+| C1 | CE inference scheduling 문제를 최초 정의. Pilot reception과 CE inference의 decoupling을 형식화 | Problem formulation | Intro + System model |
+| C2 | 3-Tier adaptive scheduling (Monitor/Delta/Full) 제안 | Algorithm | Exp 3, 5 |
+| C3 | CE-agnostic: 3종 CE에서 일관된 효과 실증 | Generality | Exp 3 (LS/LMMSE/DL-CE) |
+| C4 | NF 채널에서 temporal persistence가 거리 의존적임을 실증 | NF-specific finding | Exp 1, 4 |
+| C5 | Distance-dependent threshold τ\*(d) 설계 | NF-specific design | Exp 4 |
+| C6 | Throughput-computation Pareto front라는 CE 평가 프레임워크 제안 | Evaluation framework | Exp 3, 6 |
+| C7 | NF vs FF 비교: skip 이득이 NF에서 더 큰 이유 정량화 | Comparative analysis | Exp 3 (Config A/B vs C) |
+
+---
+
+## 7. 리뷰어 예상 공격 및 대응
+
+**Q: "CE skip은 그냥 channel prediction의 특수한 경우 아닌가?"**
+→ Channel prediction은 매 슬롯 prediction을 수행하므로 연산량 절감이 없다. 우리는 "prediction이 필요 없는 슬롯을 식별하여 연산 자체를 skip"한다. Prediction 위에 올라가는 meta-decision.
+
+**Q: "고속 이동에서는 안 되잖아?"**
+→ 맞다. Limitation으로 명시. 하지만 6G NF ELAA의 주요 use case(FWA, indoor, factory)는 저속/정적. 고속 환경에서는 τ를 낮추면 full CE에 수렴하므로 성능 저하 없이 graceful degradation.
+
+**Q: "LS difference로 trigger하면 noise에 취약하지 않나?"**
+→ 맞다. 저SNR에서 delta가 noise-dominated되어 false trigger 발생 가능. EMA smoothing으로 완화. 이것이 Exp 5(delta update ablation)에서 검증됨.
+
+**Q: "Polar-OMP 같은 제대로 된 NF CE와 비교해야 하지 않나?"**
+→ 우리 contribution은 CE 알고리즘이 아닌 scheduling framework. LS(최소), LMMSE(최적 선형), DL-CE(비선형) 3종에서 일관된 효과를 보이므로 CE-agnostic함이 증명됨. Polar-OMP도 이 위에 올릴 수 있으며 이는 future work.
+
+**Q: "실제 시스템에서의 latency 절감은?"**
+→ 본 논문은 oracle channel 기반 scheduling의 이론적 이득을 분석. 실시간 시스템 구현(cuPHY/dApp integration)은 future work. 단, A100에서의 CE kernel wall-clock time을 보고하여 실제 절감량의 추정치를 제공.
+
+---
+
+## 8. Timeline
+
+```
+Week 1:  generate.py 수정 + pilot data 생성 (20 UE, 200 snap, 4 mobility, 3 config)
+         Exp 1: temporal persistence → go/no-go
+         5G config (8×8, 3.5GHz) 추가
+
+Week 2:  CE 구현 (LS: 0.5일, LMMSE: 1일, DL-CE: 3일)
+         DL-CE 학습 (independent drops 데이터)
+         Exp 2: A100 프로파일링
+
+Week 3:  Full data 생성 (100 UE, 1000 snap, 선택된 세트)
+         Exp 3: threshold sweep + Pareto front
+         Exp 5: delta update ablation
+
+Week 4:  Exp 4: distance-dependent threshold
+         Exp 6: beamforming rate impact
+         Exp 7: multi-BS generalization
+
+Week 5:  논문 작성
+         Fig/Table 생성
+```
+
+---
+
+## 9. One-Sentence Summary
+
+We decouple mandatory pilot reception from optional CE inference, and propose a 3-tier event-triggered scheduling framework that is CE-algorithm-agnostic; validated on both 5G far-field and 6G near-field ELAA channels, it achieves [X]% computation reduction with less than [Y]% rate loss, where the optimal trigger threshold is shown to be distance-dependent — a phenomenon unique to near-field propagation.

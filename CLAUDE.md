@@ -208,6 +208,7 @@ Backlog item 스키마:
 | `config` | 설정/인프라 | 디렉토리 구조, 환경설정 |
 
 ## 주요 참고 문서
-- 연구 방향/실험 설계: `docs/research_and_experiments.md`
-- Related works: `docs/relworks.md`
+- **FL 논문** (site representation): `docs/fl/research_and_experiments.md`
+- **CE skip 논문** (inference scheduling): `docs/ce-skip/paper_plan.md`
+- Related works (공유): `docs/relworks.md`
 - 데이터셋 스펙: `README.md`
