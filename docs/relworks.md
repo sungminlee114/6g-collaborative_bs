@@ -675,6 +675,7 @@ Cluster L: CE-Skip — Adaptive CE Inference Scheduling (41편 cross-ref)
 4. **Temporal/mobility 포함**: P19, P35, P41, P55, P57, P59, P79, P83, P85, P86, P88 — CE scheduling과 결합한 논문 없음
 5. **FR3 (15 GHz)**: P41, P99b + Ours — 극소수만 FR3 대역 사용
 6. **3.5 GHz baseline**: P58, P83, P103 + Ours — sub-6 GHz 비교 가능
+7. **ULA vs UPA**: ELAA CE 알고리즘 논문 ~70%가 ULA 사용 (P93-P99: polar-domain sparse recovery의 수학적 편의). 그러나 **3GPP TR 38.901은 UPA를 표준으로 정의**, 모든 상용 시스템(Samsung 256TR, Nokia 1024, NVIDIA Aerial)이 UPA. ULA는 학술적 simplification이며 실제 6G 배포는 100% UPA. CE-skip은 UPA (8×8~32×32)를 사용하여 표준/산업과 일치. 상세 분석: `docs/ce-skip/ula_vs_upa_analysis.md`
 
 ---
 
