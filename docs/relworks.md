@@ -7,7 +7,8 @@
 ## Table of Contents
 1. [논문 군집 (Clusters) 및 스토리라인](#1-논문-군집-및-스토리라인)
 2. [논문 요약표](#2-논문-요약표)
-3. [Cluster A: O-RAN / AI-RAN 아키텍처](#cluster-a-o-ran--ai-ran-아키텍처)
+3. [전체 논문 Dataset/Simulation Configuration](#3-전체-논문-datasetsimulation-configuration)
+4. [Cluster A: O-RAN / AI-RAN 아키텍처](#cluster-a-o-ran--ai-ran-아키텍처)
 4. [Cluster B: Edge AI 추론 최적화](#cluster-b-edge-ai-추론-최적화)
 5. [Cluster C: LLM/SLM for 6G Networks](#cluster-c-llmslm-for-6g-networks)
 6. [Cluster D: 협력/분할 추론 (Split & Collaborative Inference)](#cluster-d-협력분할-추론)
@@ -543,6 +544,137 @@ Cluster L: CE-Skip — Adaptive CE Inference Scheduling (41편 cross-ref)
 ---
 
 *Initial analysis: 2026-03-04 | 46 papers analyzed by 8 parallel agents*
+
+---
+
+## 3. 전체 논문 Dataset/Simulation Configuration
+
+> 105편 논문의 시뮬레이션/데이터셋 설정 비교. **Bold** = 본 프로젝트 config(3.5/15/28 GHz, 8×8~32×32 UPA, 256-4096 SC, Munich UMi Sionna RT, 8 BS)와 유사. `-` = 해당 정보 없음 또는 N/A.
+
+### PHY 시뮬레이션 논문 (45편)
+
+| P## | Paper | Antennas | Freq (GHz) | BW (MHz) | SC | Channel | Mobility | Scene | Multi-BS |
+|-----|-------|----------|-----------|---------|-----|---------|----------|-------|----------|
+| P10 | Robust FL CE | CNN input | mmWave | - | 612 | MATLAB 5G CDL | - | 10 SBS + 1 MBS | **11 BS** |
+| P14 | Edge LAM 6G | - | - | - | - | QuaDRiGa 3GPP | - | - | Up to 10 |
+| P19 | Multi-task PHY LLM | 16×8 UPA (128) | 2.4 | 8.64 | 48 | QuaDRiGa UMa NLOS | 10-100 km/h | UMa | 1 |
+| P33 | 6G UM-MIMO Tutorial | Up to 5000 | **30** | - | - | LS/MMSE/OMP | - | Near-field | - |
+| P34 | SSBA | 64×1 ULA | **28** | 50 | 256 CB | DeepMIMO RT | - | Boston5G urban | 1 |
+| P35 | DeepBT | - | mmWave | - | OFDM | Wireless InSite RT | Vehicular | Marseille/Rosslyn | 1 |
+| P36 | MAB Beam Track | URA panels | **28** | 100 | 64 | QuaDRiGa | 1.11 m/s | Urban outdoor | **4 BS** |
+| P37 | VBS Beam Align | 256 ULA BS, 16 UE | 40 | 500 | - | **Sionna RT** | - | Mexia TX urban | 1 |
+| P38 | DL Beamforming | N=6-9 TX | - | 10 | - | Rayleigh | Static | MU-MISO | 1 |
+| P39 | FAS CE | Fluid antenna | - | - | - | Spatial corr. | - | FAS | 1 |
+| P40 | vRAN SIMD | 4×4 MIMO | 5G NR | 15kHz SCS | 720 (60 RB) | 3GPP TDL-C | - | vRAN link-level | 1 |
+| P41 | HW Heterogeneity | **8×8 UPA** | **15** | 0.72 | 24 | **Sionna RT + SUMO** | 9.5 m/s | Urban vehicular | 1 |
+| P49 | FL Coord BF ISAC | 6 TX per BS | - | - | - | Rician (K=3) | Static | 3-cell, 500m | **3 BS** |
+| P50 | PFL BF ISAC | 8T8R per BS | - | - | - | MATLAB RT + Rician | - | Semi-urban 3×3 km | **3 BS** |
+| P52 | Coalition FL CE RIS | - | - | - | - | Cell-free MIMO | - | RIS-aided | Multi-AP |
+| P53 | Sensing-Aided Beam TL | UPA | **28** | - | - | Wireless InSite RT | ~1 m/s | Smart factory | 2 BS |
+| P54 | ProtoBeam | 60 GHz frontend | 60 | - | - | Real I/Q (DeepBeam) | - | Indoor | 1 |
+| P55 | Elastic FL O-RAN | - | - | 5 | - | Porto city traces | Vehicular | Porto city | Multi-BS |
+| P56 | 5G-Adv AI/ML BM | 4×8 UPA (64) | FR2 | - | - | 3GPP SLS UMa | 3-120 km/h | 3GPP eval | 1 |
+| P57 | CRKD Beam KD | - | mmWave | - | 152 beams | CARLA+MATLAB RT | Vehicular | Town10 urban | 1 |
+| P58 | LWM | 32 ant | **3.5/28** | - | 32 | DeepMIMO (15 scenarios) | - | O1/Boston5G/ASU+12 | 1 |
+| P59 | WiFo | 1×4~4×8 UPA | 1.5-**28** | - | 32-128 | QuaDRiGa 3GPP | 0-300 km/h | UMi/UMa/RMa/Indoor | 1 |
+| P60 | WirelessGPT | 4×4 UPA (16) | 2.4-60 | - | 32-114 | Traciverse+**SionnaRT**+DeepMIMO | - | 27 cities, 100+ scen. | 1 |
+| P63 | Compression Site DNN | **8×8 UPA (64)** | 2 | - | - | MATLAB RT (OSM) | - | Montreal urban | 1 |
+| P65 | Universal AE CSI | N_BS × N_UE | - | - | K SC | Autoencoder CSI FB | - | - | 1 |
+| P66 | VQ-VAE CSI | Massive MIMO | - | - | - | VQ-VAE CSI FB | - | - | 1 |
+| P68 | DL CSI FB WiFi Temporal | (8,2,2) | 2.4/5.0 | 20 | 256/64 | DeepMIMO | 0.4-2.8 m/s | Indoor | 1 |
+| P78 | PACE-Net (PSA CE) | 64 TX × 16 RX | - | - | - | Kronecker (exp. corr.) | Static | Synthetic | 1 |
+| P79 | Channelformer | SISO | 2.1 | 1.08 | 72 (6 RB) | 3GPP EPA/EVA/ETU | 0-100 km/h | 3GPP TS36.101 | 1 |
+| P82 | NVIDIA NRX | 2TX×4RX dual-pol | 2.14 | 47.5 | 132 PRBs | 3GPP UMi | 0-8 m/s | **Munich (Sionna RT)** | Site-specific |
+| P83 | Transfer/Meta CE | (2,16) | **3.5** | - | 512 | 3GPP CDL-B/E | 60-120 km/h | Synthetic | 1 |
+| P84 | Domain Adapt CE | SISO | 3.4 | - | 612 (30kHz) | DeepMIMO + MATLAB RT | Static | DeepMIMO O1 + OSM | 1 |
+| P85 | ReQuestNet | 2×2 MIMO | 5G NR | 15/30kHz | 4-272 RBs | 3GPP TDL/CDL | 0-450 Hz Doppler | Synthetic | 1 |
+| P86 | Continual Learning | MIMO | 5.0 | 100 | 18 RBs | QuaDRiGa UMi | 0-60 km/h | UMi cross-cell | Cross-cell |
+| P88 | REAL RL xApps | srsRAN gNB | - | - | - | GNU Radio FSPL+AWGN | 40 km/h | srsRAN testbed | 1 |
+| P93 | XLCNet | 256 ULA | **30** | NB | NB | Hybrid NF+FF | Static | Synthetic NF | 1 |
+| P94 | Deep Unrolling XL-MIMO | 512 ULA / 2048 UPA | 100 | 10,000 | 256 | NF + SnS + beam split | Static | Synthetic NF | 1 |
+| P95 | LLM4XCE | 256 ULA | **30** | NB | NB | Hybrid NF+FF | Static | Synthetic NF | 1 |
+| P96 | NF Beam Training DL | 256 ULA | 50 | NB | NB | NF LoS spherical | Static | Synthetic NF | 1 |
+| P97 | Decentralized CE | 128 ULA (4 sub) | **30** | 1,600 | 16 pilots | NF + dual-WB | Static | Synthetic NF | Sub-array |
+| P98 | Sub-Array ELAA Pilot | 1024 (128 sub) | 2.6 | 15kHz/SC | **1024** | COST2100 SemiUrban | Static* | Semi-urban | Sub-array |
+| P99 | Integrated CE & Sensing | 256/128 ULA | 100/**30** | 100 | 64 | NF spherical CPD/BTD | Static | Synthetic NF | 1 |
+| P99b | NF Beamfocusing MLA | 2×25~4×36 MLA | **15** | NB | NB | NF spherical (Fresnel) | Static | Free-space | 1 |
+| P103 | Site-Specific RIS RT | 2×2/4×8/**4×16 UPA** | 2/**3.5**/10 | 20/100/200 | 1200/3276 | **Sionna RT** (calibrated) | Static | UK city | **12 BS** |
+| P104 | Diff RT vs DL | 10,000+ ant (real) | Various | Various | - | **Sionna RT** vs 5 DL | - | **13 real cities** | **10K+ BS** |
+| P105 | U6G XL-MIMO Radiomap | 2×2~**32×32 UPA** | 1.8-6.7 | SSB BW | Radiomap | **Sionna RT** (800 scenes) | Static | Nanjing urban | 1 |
+| **Ours** | **CE-skip** | **8×8/16×16/32×32 UPA** | **3.5/15/28** | **100-1,600** | **256-4,096** | **Sionna RT** | **0-33 m/s** | **Munich UMi** | **8 BS** |
+
+### Architecture / Survey / Non-PHY 논문 (60편)
+
+| P## | Paper | Category | 비고 |
+|-----|-------|----------|------|
+| P01 | AI-RAN Convergence | O-RAN arch | X5G testbed (A100 GPU) |
+| P02 | dApps | O-RAN arch | Colosseum/Arena testbed, 450μs control loop |
+| P03 | GenAI Open Networks | Edge GenAI | BEACON-5G edge |
+| P04 | MX-AI Agentic | O-RAN LLM | Live O-RAN testbed |
+| P05 | 6G Native-AI Edge | O-RAN arch | Jetson/Xavier + A100 |
+| P06 | AI-Native RAN Operator | O-RAN deploy | Field trial, 31 cities, 5000+ BS |
+| P07 | XAI-on-RAN | XAI | NVIDIA Aerial A100, GPU 63% util |
+| P08 | Self-Learning Model Version | O-RAN ML LCM | O-RAN edge simulation |
+| P09 | Dynamic D2D FL O-RAN | FL O-RAN | D2D + O-RAN framework |
+| P11 | E2E Intelligence 6G | LLM agent | RAN-CN agentic framework |
+| P12 | On-device AI Survey | Survey | - |
+| P13 | Cognitive Edge Computing | Survey | - |
+| P15 | Efficient LAIM Inference | LAIM theory | Information-theoretic analysis |
+| P16 | Energy-Efficient ISCC | Edge inference | ISCC framework |
+| P17 | GenAI on Edge | Edge LLM | RPi5 cluster K3s benchmark |
+| P18 | MIWEN | Edge AI | Ideal AWGN, RF broadcast |
+| P20 | LLM PHY IoT | LLM | SWIPT prompt engineering |
+| P21 | Pushing LLMs 6G Edge | Edge LLM | Vision + deployment |
+| P22 | How Small 6G Reason | SLM | 6G-Bench MCQ benchmark |
+| P23 | TinyLLM | SLM | SBC edge NLP deployment |
+| P24 | LLM-IoT 6G | SLM + FL | Jetson Nano ~ M3 SFL |
+| P25 | Adaptive Layer Split | Split inference | Nakagami-m channel model |
+| P26 | Splitwise | Split inference | Jetson/Galaxy/RPi5 compute |
+| P27 | Hecofer CNN Split | Split inference | Wired LAN 100 Mbps |
+| P28 | MAE DNN Partition | Split inference | Edge-cloud compute |
+| P29 | Event-Triggered Edge AI | Edge inference | Dual-threshold early-exit |
+| P30 | Split Learning 6G | Split learning | Multi-edge framework |
+| P31 | SLIDE | Model delivery | OFDMA edge |
+| P32 | Beam Mgmt Survey | Survey | mmWave/THz comprehensive |
+| P43 | Sionna RT Tech Report | Simulator | SBR + IM ray-tracing |
+| P44 | DeepTelecom DT | Dataset | LoD3 Sionna RT scenes |
+| P45 | SpectrumFM | FM spectrum | Real IQ (RML2018+TechRec) |
+| P46 | Edge ML Survey | Survey | - |
+| P47 | CoMP AI Model Cache | CoMP + AI | Multi-BS model delivery |
+| P48 | Collab Edge AI C-RAN | Edge AI | AirComp Cloud-RAN |
+| P51 | FL ISCC | FL theory | ISCC framework |
+| P61 | Diff RT Learning | Diff RT | Sionna differentiable RT |
+| P62 | AI/ML LCM RAN | Standardization | 3GPP Rel-16~20 |
+| P64 | ISEA Survey | Survey | Integrated sensing + edge AI |
+| P67 | Precoding VQ-VAE CSI | CSI feedback | VQ-VAE precoding-oriented |
+| P69 | ContraWiMAE | FM | Masked + contrastive pre-train |
+| P70 | CSI-MAE | FM | 3GPP masked AE cross-scenario |
+| P71 | Semantic Edge Computing | Semantic comm | Architecture framework |
+| P72 | Dynamic Enc/Dec Split | Split learning | MEC dynamic encoding |
+| P73 | SAFE Semantic Feature | Semantic comm | Rate-controlled feature extraction |
+| P74 | Robust Deep JSCC | Semantic comm | Task-oriented JSCC |
+| P75 | Mobile Edge Generation | Edge GenAI | Distributed generation 6G |
+| P76 | DL Autoencoder Review | Survey | AE for next-gen comm |
+| P77 | AI/ML Beam Mgmt 3GPP | Standardization | 3GPP Rel-18 beam management |
+| P80 | ANFR FL | Vision FL | CIFAR-10 channel attention |
+| P81 | FedAttn Distributed LLM | LLM inference | Federated attention mechanism |
+| P87 | Distributed AI Platform 6G | O-RAN arch | Microsoft far-edge <1ms |
+| P89 | XL-MIMO Tutorial NF | Tutorial | Near-field fundamentals |
+| P90 | NF CE 6G Survey | Survey | Comprehensive NF CE survey |
+| P91 | NF Beam Training Survey | Survey | XL-MIMO beam + CE survey |
+| P92 | Distributed SP ELAA | Survey | ELAA distributed processing |
+| P100 | Fast Diff GPU RT | Diff RT method | Implicit differentiation |
+| P101 | Fully Diff RT | Diff RT method | Discontinuity smoothing |
+| P102 | VLM-Guided Diff RT | Diff RT calibration | VLM + Sionna RT |
+
+### 주요 관찰
+
+1. **Sionna RT 사용**: P37, P41, P60, P82, P103, P104, P105 + Ours (8편) — 본 프로젝트가 유일하게 **Munich UMi + ELAA + temporal + multi-frequency** 조합
+2. **Multi-BS 설정**: P10 (11), P36 (4), P49 (3), P50 (3), P103 (12), P104 (10K+) + Ours (8) — 대부분 single-BS; multi-BS CE 연구는 희귀
+3. **ELAA-scale antennas (≥256)**: P34, P37, P93-P99, P105 + Ours — 모두 static channel 가정 (temporal gap)
+4. **Temporal/mobility 포함**: P19, P35, P41, P55, P57, P59, P79, P83, P85, P86, P88 — CE scheduling과 결합한 논문 없음
+5. **FR3 (15 GHz)**: P41, P99b + Ours — 극소수만 FR3 대역 사용
+6. **3.5 GHz baseline**: P58, P83, P103 + Ours — sub-6 GHz 비교 가능
 
 ---
 
