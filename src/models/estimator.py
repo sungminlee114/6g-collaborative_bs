@@ -5,6 +5,7 @@ Site embedding integration variants: FiLM, concat, add, none.
 """
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from typing import Literal
 
 
@@ -27,11 +28,11 @@ class ResBlock2D(nn.Module):
         return self.relu(x + self.block(x))
 
 
-class PACENetBlock2D(nn.Module):
-    """ResBlock + Squeeze-and-Excitation channel attention for channel estimation.
+class SEResBlock2D(nn.Module):
+    """ResBlock + Squeeze-and-Excitation channel attention (Hu et al., CVPR 2018).
 
-    PACE-Net (Yang et al., Entropy 2025) applies SE attention (Hu et al., CVPR 2018)
-    to wireless channel estimation. Same interface as ResBlock2D — drop-in replacement.
+    Standard SE: global avg pool → FC → ReLU → FC → Sigmoid → channel reweighting.
+    Same interface as ResBlock2D — drop-in replacement.
     """
 
     def __init__(self, channels: int, kernel_size: int = 3, reduction: int = 4):
@@ -59,6 +60,78 @@ class PACENetBlock2D(nn.Module):
         out = self.block(x)
         w = self.se(out).unsqueeze(-1).unsqueeze(-1)
         return self.relu(x + out * w)
+
+
+class PolarizedSelfAttention(nn.Module):
+    """Polarized Self-Attention — parallel layout (Liu et al., arXiv:2107.00782).
+
+    Two orthogonal branches:
+      - Channel-only SA: collapses spatial dims via softmax, produces (C,1,1) weight
+      - Spatial-only SA: collapses channel dims via global pool, produces (1,H,W) weight
+    Output = channel_branch + spatial_branch (element-wise sum).
+    """
+
+    def __init__(self, channels: int):
+        super().__init__()
+        mid = max(channels // 2, 1)
+        # Channel-only branch
+        self.ch_q = nn.Conv2d(channels, mid, 1)
+        self.ch_k = nn.Conv2d(channels, 1, 1)
+        self.ch_v = nn.Conv2d(mid, channels, 1)
+        self.ch_ln = nn.LayerNorm(channels)
+        # Spatial-only branch
+        self.sp_q = nn.Conv2d(channels, mid, 1)
+        self.sp_k = nn.Conv2d(channels, mid, 1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        B, C, H, W = x.shape
+        mid = self.ch_q.out_channels
+
+        # === Channel-only Self-Attention ===
+        q = self.ch_q(x).reshape(B, mid, H * W)           # B, C/2, HW
+        k = F.softmax(self.ch_k(x).reshape(B, H * W, 1), dim=1)  # B, HW, 1
+        a = torch.bmm(q, k)                                # B, C/2, 1
+        a = self.ch_v(a.unsqueeze(-1)).squeeze(-1).squeeze(-1)  # B, C
+        ch_attn = torch.sigmoid(self.ch_ln(a)).unsqueeze(-1).unsqueeze(-1)  # B, C, 1, 1
+        ch_out = x * ch_attn
+
+        # === Spatial-only Self-Attention ===
+        q = self.sp_q(x).reshape(B, mid, H * W)            # B, C/2, HW
+        k = F.adaptive_avg_pool2d(self.sp_k(x), 1)         # B, C/2, 1, 1
+        k = F.softmax(k.reshape(B, 1, mid), dim=2)         # B, 1, C/2
+        a = torch.bmm(k, q).reshape(B, 1, H, W)            # B, 1, HW → B, 1, H, W
+        sp_out = x * torch.sigmoid(a)
+
+        return ch_out + sp_out
+
+
+class PACENetBlock2D(nn.Module):
+    """PACE-Net block (Yang et al., Entropy 2025) for channel estimation.
+
+    Faithful to the paper architecture (Figure 3):
+      - Asymmetric convolutions: 1×K then K×1 (factorized, paper's hidden layers)
+      - LeakyReLU (α=0.08): preserves negative channel values (paper Section 4.2)
+      - Dropout instead of BatchNorm: paper shows ~3 dB gain (Figure 14)
+      - PSA (Polarized Self-Attention): channel + spatial dual attention (Figures 5-6)
+    Same interface as ResBlock2D — drop-in replacement.
+    """
+
+    def __init__(self, channels: int, kernel_size: int = 3, dropout: float = 0.1):
+        super().__init__()
+        self.block = nn.Sequential(
+            nn.Conv2d(channels, channels, (1, kernel_size), padding=(0, kernel_size // 2)),
+            nn.LeakyReLU(0.08, inplace=True),
+            nn.Dropout2d(dropout),
+            nn.Conv2d(channels, channels, (kernel_size, 1), padding=(kernel_size // 2, 0)),
+            nn.LeakyReLU(0.08, inplace=True),
+            nn.Dropout2d(dropout),
+        )
+        self.psa = PolarizedSelfAttention(channels)
+        self.act = nn.LeakyReLU(0.08, inplace=True)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out = self.psa(self.block(x))
+        return self.act(x + out)
 
 
 class DWSResBlock2D(nn.Module):
@@ -90,6 +163,7 @@ class DWSResBlock2D(nn.Module):
 
 BLOCK_REGISTRY = {
     "resnet": ResBlock2D,
+    "se_resnet": SEResBlock2D,
     "pacenet": PACENetBlock2D,
     "dws_resnet": DWSResBlock2D,
 }

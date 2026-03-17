@@ -268,8 +268,8 @@ CONFIGS["B_lora_c128"]         = _cfg_big(0, "lora", "all", "all_except_adapter"
 
 # ══ Backbone comparison (backbone-agnostic claim) ══
 # For each backbone: FedAvg, Independent, Ours (LoRA+FedPer)
-for _bb in ("pacenet", "dws_resnet"):
-    _tag = _bb.replace("_resnet", "")  # "se" or "dws"
+# se_resnet = SE attention (Hu et al.), pacenet = PSA (Yang et al., Entropy 2025), dws = depthwise-sep
+for _bb, _tag in [("se_resnet", "se"), ("pacenet", "psa"), ("dws_resnet", "dws")]:
     CONFIGS[f"A_fedavg_{_tag}"]     = _cfg(3, "none", "none", "all_except_adapter", block_type=_bb)
     CONFIGS[f"A_indep_{_tag}"]      = _cfg(3, "none", "none", "none", block_type=_bb)
     CONFIGS[f"A_lora_E_fpE_{_tag}"] = _cfg(3, "lora", "encoder", "encoder_only", block_type=_bb)
@@ -325,7 +325,7 @@ def train_config(config_name: str, gpu: int,
         variables={
             "independent": ["structure (A/B)", "adapter (ssf/lora/none)",
                             "placement (E/T/ET)", "sharing (all/encoder_only/none)",
-                            "backbone (resnet/pacenet/dws)", "dataset (uma/umi)"],
+                            "backbone (resnet/se_resnet/pacenet_psa/dws)", "dataset (uma/umi)"],
             "dependent": ["avg_nmse_db", "per-BS nmse_db (pretrain vs test)"],
             "controlled": ["fl_rounds=50", "local_epochs=5", "lr=1e-3", "C=64"],
         },
