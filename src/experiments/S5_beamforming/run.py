@@ -27,9 +27,8 @@ from src.ce_skip.metrics import (
 )
 
 PRIMARY_PRESETS = [
-    "munich_elaa_l_1k_15g",
-    "munich_elaa_l_4k_28g",
-    "munich_5g_mimo_3g5",
+    "munich_elaa_s_1k_15g",   # 15 GHz, 16×16, 1024 SC
+    "munich_mimo_15g",        # 15 GHz, 8×8, 1024 SC (FF baseline)
 ]
 
 SNR_LIST = [10.0, 15.0, 20.0, 25.0]

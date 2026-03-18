@@ -27,9 +27,8 @@ from src.ce_skip.temporal_dataset import TemporalChannelData
 
 # ─── Configs ────────────────────────────────────────────────────────
 PRIMARY_PRESETS = [
-    "munich_elaa_l_1k_15g",   # Config A: 15 GHz, 32×32, 1024 SC
-    "munich_elaa_l_4k_28g",   # Config B: 28 GHz, 32×32, 4096 SC
-    "munich_5g_mimo_3g5",     # Config C: 3.5 GHz, 8×8, 256 SC
+    "munich_elaa_s_1k_15g",   # Config A: 15 GHz, 16×16, 1024 SC
+    "munich_mimo_15g",        # Config B: 15 GHz, 8×8, 1024 SC (FF baseline)
 ]
 
 SPEED_LABELS = {0.0: "static", 1.0: "pedestrian", 8.3: "low_vehicle"}

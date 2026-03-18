@@ -22,9 +22,8 @@ from src.ce_skip.scheduling import adaptive_ce_scheduling
 from src.ce_skip.metrics import nmse_per_slot, rate_preservation_ratio
 
 PRIMARY_PRESETS = [
-    "munich_elaa_l_1k_15g",
-    "munich_elaa_l_4k_28g",
-    "munich_5g_mimo_3g5",
+    "munich_elaa_s_1k_15g",   # 15 GHz, 16×16, 1024 SC
+    "munich_mimo_15g",        # 15 GHz, 8×8, 1024 SC (FF baseline)
 ]
 
 

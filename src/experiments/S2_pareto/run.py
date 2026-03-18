@@ -28,9 +28,8 @@ from src.dataset_operation.dataset import ChannelEstimationDataset
 from src.dataset_operation.utils import complex_to_real
 
 PRIMARY_PRESETS = [
-    "munich_elaa_l_1k_15g",
-    "munich_elaa_l_4k_28g",
-    "munich_5g_mimo_3g5",
+    "munich_elaa_s_1k_15g",   # 15 GHz, 16×16, 1024 SC
+    "munich_mimo_15g",        # 15 GHz, 8×8, 1024 SC (FF baseline)
 ]
 
 # CE profiling times (ms) — will be overridden by S1 results if available

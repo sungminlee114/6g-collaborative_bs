@@ -27,9 +27,8 @@ from src.ce_skip.metrics import nmse_per_slot, rate_preservation_ratio
 
 
 PRIMARY_PRESETS = [
-    "munich_elaa_l_1k_15g",   # R_Rayleigh ≈ 20.5m
-    "munich_elaa_l_4k_28g",   # R_Rayleigh ≈ 10.9m
-    "munich_5g_mimo_3g5",     # R_Rayleigh ≈ 0.5m (all FF)
+    "munich_elaa_s_1k_15g",   # R_Rayleigh ≈ 5.1m (16×16, 15GHz)
+    "munich_mimo_15g",        # R_Rayleigh ≈ 1.3m (8×8, 15GHz — mostly FF)
 ]
 
 
