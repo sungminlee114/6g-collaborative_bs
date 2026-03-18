@@ -677,6 +677,39 @@ Cluster L: CE-Skip — Adaptive CE Inference Scheduling (41편 cross-ref)
 6. **3.5 GHz baseline**: P58, P83, P103 + Ours — sub-6 GHz 비교 가능
 7. **ULA vs UPA**: ELAA CE 알고리즘 논문 ~70%가 ULA 사용 (P93-P99: polar-domain sparse recovery의 수학적 편의). 그러나 **3GPP TR 38.901은 UPA를 표준으로 정의**, 모든 상용 시스템(Samsung 256TR, Nokia 1024, NVIDIA Aerial)이 UPA. ULA는 학술적 simplification이며 실제 6G 배포는 100% UPA. CE-skip은 UPA (8×8~32×32)를 사용하여 표준/산업과 일치. 상세 분석: `docs/ce-skip/ula_vs_upa_analysis.md`
 
+   **UPA 사용 논문 (M×N):**
+
+   | Paper | Config | Total | 비고 |
+   |-------|--------|-------|------|
+   | P41 (HW Heterogeneity) | 8×8 | 64 | Beam mgmt, **15 GHz** Sionna RT |
+   | P56 (5G-Adv BM) | 4×8 | 64 | 3GPP eval (dual-pol로 64) |
+   | P63 (Compression Site DNN) | 8×8 | 64 | Site-specific, 2 GHz |
+   | P19 (Multi-task PHY LLM) | 16×8 | 128 | Multi-task, QuaDRiGa |
+   | P60 (WirelessGPT) | 4×4 | 16 | FM pre-train, Sionna RT |
+   | P59 (WiFo) | 1×4 ~ 4×8 | 4~32 | Variable, QuaDRiGa |
+   | P78 (PACE-Net) | 64 TX × 16 RX | 64×16 | DL-CE, Kronecker synthetic |
+   | P53 (Sensing-Aided BM TL) | UPA (크기 미상) | - | 28 GHz RT |
+   | P103 (Site-Specific RIS) | 2×2 / 4×8 / 4×16 | 4~64 | Sionna RT calibrated |
+   | P94 (Deep Unrolling) | 256×8 | 2048 | ELAA (UPA mode), synthetic NF |
+   | P105 (U6G Radiomap) | 2×2 ~ 32×32 | 4~1024 | Sionna RT, 800 scenes |
+   | **Ours (CE-skip)** | **8×8 / 16×16 / 32×32** | **64~1024** | **Sionna RT, Munich UMi, 8 BS** |
+
+   **ULA 사용 논문 (1D, 참고):**
+
+   | Paper | Config | Total | 비고 |
+   |-------|--------|-------|------|
+   | P34 (SSBA) | 64×1 | 64 | DeepMIMO RT |
+   | P37 (VBS Beam Align) | 256×1 | 256 | Sionna RT |
+   | P93 (XLCNet) | 256×1 | 256 | Hybrid NF+FF |
+   | P94 (Deep Unrolling) | 512×1 | 512 | (ULA mode) |
+   | P95 (LLM4XCE) | 256×1 | 256 | GPT-2 backbone |
+   | P96 (NF Beam Training) | 256×1 | 256 | NF LoS spherical |
+   | P97 (Decentralized CE) | 128×1 (4 sub) | 128 | Sub-array |
+   | P99 (ISAC NF) | 256/128×1 | 128~256 | NF spherical |
+   | P99b (NF Beamfocusing MLA) | 2×25 ~ 4×36 | 50~144 | Modular array, 15 GHz |
+
+   **요약**: 가장 흔한 UPA는 **8×8 (64)** — 4편 동일 설정. 가장 큰 UPA는 P94의 256×8 (2048)과 P105의 32×32 (1024). 우리 설정 16×16~32×32 (256~1024)는 대부분 논문(8×8=64)보다 큰 ELAA 스케일을 커버하며, P78(유사)·P105(동일 스케일)만 비교 가능.
+
 ---
 
 ## 4. 추가 발굴 논문 (18편, 웹서치 기반)
