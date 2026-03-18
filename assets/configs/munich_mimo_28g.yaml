@@ -1,15 +1,16 @@
-# Munich ELAA Small — 256 elements, 4096 SC, 15 GHz (FR3)
-# 8-BS UMi focused area (400x350m), split: 2 train / 2 val / 4 test
+# Munich mMIMO Baseline — 64 elements (8x8 UPA), 1024 SC, 28 GHz (FR2)
+# Comparable to majority of literature (P41, P56, P63, P70)
+# Same 8-BS UMi layout as ELAA configs for fair comparison
 
 scene_name: munich
-deployment: elaa_s
-frequency: 15000000000.0
-bandwidth: 1600000000.0
-num_subcarriers: 4096
+deployment: mimo_28g
+frequency: 28000000000.0
+bandwidth: 100000000.0
+num_subcarriers: 1024
 guard_band_ratio: 0.1
 temperature: 293.0
-tx_rows: 16
-tx_cols: 16
+tx_rows: 8
+tx_cols: 8
 tx_polarization: V
 rx_rows: 1
 rx_cols: 1
@@ -60,7 +61,7 @@ ue_device_types:
 - - 2
   - 2
   - V
-data_dir: assets/data/channels_elaa_s_4k_15g
+data_dir: assets/data/channels_mimo_28g
 num_snapshots: 100
 train_bs_ids:
 - 0
