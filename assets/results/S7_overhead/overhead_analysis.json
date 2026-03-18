@@ -1,0 +1,614 @@
+{
+  "munich_elaa_s_1k_15g": {
+    "n_ant": 512,
+    "n_sc": 1024,
+    "components": {
+      "ls_estimate": {
+        "time_ms": 0.0253439998626709,
+        "desc": "Y/X element-wise"
+      },
+      "monitor": {
+        "time_ms": 0.06892543792724609,
+        "desc": "\u03b4 = norm(diff)/norm(ref)"
+      },
+      "ema_update": {
+        "time_ms": 0.038932480812072755,
+        "desc": "\u03b1\u00b7h_LS + (1-\u03b1)\u00b7\u0125_prev"
+      },
+      "full_ce_lmmse": {
+        "time_ms": 0.08851455688476563,
+        "desc": "Genie-LMMSE"
+      },
+      "full_ce_dlce": {
+        "time_ms": 31.18033935546875,
+        "desc": "DL-CE ResNet (8 blocks)"
+      }
+    },
+    "overhead": {
+      "ls": {
+        "t_fixed_ms": 0.09426943778991699,
+        "t_full_ce_ms": 0.0253439998626709,
+        "overhead_pct": 371.95958925475753
+      },
+      "lmmse": {
+        "t_fixed_ms": 0.09426943778991699,
+        "t_full_ce_ms": 0.08851455688476563,
+        "overhead_pct": 106.50162087196964
+      },
+      "dl_ce": {
+        "t_fixed_ms": 0.09426943778991699,
+        "t_full_ce_ms": 31.18033935546875,
+        "overhead_pct": 0.3023361507237188
+      }
+    },
+    "memory": {
+      "bytes": 8388608,
+      "mb": 8.0,
+      "desc": "h_LS(t-1) + \u0125(t-1), float32"
+    },
+    "effective_throughput": {
+      "snr10_tau0.1_lmmse": {
+        "per_ue_rate_factor": 0.812463441491127,
+        "per_ue_rate_loss_pct": 18.753655850887295,
+        "capacity_multiplier": 0.9840059164880491,
+        "system_throughput_gain": 0.799468833357511,
+        "skip_rate": 0.25,
+        "computation_ratio": 1.0162540521799241
+      },
+      "snr10_tau0.1_dl_ce": {
+        "per_ue_rate_factor": 0.812463441491127,
+        "per_ue_rate_loss_pct": 18.753655850887295,
+        "capacity_multiplier": 1.3319909699245143,
+        "system_throughput_gain": 1.0821939674599752,
+        "skip_rate": 0.25,
+        "computation_ratio": 0.7507558403768093
+      },
+      "snr10_tau0.2_lmmse": {
+        "per_ue_rate_factor": 0.8124167740345001,
+        "per_ue_rate_loss_pct": 18.75832259654999,
+        "capacity_multiplier": 0.96851540029315,
+        "system_throughput_gain": 0.7868381571088934,
+        "skip_rate": 0.5,
+        "computation_ratio": 1.0325081043598483
+      },
+      "snr10_tau0.2_dl_ce": {
+        "per_ue_rate_factor": 0.8124167740345001,
+        "per_ue_rate_loss_pct": 18.75832259654999,
+        "capacity_multiplier": 1.9939715033103635,
+        "system_throughput_gain": 1.619935896236128,
+        "skip_rate": 0.5,
+        "computation_ratio": 0.5015116807536186
+      },
+      "snr10_tau0.3_lmmse": {
+        "per_ue_rate_factor": 0.8463920831680298,
+        "per_ue_rate_loss_pct": 15.360791683197018,
+        "capacity_multiplier": 0.9535050380720683,
+        "system_throughput_gain": 0.8070391154850295,
+        "skip_rate": 0.75,
+        "computation_ratio": 1.0487621565397722
+      },
+      "snr10_tau0.3_dl_ce": {
+        "per_ue_rate_factor": 0.8463920831680298,
+        "per_ue_rate_loss_pct": 15.360791683197018,
+        "capacity_multiplier": 3.9640457698198013,
+        "system_throughput_gain": 3.355136956891198,
+        "skip_rate": 0.75,
+        "computation_ratio": 0.2522675211304279
+      },
+      "snr10_tau0.5_lmmse": {
+        "per_ue_rate_factor": 0.7779843389987946,
+        "per_ue_rate_loss_pct": 22.20156610012054,
+        "capacity_multiplier": 0.9418276406600251,
+        "system_throughput_gain": 0.7327271544696838,
+        "skip_rate": 0.95,
+        "computation_ratio": 1.0617653982837116
+      },
+      "snr10_tau0.5_dl_ce": {
+        "per_ue_rate_factor": 0.7779843389987946,
+        "per_ue_rate_loss_pct": 22.20156610012054,
+        "capacity_multiplier": 18.91353346799348,
+        "system_throughput_gain": 14.714432833228487,
+        "skip_rate": 0.95,
+        "computation_ratio": 0.052872193431875374
+      },
+      "snr15_tau0.1_lmmse": {
+        "per_ue_rate_factor": 0.9134700298309326,
+        "per_ue_rate_loss_pct": 8.652997016906738,
+        "capacity_multiplier": 0.9840059164880491,
+        "system_throughput_gain": 0.8988599138881525,
+        "skip_rate": 0.25,
+        "computation_ratio": 1.0162540521799241
+      },
+      "snr15_tau0.1_dl_ce": {
+        "per_ue_rate_factor": 0.9134700298309326,
+        "per_ue_rate_loss_pct": 8.652997016906738,
+        "capacity_multiplier": 1.3319909699245143,
+        "system_throughput_gain": 1.216733831031479,
+        "skip_rate": 0.25,
+        "computation_ratio": 0.7507558403768093
+      },
+      "snr15_tau0.2_lmmse": {
+        "per_ue_rate_factor": 0.9262577950954437,
+        "per_ue_rate_loss_pct": 7.374220490455629,
+        "capacity_multiplier": 0.96851540029315,
+        "system_throughput_gain": 0.8970949391915142,
+        "skip_rate": 0.5,
+        "computation_ratio": 1.0325081043598483
+      },
+      "snr15_tau0.2_dl_ce": {
+        "per_ue_rate_factor": 0.9262577950954437,
+        "per_ue_rate_loss_pct": 7.374220490455629,
+        "capacity_multiplier": 1.9939715033103635,
+        "system_throughput_gain": 1.8469316481394045,
+        "skip_rate": 0.5,
+        "computation_ratio": 0.5015116807536186
+      },
+      "snr15_tau0.3_lmmse": {
+        "per_ue_rate_factor": 0.8702587530016899,
+        "per_ue_rate_loss_pct": 12.974124699831012,
+        "capacity_multiplier": 0.9535050380720683,
+        "system_throughput_gain": 0.829796105413427,
+        "skip_rate": 0.75,
+        "computation_ratio": 1.0487621565397722
+      },
+      "snr15_tau0.3_dl_ce": {
+        "per_ue_rate_factor": 0.8702587530016899,
+        "per_ue_rate_loss_pct": 12.974124699831012,
+        "capacity_multiplier": 3.9640457698198013,
+        "system_throughput_gain": 3.449745528485004,
+        "skip_rate": 0.75,
+        "computation_ratio": 0.2522675211304279
+      },
+      "snr15_tau0.5_lmmse": {
+        "per_ue_rate_factor": 0.8762890875339509,
+        "per_ue_rate_loss_pct": 12.371091246604916,
+        "capacity_multiplier": 0.9418276406600251,
+        "system_throughput_gain": 0.8253132838482271,
+        "skip_rate": 0.95,
+        "computation_ratio": 1.0617653982837116
+      },
+      "snr15_tau0.5_dl_ce": {
+        "per_ue_rate_factor": 0.8762890875339509,
+        "per_ue_rate_loss_pct": 12.371091246604916,
+        "capacity_multiplier": 18.91353346799348,
+        "system_throughput_gain": 16.573722984710848,
+        "skip_rate": 0.95,
+        "computation_ratio": 0.052872193431875374
+      },
+      "snr20_tau0.1_lmmse": {
+        "per_ue_rate_factor": 0.9917223423719406,
+        "per_ue_rate_loss_pct": 0.8277657628059432,
+        "capacity_multiplier": 0.9840059164880491,
+        "system_throughput_gain": 0.9758606524073762,
+        "skip_rate": 0.25,
+        "computation_ratio": 1.0162540521799241
+      },
+      "snr20_tau0.1_dl_ce": {
+        "per_ue_rate_factor": 0.9917223423719406,
+        "per_ue_rate_loss_pct": 0.8277657628059432,
+        "capacity_multiplier": 1.3319909699245143,
+        "system_throughput_gain": 1.3209652047118123,
+        "skip_rate": 0.25,
+        "computation_ratio": 0.7507558403768093
+      },
+      "snr20_tau0.2_lmmse": {
+        "per_ue_rate_factor": 0.974673056602478,
+        "per_ue_rate_loss_pct": 2.532694339752195,
+        "capacity_multiplier": 0.96851540029315,
+        "system_throughput_gain": 0.9439858655702971,
+        "skip_rate": 0.5,
+        "computation_ratio": 1.0325081043598483
+      },
+      "snr20_tau0.2_dl_ce": {
+        "per_ue_rate_factor": 0.974673056602478,
+        "per_ue_rate_loss_pct": 2.532694339752195,
+        "capacity_multiplier": 1.9939715033103635,
+        "system_throughput_gain": 1.9434702999097502,
+        "skip_rate": 0.5,
+        "computation_ratio": 0.5015116807536186
+      },
+      "snr20_tau0.3_lmmse": {
+        "per_ue_rate_factor": 0.9762473255395889,
+        "per_ue_rate_loss_pct": 2.375267446041107,
+        "capacity_multiplier": 0.9535050380720683,
+        "system_throughput_gain": 0.9308567433063806,
+        "skip_rate": 0.75,
+        "computation_ratio": 1.0487621565397722
+      },
+      "snr20_tau0.3_dl_ce": {
+        "per_ue_rate_factor": 0.9762473255395889,
+        "per_ue_rate_loss_pct": 2.375267446041107,
+        "capacity_multiplier": 3.9640457698198013,
+        "system_throughput_gain": 3.869889081103102,
+        "skip_rate": 0.75,
+        "computation_ratio": 0.2522675211304279
+      },
+      "snr20_tau0.5_lmmse": {
+        "per_ue_rate_factor": 0.9588631093502045,
+        "per_ue_rate_loss_pct": 4.113689064979553,
+        "capacity_multiplier": 0.9418276406600251,
+        "system_throughput_gain": 0.9030837799952387,
+        "skip_rate": 0.95,
+        "computation_ratio": 1.0617653982837116
+      },
+      "snr20_tau0.5_dl_ce": {
+        "per_ue_rate_factor": 0.9588631093502045,
+        "per_ue_rate_loss_pct": 4.113689064979553,
+        "capacity_multiplier": 18.91353346799348,
+        "system_throughput_gain": 18.135489509919385,
+        "skip_rate": 0.95,
+        "computation_ratio": 0.052872193431875374
+      },
+      "snr25_tau0.1_lmmse": {
+        "per_ue_rate_factor": 0.9930621922016144,
+        "per_ue_rate_loss_pct": 0.6937807798385598,
+        "capacity_multiplier": 0.9840059164880491,
+        "system_throughput_gain": 0.9771790725669808,
+        "skip_rate": 0.25,
+        "computation_ratio": 1.0162540521799241
+      },
+      "snr25_tau0.1_dl_ce": {
+        "per_ue_rate_factor": 0.9930621922016144,
+        "per_ue_rate_loss_pct": 0.6937807798385598,
+        "capacity_multiplier": 1.3319909699245143,
+        "system_throughput_gain": 1.3227498725859927,
+        "skip_rate": 0.25,
+        "computation_ratio": 0.7507558403768093
+      },
+      "snr25_tau0.2_lmmse": {
+        "per_ue_rate_factor": 0.9868598073720932,
+        "per_ue_rate_loss_pct": 1.3140192627906777,
+        "capacity_multiplier": 0.96851540029315,
+        "system_throughput_gain": 0.9557889213702038,
+        "skip_rate": 0.5,
+        "computation_ratio": 1.0325081043598483
+      },
+      "snr25_tau0.2_dl_ce": {
+        "per_ue_rate_factor": 0.9868598073720932,
+        "per_ue_rate_loss_pct": 1.3140192627906777,
+        "capacity_multiplier": 1.9939715033103635,
+        "system_throughput_gain": 1.9677703336623085,
+        "skip_rate": 0.5,
+        "computation_ratio": 0.5015116807536186
+      },
+      "snr25_tau0.3_lmmse": {
+        "per_ue_rate_factor": 0.9851552486419678,
+        "per_ue_rate_loss_pct": 1.4844751358032204,
+        "capacity_multiplier": 0.9535050380720683,
+        "system_throughput_gain": 0.9393504928632574,
+        "skip_rate": 0.75,
+        "computation_ratio": 1.0487621565397722
+      },
+      "snr25_tau0.3_dl_ce": {
+        "per_ue_rate_factor": 0.9851552486419678,
+        "per_ue_rate_loss_pct": 1.4844751358032204,
+        "capacity_multiplier": 3.9640457698198013,
+        "system_throughput_gain": 3.905200495994967,
+        "skip_rate": 0.75,
+        "computation_ratio": 0.2522675211304279
+      },
+      "snr25_tau0.5_lmmse": {
+        "per_ue_rate_factor": 0.9665727466344833,
+        "per_ue_rate_loss_pct": 3.3427253365516663,
+        "capacity_multiplier": 0.9418276406600251,
+        "system_throughput_gain": 0.9103449294890357,
+        "skip_rate": 0.95,
+        "computation_ratio": 1.0617653982837116
+      },
+      "snr25_tau0.5_dl_ce": {
+        "per_ue_rate_factor": 0.9665727466344833,
+        "per_ue_rate_loss_pct": 3.3427253365516663,
+        "capacity_multiplier": 18.91353346799348,
+        "system_throughput_gain": 18.281305992721684,
+        "skip_rate": 0.95,
+        "computation_ratio": 0.052872193431875374
+      }
+    }
+  },
+  "munich_mimo_15g": {
+    "n_ant": 128,
+    "n_sc": 1024,
+    "components": {
+      "ls_estimate": {
+        "time_ms": 0.013199360370635986,
+        "desc": "Y/X element-wise"
+      },
+      "monitor": {
+        "time_ms": 0.045404157638549804,
+        "desc": "\u03b4 = norm(diff)/norm(ref)"
+      },
+      "ema_update": {
+        "time_ms": 0.01947648048400879,
+        "desc": "\u03b1\u00b7h_LS + (1-\u03b1)\u00b7\u0125_prev"
+      },
+      "full_ce_lmmse": {
+        "time_ms": 20.50291748046875,
+        "desc": "Genie-LMMSE"
+      },
+      "full_ce_dlce": {
+        "time_ms": 7.860950927734375,
+        "desc": "DL-CE ResNet (8 blocks)"
+      }
+    },
+    "overhead": {
+      "ls": {
+        "t_fixed_ms": 0.05860351800918579,
+        "t_full_ce_ms": 0.013199360370635986,
+        "overhead_pct": 443.98755972719977
+      },
+      "lmmse": {
+        "t_fixed_ms": 0.05860351800918579,
+        "t_full_ce_ms": 20.50291748046875,
+        "overhead_pct": 0.28583014132019013
+      },
+      "dl_ce": {
+        "t_fixed_ms": 0.05860351800918579,
+        "t_full_ce_ms": 7.860950927734375,
+        "overhead_pct": 0.7455016390246829
+      }
+    },
+    "memory": {
+      "bytes": 2097152,
+      "mb": 2.0,
+      "desc": "h_LS(t-1) + \u0125(t-1), float32"
+    },
+    "effective_throughput": {
+      "snr10_tau0.1_lmmse": {
+        "per_ue_rate_factor": 0.6177536904811859,
+        "per_ue_rate_loss_pct": 38.22463095188141,
+        "capacity_multiplier": 1.3320641863512257,
+        "system_throughput_gain": 0.8228875670762879,
+        "skip_rate": 0.25,
+        "computation_ratio": 0.7507145753533004
+      },
+      "snr10_tau0.1_dl_ce": {
+        "per_ue_rate_factor": 0.6177536904811859,
+        "per_ue_rate_loss_pct": 38.22463095188141,
+        "capacity_multiplier": 1.3300282059749886,
+        "system_throughput_gain": 0.82162983268512,
+        "skip_rate": 0.25,
+        "computation_ratio": 0.7518637540975617
+      },
+      "snr10_tau0.2_lmmse": {
+        "per_ue_rate_factor": 0.6174999192357064,
+        "per_ue_rate_loss_pct": 38.25000807642937,
+        "capacity_multiplier": 1.9942996903766481,
+        "system_throughput_gain": 1.2314798977393744,
+        "skip_rate": 0.5,
+        "computation_ratio": 0.501429150706601
+      },
+      "snr10_tau0.2_dl_ce": {
+        "per_ue_rate_factor": 0.6174999192357064,
+        "per_ue_rate_loss_pct": 38.25000807642937,
+        "capacity_multiplier": 1.9852002992313076,
+        "system_throughput_gain": 1.2258610244420325,
+        "skip_rate": 0.5,
+        "computation_ratio": 0.5037275081951235
+      },
+      "snr10_tau0.3_lmmse": {
+        "per_ue_rate_factor": 0.6722546547651291,
+        "per_ue_rate_loss_pct": 32.774534523487084,
+        "capacity_multiplier": 3.965991998398689,
+        "system_throughput_gain": 2.666156581684775,
+        "skip_rate": 0.75,
+        "computation_ratio": 0.25214372605990143
+      },
+      "snr10_tau0.3_dl_ce": {
+        "per_ue_rate_factor": 0.6722546547651291,
+        "per_ue_rate_loss_pct": 32.774534523487084,
+        "capacity_multiplier": 3.9124968163225797,
+        "system_throughput_gain": 2.6301941965266025,
+        "skip_rate": 0.75,
+        "computation_ratio": 0.25559126229268514
+      },
+      "snr10_tau0.5_lmmse": {
+        "per_ue_rate_factor": 0.6079607397317887,
+        "per_ue_rate_loss_pct": 39.20392602682114,
+        "capacity_multiplier": 18.969793629170272,
+        "system_throughput_gain": 11.532889767349731,
+        "skip_rate": 0.95,
+        "computation_ratio": 0.05271538634254185
+      },
+      "snr10_tau0.5_dl_ce": {
+        "per_ue_rate_factor": 0.6079607397317887,
+        "per_ue_rate_loss_pct": 39.20392602682114,
+        "capacity_multiplier": 17.51857586592865,
+        "system_throughput_gain": 10.650606342497442,
+        "skip_rate": 0.95,
+        "computation_ratio": 0.057082265570734536
+      },
+      "snr15_tau0.1_lmmse": {
+        "per_ue_rate_factor": 0.8074646472930909,
+        "per_ue_rate_loss_pct": 19.253535270690914,
+        "capacity_multiplier": 1.3320641863512257,
+        "system_throughput_gain": 1.0755947384038504,
+        "skip_rate": 0.25,
+        "computation_ratio": 0.7507145753533004
+      },
+      "snr15_tau0.1_dl_ce": {
+        "per_ue_rate_factor": 0.8074646472930909,
+        "per_ue_rate_loss_pct": 19.253535270690914,
+        "capacity_multiplier": 1.3300282059749886,
+        "system_throughput_gain": 1.0739507562274566,
+        "skip_rate": 0.25,
+        "computation_ratio": 0.7518637540975617
+      },
+      "snr15_tau0.2_lmmse": {
+        "per_ue_rate_factor": 0.8159048140048981,
+        "per_ue_rate_loss_pct": 18.40951859951019,
+        "capacity_multiplier": 1.9942996903766481,
+        "system_throughput_gain": 1.627158717946785,
+        "skip_rate": 0.5,
+        "computation_ratio": 0.501429150706601
+      },
+      "snr15_tau0.2_dl_ce": {
+        "per_ue_rate_factor": 0.8159048140048981,
+        "per_ue_rate_loss_pct": 18.40951859951019,
+        "capacity_multiplier": 1.9852002992313076,
+        "system_throughput_gain": 1.6197344809067882,
+        "skip_rate": 0.5,
+        "computation_ratio": 0.5037275081951235
+      },
+      "snr15_tau0.3_lmmse": {
+        "per_ue_rate_factor": 0.7875314235687256,
+        "per_ue_rate_loss_pct": 21.246857643127438,
+        "capacity_multiplier": 3.965991998398689,
+        "system_throughput_gain": 3.1233433243610946,
+        "skip_rate": 0.75,
+        "computation_ratio": 0.25214372605990143
+      },
+      "snr15_tau0.3_dl_ce": {
+        "per_ue_rate_factor": 0.7875314235687256,
+        "per_ue_rate_loss_pct": 21.246857643127438,
+        "capacity_multiplier": 3.9124968163225797,
+        "system_throughput_gain": 3.081214187466628,
+        "skip_rate": 0.75,
+        "computation_ratio": 0.25559126229268514
+      },
+      "snr15_tau0.5_lmmse": {
+        "per_ue_rate_factor": 0.7692189484834671,
+        "per_ue_rate_loss_pct": 23.078105151653293,
+        "capacity_multiplier": 18.969793629170272,
+        "system_throughput_gain": 14.591924708378729,
+        "skip_rate": 0.95,
+        "computation_ratio": 0.05271538634254185
+      },
+      "snr15_tau0.5_dl_ce": {
+        "per_ue_rate_factor": 0.7692189484834671,
+        "per_ue_rate_loss_pct": 23.078105151653293,
+        "capacity_multiplier": 17.51857586592865,
+        "system_throughput_gain": 13.47562050651748,
+        "skip_rate": 0.95,
+        "computation_ratio": 0.057082265570734536
+      },
+      "snr20_tau0.1_lmmse": {
+        "per_ue_rate_factor": 0.9917180627584458,
+        "per_ue_rate_loss_pct": 0.8281937241554238,
+        "capacity_multiplier": 1.3320641863512257,
+        "system_throughput_gain": 1.321032114358143,
+        "skip_rate": 0.25,
+        "computation_ratio": 0.7507145753533004
+      },
+      "snr20_tau0.1_dl_ce": {
+        "per_ue_rate_factor": 0.9917180627584458,
+        "per_ue_rate_loss_pct": 0.8281937241554238,
+        "capacity_multiplier": 1.3300282059749886,
+        "system_throughput_gain": 1.3190129958436068,
+        "skip_rate": 0.25,
+        "computation_ratio": 0.7518637540975617
+      },
+      "snr20_tau0.2_lmmse": {
+        "per_ue_rate_factor": 0.9718716353178024,
+        "per_ue_rate_loss_pct": 2.8128364682197593,
+        "capacity_multiplier": 1.9942996903766481,
+        "system_throughput_gain": 1.93820330140014,
+        "skip_rate": 0.5,
+        "computation_ratio": 0.501429150706601
+      },
+      "snr20_tau0.2_dl_ce": {
+        "per_ue_rate_factor": 0.9718716353178024,
+        "per_ue_rate_loss_pct": 2.8128364682197593,
+        "capacity_multiplier": 1.9852002992313076,
+        "system_throughput_gain": 1.9293598612473215,
+        "skip_rate": 0.5,
+        "computation_ratio": 0.5037275081951235
+      },
+      "snr20_tau0.3_lmmse": {
+        "per_ue_rate_factor": 0.972557520866394,
+        "per_ue_rate_loss_pct": 2.744247913360598,
+        "capacity_multiplier": 3.965991998398689,
+        "system_throughput_gain": 3.8571553457385845,
+        "skip_rate": 0.75,
+        "computation_ratio": 0.25214372605990143
+      },
+      "snr20_tau0.3_dl_ce": {
+        "per_ue_rate_factor": 0.972557520866394,
+        "per_ue_rate_loss_pct": 2.744247913360598,
+        "capacity_multiplier": 3.9124968163225797,
+        "system_throughput_gain": 3.8051282040803476,
+        "skip_rate": 0.75,
+        "computation_ratio": 0.25559126229268514
+      },
+      "snr20_tau0.5_lmmse": {
+        "per_ue_rate_factor": 0.9539926677942276,
+        "per_ue_rate_loss_pct": 4.6007332205772355,
+        "capacity_multiplier": 18.969793629170272,
+        "system_throughput_gain": 18.09704403179809,
+        "skip_rate": 0.95,
+        "computation_ratio": 0.05271538634254185
+      },
+      "snr20_tau0.5_dl_ce": {
+        "per_ue_rate_factor": 0.9539926677942276,
+        "per_ue_rate_loss_pct": 4.6007332205772355,
+        "capacity_multiplier": 17.51857586592865,
+        "system_throughput_gain": 16.712592926292846,
+        "skip_rate": 0.95,
+        "computation_ratio": 0.057082265570734536
+      },
+      "snr25_tau0.1_lmmse": {
+        "per_ue_rate_factor": 0.9922194659709931,
+        "per_ue_rate_loss_pct": 0.7780534029006914,
+        "capacity_multiplier": 1.3320641863512257,
+        "system_throughput_gain": 1.3217000156204985,
+        "skip_rate": 0.25,
+        "computation_ratio": 0.7507145753533004
+      },
+      "snr25_tau0.1_dl_ce": {
+        "per_ue_rate_factor": 0.9922194659709931,
+        "per_ue_rate_loss_pct": 0.7780534029006914,
+        "capacity_multiplier": 1.3300282059749886,
+        "system_throughput_gain": 1.3196798762588613,
+        "skip_rate": 0.25,
+        "computation_ratio": 0.7518637540975617
+      },
+      "snr25_tau0.2_lmmse": {
+        "per_ue_rate_factor": 0.9868530243635177,
+        "per_ue_rate_loss_pct": 1.314697563648226,
+        "capacity_multiplier": 1.9942996903766481,
+        "system_throughput_gain": 1.968080680935422,
+        "skip_rate": 0.5,
+        "computation_ratio": 0.501429150706601
+      },
+      "snr25_tau0.2_dl_ce": {
+        "per_ue_rate_factor": 0.9868530243635177,
+        "per_ue_rate_loss_pct": 1.314697563648226,
+        "capacity_multiplier": 1.9852002992313076,
+        "system_throughput_gain": 1.9591009192637763,
+        "skip_rate": 0.5,
+        "computation_ratio": 0.5037275081951235
+      },
+      "snr25_tau0.3_lmmse": {
+        "per_ue_rate_factor": 0.9848342776298523,
+        "per_ue_rate_loss_pct": 1.5165722370147683,
+        "capacity_multiplier": 3.965991998398689,
+        "system_throughput_gain": 3.9058448648287474,
+        "skip_rate": 0.75,
+        "computation_ratio": 0.25214372605990143
+      },
+      "snr25_tau0.3_dl_ce": {
+        "per_ue_rate_factor": 0.9848342776298523,
+        "per_ue_rate_loss_pct": 1.5165722370147683,
+        "capacity_multiplier": 3.9124968163225797,
+        "system_throughput_gain": 3.853160975832145,
+        "skip_rate": 0.75,
+        "computation_ratio": 0.25559126229268514
+      },
+      "snr25_tau0.5_lmmse": {
+        "per_ue_rate_factor": 0.9652978241443634,
+        "per_ue_rate_loss_pct": 3.470217585563662,
+        "capacity_multiplier": 18.969793629170272,
+        "system_throughput_gain": 18.31150051470567,
+        "skip_rate": 0.95,
+        "computation_ratio": 0.05271538634254185
+      },
+      "snr25_tau0.5_dl_ce": {
+        "per_ue_rate_factor": 0.9652978241443634,
+        "per_ue_rate_loss_pct": 3.470217585563662,
+        "capacity_multiplier": 17.51857586592865,
+        "system_throughput_gain": 16.91064316548888,
+        "skip_rate": 0.95,
+        "computation_ratio": 0.057082265570734536
+      }
+    }
+  }
+}

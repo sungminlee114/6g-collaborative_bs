@@ -105,3 +105,87 @@ def skip_miss_rate(
         return 0.0
     bad_skips = (skip_mask & (rl > rate_loss_threshold)).sum()
     return float(bad_skips / skip_mask.sum())
+
+
+# ─── System overhead & effective throughput metrics ─────────────────
+
+def scheduling_overhead(
+    n_ant: int,
+    n_sc: int,
+    t_full_ms: float,
+) -> dict:
+    """Compute scheduling overhead breakdown.
+
+    Monitor cost: 2 norms + 1 subtraction = O(n_ant * n_sc) flops.
+    Negligible compared to full CE but quantified for completeness.
+
+    Args:
+        n_ant: number of antenna elements (rx * tx)
+        n_sc: number of subcarriers
+        t_full_ms: full CE wall-clock time in ms
+
+    Returns dict with overhead breakdown.
+    """
+    # Monitor: norm(diff) + norm(ref) + subtraction
+    # ~3 * n_ant * n_sc FLOPs (add + mul + sqrt negligible)
+    monitor_flops = 3 * n_ant * n_sc
+
+    # LS: element-wise Y/X = n_ant * n_sc complex divisions
+    ls_flops = n_ant * n_sc * 6  # complex div ≈ 6 real ops
+
+    # A100: ~312 TFLOPS FP32 → ~312e9 FLOPS/ms
+    a100_flops_per_ms = 312e9
+
+    t_monitor_ms = monitor_flops / a100_flops_per_ms
+    t_ls_ms = ls_flops / a100_flops_per_ms
+    t_overhead_ms = t_monitor_ms + t_ls_ms  # total per-slot fixed cost
+
+    return {
+        "n_ant": n_ant,
+        "n_sc": n_sc,
+        "monitor_flops": monitor_flops,
+        "ls_flops": ls_flops,
+        "t_monitor_ms": t_monitor_ms,
+        "t_ls_ms": t_ls_ms,
+        "t_overhead_ms": t_overhead_ms,
+        "t_full_ce_ms": t_full_ms,
+        "overhead_ratio": t_overhead_ms / max(t_full_ms, 1e-12),
+        "memory_bytes": n_ant * n_sc * 4 * 2 * 2,  # 2 tensors (prev LS + prev est), real, float32
+    }
+
+
+def effective_throughput_gain(
+    skip_rate: float,
+    rpr: float,
+    computation_ratio: float,
+) -> dict:
+    """Compute effective throughput metrics.
+
+    Per-UE: rate is RPR * R_full (slight loss per UE).
+    System: GPU freed by skipping can serve more UEs.
+
+    Args:
+        skip_rate: fraction of skipped slots
+        rpr: rate preservation ratio (0-1)
+        computation_ratio: CR = cost_adaptive / cost_full
+
+    Returns dict with per-UE and system-level metrics.
+    """
+    # Per-UE rate factor
+    per_ue_rate_factor = rpr  # e.g., 0.976
+
+    # System capacity multiplier: 1/CR UEs can be served with same GPU budget
+    capacity_multiplier = 1.0 / max(computation_ratio, 1e-6)
+
+    # System effective throughput = capacity_multiplier * per_ue_rate_factor
+    # Normalized to full-CE baseline (1 UE at full rate)
+    system_throughput_gain = capacity_multiplier * per_ue_rate_factor
+
+    return {
+        "per_ue_rate_factor": per_ue_rate_factor,
+        "per_ue_rate_loss_pct": (1 - per_ue_rate_factor) * 100,
+        "capacity_multiplier": capacity_multiplier,
+        "system_throughput_gain": system_throughput_gain,
+        "skip_rate": skip_rate,
+        "computation_ratio": computation_ratio,
+    }
