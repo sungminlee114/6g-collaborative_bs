@@ -141,7 +141,10 @@ class TemporalChannelData:
         """Get UE-BS distance at a given snapshot."""
         if self.positions is None:
             return float("nan")
-        bs_pos = np.array(self.bs_info.get("bs_positions", [[0, 0, 0]])[bs_id])
+        positions = self.bs_info.get("positions", self.bs_info.get("bs_positions", []))
+        if bs_id >= len(positions):
+            return float("nan")
+        bs_pos = np.array(positions[bs_id])
         ue_pos = self.positions[snap_idx, ue_id]
         return float(np.linalg.norm(ue_pos - bs_pos))
 

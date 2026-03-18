@@ -49,21 +49,32 @@ class GenieLMMSE:
     def fit(self, h_true_samples: torch.Tensor):
         """Compute sample covariance from ground truth channels.
 
+        For large antenna arrays (D > 256), uses diagonal covariance to avoid
+        O(n_sc * D^2) memory. Full covariance for small arrays.
+
         Args:
             h_true_samples: (N, 2, n_ant, n_sc) float — training channels
         """
-        # Reshape to (N, n_sc, 2*n_ant) for per-subcarrier covariance
         N, _, n_ant, n_sc = h_true_samples.shape
-        # (N, n_sc, 2*n_ant)
-        h = h_true_samples.permute(0, 3, 1, 2).reshape(N, n_sc, 2 * n_ant)
+        D = 2 * n_ant
+        # (N, n_sc, D)
+        h = h_true_samples.permute(0, 3, 1, 2).reshape(N, n_sc, D)
         h = h.to(self.device)
 
-        # Per-subcarrier covariance: R_hh[sc] = (1/N) * H^H @ H
-        # h: (N, n_sc, D) where D = 2*n_ant
         h_mean = h.mean(dim=0, keepdim=True)  # (1, n_sc, D)
         h_centered = h - h_mean
-        # (n_sc, D, D)
-        self.R_hh = torch.einsum("nsd,nse->sde", h_centered, h_centered) / (N - 1)
+
+        if D > 256:
+            # Diagonal covariance for large arrays (memory-safe)
+            # R_diag[sc, d] = var of d-th element across samples
+            self.R_diag = h_centered.pow(2).mean(dim=0)  # (n_sc, D)
+            self.R_hh = None
+            self._diagonal_mode = True
+        else:
+            # Full per-subcarrier covariance
+            self.R_hh = torch.einsum("nsd,nse->sde", h_centered, h_centered) / (N - 1)
+            self.R_diag = None
+            self._diagonal_mode = False
         self.h_mean = h_mean.squeeze(0)  # (n_sc, D)
 
     def __call__(self, h_ls: torch.Tensor, snr_db: float = 20.0) -> torch.Tensor:
@@ -73,30 +84,33 @@ class GenieLMMSE:
             h_ls: (batch, 2, n_ant, n_sc) float — noisy LS estimate
             snr_db: SNR in dB (used to compute noise variance)
         """
-        assert self.R_hh is not None, "Must call fit() first"
+        assert self.R_hh is not None or self.R_diag is not None, "Must call fit() first"
 
         B, _, n_ant, n_sc = h_ls.shape
         device = h_ls.device
-
-        # Reshape: (B, n_sc, 2*n_ant)
-        y = h_ls.permute(0, 3, 1, 2).reshape(B, n_sc, 2 * n_ant).to(device)
-
-        R = self.R_hh.to(device)  # (n_sc, D, D)
         D = 2 * n_ant
-        I = torch.eye(D, device=device).unsqueeze(0)  # (1, D, D)
 
-        # Estimate noise variance: σ² = E[|h|²] / SNR_linear
-        avg_signal_power = R.diagonal(dim1=-2, dim2=-1).mean()
+        # Reshape: (B, n_sc, D)
+        y = h_ls.permute(0, 3, 1, 2).reshape(B, n_sc, D).to(device)
+
         snr_linear = 10 ** (snr_db / 10)
-        sigma2 = float(avg_signal_power / snr_linear)
 
-        # W = R_hh (R_hh + σ²I)^{-1}
-        # solve(A, B) = A^{-1} B → solve(R+σ²I, R) = (R+σ²I)^{-1} R
-        # For symmetric R: R(R+σ²I)^{-1} = ((R+σ²I)^{-1} R)^T
-        W = torch.linalg.solve(R + sigma2 * I, R).transpose(-1, -2)  # (n_sc, D, D)
+        if self._diagonal_mode:
+            # Diagonal LMMSE: w_d = r_d / (r_d + σ²)  element-wise
+            r = self.R_diag.to(device)  # (n_sc, D)
+            sigma2 = float(r.mean() / snr_linear)
+            w = r / (r + sigma2)  # (n_sc, D)
+            h_hat = w.unsqueeze(0) * y  # (B, n_sc, D)
+        else:
+            R = self.R_hh.to(device)  # (n_sc, D, D)
+            I = torch.eye(D, device=device).unsqueeze(0)
 
-        # Apply: h_hat = W @ y  (per subcarrier)
-        h_hat = torch.einsum("sde,bse->bsd", W, y)  # (B, n_sc, D)
+            avg_signal_power = R.diagonal(dim1=-2, dim2=-1).mean()
+            sigma2 = float(avg_signal_power / snr_linear)
+
+            # W = R(R + σ²I)^{-1}
+            W = torch.linalg.solve(R + sigma2 * I, R).transpose(-1, -2)
+            h_hat = torch.einsum("sde,bse->bsd", W, y)  # (B, n_sc, D)
 
         # Reshape back: (B, 2, n_ant, n_sc)
         h_hat = h_hat.reshape(B, n_sc, 2, n_ant).permute(0, 2, 3, 1)
@@ -106,6 +120,8 @@ class GenieLMMSE:
         self.device = device
         if self.R_hh is not None:
             self.R_hh = self.R_hh.to(device)
+        if self.R_diag is not None:
+            self.R_diag = self.R_diag.to(device)
         return self
 
     def eval(self):

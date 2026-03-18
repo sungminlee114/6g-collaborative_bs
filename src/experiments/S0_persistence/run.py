@@ -16,13 +16,13 @@ Usage:
 """
 import argparse
 import json
-from pathlib import Path
 
 import numpy as np
 import torch
 
-from src.config import SceneConfig, get_plot_dir, get_results_dir
+from src.config import get_results_dir
 from src.tracker import Tracker
+from src.ce_skip import ExperimentConfig
 from src.ce_skip.temporal_dataset import TemporalChannelData
 
 # ─── Configs ────────────────────────────────────────────────────────
@@ -74,22 +74,21 @@ def compute_delta_profile(data: TemporalChannelData, bs_id: int) -> dict:
     return results
 
 
-def run_persistence_profile(preset: str, gpu: int = 0):
+def run_persistence_profile(preset: str, gpu: int = 0, max_snapshots: int = 200):
     """Run persistence profiling for a single preset."""
-    cfg = SceneConfig.from_preset(preset)
-    temporal_dir = Path(cfg.data_dir).parent / f"{Path(cfg.data_dir).name}_temporal"
+    cfg = ExperimentConfig.from_preset(preset)
 
-    if not temporal_dir.exists():
-        print(f"  ⚠ Temporal data not found: {temporal_dir}")
+    if not cfg.temporal_dir.exists():
+        print(f"  ⚠ Temporal data not found: {cfg.temporal_dir}")
         print(f"    Generate with: bash scripts/run_all_datagen.sh")
         return None
 
-    print(f"  Loading temporal data from {temporal_dir}")
-    data = TemporalChannelData(temporal_dir)
+    print(f"  Loading temporal data from {cfg.temporal_dir}")
+    data = TemporalChannelData(cfg.temporal_dir, max_snapshots=max_snapshots)
     print(f"  Snapshots: {data.num_snapshots}, UEs: {data.num_ue}, dt: {data.dt_s}s")
 
     all_results = {}
-    bs_ids = cfg.test_bs_ids if hasattr(cfg, "test_bs_ids") else list(range(cfg.num_bs))
+    bs_ids = cfg.test_bs_ids
 
     # Use a subset of BSs for profiling (test set)
     for bs_id in bs_ids[:2]:  # Profile 2 BSs to save time
@@ -150,6 +149,7 @@ def main():
     parser.add_argument("--preset", type=str, default=None, help="Single preset to profile")
     parser.add_argument("--all", action="store_true", help="Profile all primary presets")
     parser.add_argument("--gpu", type=int, default=0)
+    parser.add_argument("--max-snapshots", type=int, default=200)
     args = parser.parse_args()
 
     presets = PRIMARY_PRESETS if args.all else [args.preset or PRIMARY_PRESETS[0]]
@@ -174,7 +174,7 @@ def main():
             print(f"\n{'─'*60}")
             print(f"  Preset: {preset}")
             print(f"{'─'*60}")
-            r = run_persistence_profile(preset, gpu=args.gpu)
+            r = run_persistence_profile(preset, gpu=args.gpu, max_snapshots=args.max_snapshots)
             all_results.append(r)
 
             if r is not None:

@@ -14,13 +14,13 @@ Usage:
 """
 import argparse
 import json
-from pathlib import Path
 
 import numpy as np
 import torch
 
-from src.config import SceneConfig, get_results_dir
+from src.config import get_results_dir
 from src.tracker import Tracker
+from src.ce_skip import ExperimentConfig
 from src.ce_skip.temporal_dataset import TemporalChannelData
 from src.ce_skip.scheduling import adaptive_ce_scheduling
 from src.ce_skip.metrics import nmse_per_slot, rate_preservation_ratio
@@ -32,7 +32,7 @@ PRIMARY_PRESETS = [
 ]
 
 
-def rayleigh_distance(cfg: SceneConfig) -> float:
+def rayleigh_distance(cfg: ExperimentConfig) -> float:
     """Compute Rayleigh distance: 2D^2/λ where D = array aperture."""
     c = 3e8
     wavelength = c / cfg.frequency
@@ -127,69 +127,83 @@ def run_distance_analysis(preset: str, gpu: int = 0, max_snapshots: int = 200):
     """Run distance-dependent threshold analysis."""
     device = f"cuda:{gpu}"
     torch.cuda.set_device(device)
-    cfg = SceneConfig.from_preset(preset)
+    cfg = ExperimentConfig.from_preset(preset)
 
-    temporal_dir = Path(cfg.data_dir).parent / f"{Path(cfg.data_dir).name}_temporal"
-    if not temporal_dir.exists():
-        print(f"  ⚠ Temporal data not found: {temporal_dir}")
+    if not cfg.temporal_dir.exists():
+        print(f"  ⚠ Temporal data not found: {cfg.temporal_dir}")
         return None
 
-    data = TemporalChannelData(temporal_dir, max_snapshots=max_snapshots)
+    data = TemporalChannelData(cfg.temporal_dir, max_snapshots=max_snapshots)
     r_rayleigh = rayleigh_distance(cfg)
     print(f"  Rayleigh distance: {r_rayleigh:.1f} m")
 
-    test_bs = cfg.test_bs_ids[0] if cfg.test_bs_ids else 1
-    h_all, ue_ids = data.get_all_series(test_bs, snap_range=(0, min(data.num_snapshots, max_snapshots)))
+    from src.ce_skip.helpers import iter_ue_tensors
+    from src.ce_skip.ce_algorithms import LSEstimator
+    from src.ce_skip.scheduling import adaptive_ce_scheduling
 
-    if len(ue_ids) == 0:
-        print(f"  ⚠ No UEs for BS {test_bs}")
-        return None
-
-    # Get distances
-    distances = np.array([data.get_ue_distance(uid, test_bs) for uid in ue_ids])
-
-    # Convert to real tensor
-    N_ue, T, n_ant, n_sc = h_all.shape
-    h_real = np.stack([h_all.real, h_all.imag], axis=2).astype(np.float32)
-    h_tensor = torch.from_numpy(h_real).to(device)
-
-    # Classify zones
-    zones = classify_zones(distances, r_rayleigh)
+    test_bs = cfg.test_bs_ids[0]
     tau_values = np.linspace(0.01, 1.0, 40)
+
+    # Collect per-UE data: distance, speed, and per-tau NMSE (UE-by-UE for memory)
+    zone_data = {"NF": [], "Transition": [], "FF": []}
+    delta_dist = []
+
+    for h_ue, uid, dist, speed in iter_ue_tensors(data, test_bs, device, max_snapshots, max_ue=30):
+        # Classify zone
+        if dist < r_rayleigh:
+            zone = "NF"
+        elif dist < 3 * r_rayleigh:
+            zone = "Transition"
+        else:
+            zone = "FF"
+
+        # Sweep tau for this UE
+        ce = LSEstimator()
+        ue_sweep = {}
+        for tau in tau_values:
+            h_hat, stats = adaptive_ce_scheduling(h_ue, ce, tau_low=tau, tau_high=2*tau, snr_db=20.0)
+            nm = nmse_per_slot(h_hat, h_ue).cpu().numpy()
+            ue_sweep[tau] = {"nmse": float(np.mean(nm)), "skip_rate": stats.skip_rate}
+
+        zone_data[zone].append({"uid": uid, "dist": dist, "speed": speed, "sweep": ue_sweep})
+
+        # Delta vs distance
+        h_cpu = h_ue.cpu().numpy()
+        for t in range(1, h_cpu.shape[0]):
+            diff_n = np.linalg.norm(h_cpu[t] - h_cpu[t-1])
+            ref_n = np.linalg.norm(h_cpu[t-1])
+            if ref_n > 1e-12:
+                delta_dist.append({"distance": float(dist), "delta": float(diff_n/ref_n), "speed": float(speed)})
 
     results = {"r_rayleigh": r_rayleigh, "zones": {}}
 
-    for zone_name, zone_info in zones.items():
-        mask = zone_info["mask"]
-        n_ues = zone_info["count"]
+    for zone_name in ["NF", "Transition", "FF"]:
+        ues = zone_data[zone_name]
+        n_ues = len(ues)
         if n_ues == 0:
-            print(f"  {zone_name}: no UEs in [{zone_info['d_min']:.1f}, {zone_info['d_max']:.1f}) m")
+            print(f"  {zone_name}: no UEs")
             results["zones"][zone_name] = {"count": 0, "optimal_tau": None}
             continue
 
-        print(f"  {zone_name}: {n_ues} UEs in [{zone_info['d_min']:.1f}, {zone_info['d_max']:.1f}) m")
+        print(f"  {zone_name}: {n_ues} UEs")
 
-        h_zone = h_tensor[mask]
-        zone_result = sweep_tau_for_ues(h_zone, tau_values, snr_db=20.0, target_nmse_db=-10.0)
-        zone_result["count"] = n_ues
-        zone_result["d_range"] = [zone_info["d_min"], zone_info["d_max"]]
-        results["zones"][zone_name] = zone_result
+        # Find optimal tau from aggregated sweep data
+        optimal_tau = tau_values[0]
+        sweep_results = []
+        for tau in tau_values:
+            avg_nmse = np.mean([u["sweep"][tau]["nmse"] for u in ues])
+            avg_nmse_db = 10 * np.log10(max(avg_nmse, 1e-30))
+            avg_sr = np.mean([u["sweep"][tau]["skip_rate"] for u in ues])
+            sweep_results.append({"tau": float(tau), "nmse_db": avg_nmse_db, "skip_rate": avg_sr})
+            if avg_nmse_db <= -10.0:
+                optimal_tau = tau
 
-        print(f"    Optimal τ* = {zone_result['optimal_tau']:.3f}")
-
-    # Also compute δ statistics per distance bin
-    print("  Computing δ vs distance...")
-    delta_dist = []
-    for ue_idx in range(min(N_ue, 30)):
-        dist = distances[ue_idx]
-        speed = data.get_ue_speed(ue_ids[ue_idx])
-        h_ue = h_all[ue_idx]  # (T, n_ant, n_sc) complex
-        for t in range(1, T):
-            diff = h_ue[t] - h_ue[t - 1]
-            ref_norm = np.linalg.norm(h_ue[t - 1])
-            if ref_norm > 1e-12:
-                delta = float(np.linalg.norm(diff) / ref_norm)
-                delta_dist.append({"distance": float(dist), "delta": delta, "speed": float(speed)})
+        results["zones"][zone_name] = {
+            "count": n_ues,
+            "optimal_tau": float(optimal_tau),
+            "sweep": sweep_results,
+        }
+        print(f"    Optimal τ* = {optimal_tau:.3f}")
 
     results["delta_vs_distance"] = delta_dist
 

@@ -20,8 +20,9 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-from src.config import SceneConfig, get_results_dir
+from src.config import get_results_dir
 from src.tracker import Tracker
+from src.ce_skip import ExperimentConfig
 from src.dataset_operation.dataset import ChannelEstimationDataset
 from src.dataset_operation.utils import nmse, nmse_db
 from src.ce_skip.ce_algorithms import (
@@ -169,7 +170,7 @@ def run_profiling(preset: str, gpu: int = 0, train_dl: bool = True):
     device = f"cuda:{gpu}"
     torch.cuda.set_device(device)
 
-    cfg = SceneConfig.from_preset(preset)
+    cfg = ExperimentConfig.from_preset(preset)
     data_dir = cfg.data_dir
 
     if not Path(data_dir).exists():

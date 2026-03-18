@@ -9,13 +9,13 @@ Usage:
 """
 import argparse
 import json
-from pathlib import Path
 
 import numpy as np
 import torch
 
-from src.config import SceneConfig, get_results_dir
+from src.config import get_results_dir
 from src.tracker import Tracker
+from src.ce_skip import ExperimentConfig
 from src.ce_skip.temporal_dataset import TemporalChannelData
 from src.ce_skip.ce_algorithms import LSEstimator
 from src.ce_skip.scheduling import adaptive_ce_scheduling
@@ -95,33 +95,62 @@ def run_generalization(preset: str, gpu: int = 0, max_snapshots: int = 200):
     """Run multi-BS generalization test."""
     device = f"cuda:{gpu}"
     torch.cuda.set_device(device)
-    cfg = SceneConfig.from_preset(preset)
+    cfg = ExperimentConfig.from_preset(preset)
 
-    temporal_dir = Path(cfg.data_dir).parent / f"{Path(cfg.data_dir).name}_temporal"
-    if not temporal_dir.exists():
-        print(f"  ⚠ Temporal data not found: {temporal_dir}")
+    if not cfg.temporal_dir.exists():
+        print(f"  ⚠ Temporal data not found: {cfg.temporal_dir}")
         return None
 
-    data = TemporalChannelData(temporal_dir, max_snapshots=max_snapshots)
-    tau_values = np.linspace(0.01, 0.8, 30)
-    T_max = min(data.num_snapshots, max_snapshots)
+    from src.ce_skip.helpers import iter_ue_tensors
 
-    def load_bs_data(bs_id):
-        h_all, ue_ids = data.get_all_series(bs_id, snap_range=(0, T_max))
-        if len(ue_ids) == 0:
+    data = TemporalChannelData(cfg.temporal_dir, max_snapshots=max_snapshots)
+    tau_values = np.linspace(0.01, 0.8, 30)
+
+    def find_tau_for_bs(bs_id):
+        """Find optimal τ for a BS using memory-safe UE iteration."""
+        ce = LSEstimator()
+        optimal = tau_values[0]
+        for tau in tau_values:
+            nmse_list = []
+            for h_ue, uid, dist, speed in iter_ue_tensors(data, bs_id, device, max_snapshots, max_ue=15):
+                h_hat, _ = adaptive_ce_scheduling(h_ue, ce, tau_low=tau, tau_high=2*tau, snr_db=20.0)
+                nm = nmse_per_slot(h_hat, h_ue).cpu().numpy()
+                nmse_list.extend(nm.tolist())
+            if not nmse_list:
+                break
+            avg_db = 10 * np.log10(max(np.mean(nmse_list), 1e-30))
+            if avg_db <= -10.0:
+                optimal = tau
+            else:
+                break
+        return float(optimal), len(nmse_list) > 0
+
+    def eval_tau_for_bs(bs_id, tau):
+        """Evaluate a fixed τ for a BS."""
+        ce = LSEstimator()
+        snr_linear = 10 ** (20.0 / 10)
+        nmse_list, sr_list, rpr_list = [], [], []
+        for h_ue, uid, dist, speed in iter_ue_tensors(data, bs_id, device, max_snapshots, max_ue=20):
+            h_hat, stats = adaptive_ce_scheduling(h_ue, ce, tau_low=tau, tau_high=2*tau, snr_db=20.0)
+            nm = nmse_per_slot(h_hat, h_ue).cpu().numpy()
+            nmse_list.extend(nm.tolist())
+            sr_list.append(stats.skip_rate)
+            rpr_list.append(rate_preservation_ratio(h_hat, h_ue, snr_linear))
+        if not nmse_list:
             return None
-        N_ue, T, n_ant, n_sc = h_all.shape
-        h_real = np.stack([h_all.real, h_all.imag], axis=2).astype(np.float32)
-        return torch.from_numpy(h_real).to(device)
+        return {
+            "nmse_db": 10 * np.log10(max(np.mean(nmse_list), 1e-30)),
+            "skip_rate": float(np.mean(sr_list)),
+            "rpr": float(np.mean(rpr_list)),
+        }
 
     # Step 1: Find τ* on train BSs
     print("  Phase 1: Finding τ* on train BSs...")
     train_taus = []
     for bs_id in cfg.train_bs_ids:
-        h_train = load_bs_data(bs_id)
-        if h_train is None:
+        tau_star, has_data = find_tau_for_bs(bs_id)
+        if not has_data:
             continue
-        tau_star = find_optimal_tau(h_train, tau_values)
         train_taus.append(tau_star)
         print(f"    BS {bs_id}: τ* = {tau_star:.3f}")
 
@@ -142,16 +171,12 @@ def run_generalization(preset: str, gpu: int = 0, max_snapshots: int = 200):
 
     all_bs = cfg.train_bs_ids + cfg.val_bs_ids + cfg.test_bs_ids
     for bs_id in all_bs:
-        h_bs = load_bs_data(bs_id)
-        if h_bs is None:
+        eval_transferred = eval_tau_for_bs(bs_id, avg_tau_star)
+        if eval_transferred is None:
             continue
 
-        # Evaluate with transferred τ*
-        eval_transferred = evaluate_tau(h_bs, avg_tau_star)
-
-        # Also find BS-specific optimal τ* for comparison
-        tau_local = find_optimal_tau(h_bs, tau_values)
-        eval_local = evaluate_tau(h_bs, tau_local)
+        tau_local, _ = find_tau_for_bs(bs_id)
+        eval_local = eval_tau_for_bs(bs_id, tau_local)
 
         split = ("train" if bs_id in cfg.train_bs_ids
                  else "val" if bs_id in cfg.val_bs_ids

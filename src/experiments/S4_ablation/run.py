@@ -14,13 +14,13 @@ Usage:
 """
 import argparse
 import json
-from pathlib import Path
 
 import numpy as np
 import torch
 
-from src.config import SceneConfig, get_results_dir
+from src.config import get_results_dir
 from src.tracker import Tracker
+from src.ce_skip import ExperimentConfig
 from src.ce_skip.temporal_dataset import TemporalChannelData
 from src.ce_skip.ce_algorithms import LSEstimator
 from src.ce_skip.scheduling import adaptive_ce_scheduling
@@ -40,67 +40,51 @@ def run_ablation(preset: str, gpu: int = 0, tau_low: float = 0.2, max_snapshots:
     """Run delta update ablation for one preset."""
     device = f"cuda:{gpu}"
     torch.cuda.set_device(device)
-    cfg = SceneConfig.from_preset(preset)
+    cfg = ExperimentConfig.from_preset(preset)
 
-    temporal_dir = Path(cfg.data_dir).parent / f"{Path(cfg.data_dir).name}_temporal"
-    if not temporal_dir.exists():
-        print(f"  ⚠ Temporal data not found: {temporal_dir}")
+    if not cfg.temporal_dir.exists():
+        print(f"  ⚠ Temporal data not found: {cfg.temporal_dir}")
         return None
 
-    data = TemporalChannelData(temporal_dir, max_snapshots=max_snapshots)
+    from src.ce_skip.helpers import iter_ue_tensors
+
+    data = TemporalChannelData(cfg.temporal_dir, max_snapshots=max_snapshots)
     ce = LSEstimator()
+    test_bs = cfg.test_bs_ids[0]
 
-    test_bs = cfg.test_bs_ids[0] if cfg.test_bs_ids else 1
-    h_all, ue_ids = data.get_all_series(test_bs, snap_range=(0, min(data.num_snapshots, max_snapshots)))
-    if len(ue_ids) == 0:
-        return None
-
-    N_ue, T, n_ant, n_sc = h_all.shape
-    h_real = np.stack([h_all.real, h_all.imag], axis=2).astype(np.float32)
-    h_tensor = torch.from_numpy(h_real).to(device)
-
-    # Group UEs by speed
-    speed_groups = {}
-    for i, uid in enumerate(ue_ids):
-        speed = data.get_ue_speed(uid)
-        label = SPEED_LABELS.get(speed, f"v{speed:.1f}")
-        if label not in speed_groups:
-            speed_groups[label] = []
-        speed_groups[label].append(i)
-
+    # Collect results per (mode, alpha, speed) — UE-by-UE for memory safety
     results = {}
     for mode in DELTA_MODES:
         for alpha in (ALPHA_VALUES if mode != "skip" else [0.0]):
             key = f"{mode}_a{alpha:.1f}" if mode != "skip" else "skip"
 
             per_speed = {}
-            for speed_label, ue_indices in speed_groups.items():
-                nmse_list = []
-                skip_rates = []
+            for h_ue, uid, dist, speed in iter_ue_tensors(data, test_bs, device, max_snapshots, max_ue=20):
+                label = SPEED_LABELS.get(speed, f"v{speed:.1f}")
+                if label not in per_speed:
+                    per_speed[label] = {"nmse": [], "skip_rates": []}
 
-                for ue_idx in ue_indices[:20]:
-                    h_hat, stats = adaptive_ce_scheduling(
-                        h_tensor[ue_idx], ce,
-                        tau_low=tau_low, tau_high=2 * tau_low,
-                        alpha=alpha, snr_db=20.0,
-                        delta_mode=mode,
-                    )
-                    nm = nmse_per_slot(h_hat, h_tensor[ue_idx]).cpu().numpy()
-                    nmse_list.extend(nm.tolist())
-                    skip_rates.append(stats.skip_rate)
+                h_hat, stats = adaptive_ce_scheduling(
+                    h_ue, ce,
+                    tau_low=tau_low, tau_high=2 * tau_low,
+                    alpha=alpha, snr_db=20.0,
+                    delta_mode=mode,
+                )
+                nm = nmse_per_slot(h_hat, h_ue).cpu().numpy()
+                per_speed[label]["nmse"].extend(nm.tolist())
+                per_speed[label]["skip_rates"].append(stats.skip_rate)
 
-                avg_nmse_db = 10 * np.log10(max(np.mean(nmse_list), 1e-30))
-                avg_skip_rate = np.mean(skip_rates)
-                per_speed[speed_label] = {
-                    "nmse_db": avg_nmse_db,
-                    "skip_rate": avg_skip_rate,
+            # Aggregate
+            agg = {}
+            for sl, vals in per_speed.items():
+                agg[sl] = {
+                    "nmse_db": 10 * np.log10(max(np.mean(vals["nmse"]), 1e-30)),
+                    "skip_rate": float(np.mean(vals["skip_rates"])),
                 }
+            results[key] = agg
 
-            results[key] = per_speed
-
-            # Print
-            for sl, stats in per_speed.items():
-                print(f"    {key:<15} {sl:<15} NMSE={stats['nmse_db']:.1f}dB SR={stats['skip_rate']:.1%}")
+            for sl, st in agg.items():
+                print(f"    {key:<15} {sl:<15} NMSE={st['nmse_db']:.1f}dB SR={st['skip_rate']:.1%}")
 
     data.clear_cache()
     return results

@@ -11,13 +11,13 @@ Usage:
 """
 import argparse
 import json
-from pathlib import Path
 
 import numpy as np
 import torch
 
-from src.config import SceneConfig, get_results_dir
+from src.config import get_results_dir
 from src.tracker import Tracker
+from src.ce_skip import ExperimentConfig
 from src.ce_skip.temporal_dataset import TemporalChannelData
 from src.ce_skip.ce_algorithms import LSEstimator
 from src.ce_skip.scheduling import adaptive_ce_scheduling
@@ -43,55 +43,45 @@ def run_beamforming_analysis(
     """Run beamforming rate impact analysis."""
     device = f"cuda:{gpu}"
     torch.cuda.set_device(device)
-    cfg = SceneConfig.from_preset(preset)
+    cfg = ExperimentConfig.from_preset(preset)
 
-    temporal_dir = Path(cfg.data_dir).parent / f"{Path(cfg.data_dir).name}_temporal"
-    if not temporal_dir.exists():
-        print(f"  ⚠ Temporal data not found: {temporal_dir}")
+    if not cfg.temporal_dir.exists():
+        print(f"  ⚠ Temporal data not found: {cfg.temporal_dir}")
         return None
 
-    data = TemporalChannelData(temporal_dir, max_snapshots=max_snapshots)
+    from src.ce_skip.helpers import iter_ue_tensors
+
+    data = TemporalChannelData(cfg.temporal_dir, max_snapshots=max_snapshots)
     ce = LSEstimator()
+    test_bs = cfg.test_bs_ids[0]
 
-    test_bs = cfg.test_bs_ids[0] if cfg.test_bs_ids else 1
-    h_all, ue_ids = data.get_all_series(test_bs, snap_range=(0, min(data.num_snapshots, max_snapshots)))
-    if len(ue_ids) == 0:
-        return None
+    # Pre-collect UE data for all (snr, tau) combos — UE-by-UE
+    combo_data = {}
+    for snr_db in SNR_LIST:
+        for tau in TAU_LIST:
+            combo_data[(snr_db, tau)] = {"rate_loss": [], "rpr": [], "smr": []}
 
-    N_ue, T, n_ant, n_sc = h_all.shape
-    h_real = np.stack([h_all.real, h_all.imag], axis=2).astype(np.float32)
-    h_tensor = torch.from_numpy(h_real).to(device)
+    for h_ue, uid, dist, speed in iter_ue_tensors(data, test_bs, device, max_snapshots, max_ue=20):
+        for snr_db in SNR_LIST:
+            snr_linear = 10 ** (snr_db / 10)
+            for tau in TAU_LIST:
+                h_hat, stats = adaptive_ce_scheduling(
+                    h_ue, ce, tau_low=tau, tau_high=2 * tau, snr_db=snr_db,
+                )
+                rl = rate_loss_per_slot(h_hat, h_ue, snr_linear)
+                combo_data[(snr_db, tau)]["rate_loss"].extend(rl.cpu().numpy().tolist())
+                combo_data[(snr_db, tau)]["rpr"].append(rate_preservation_ratio(h_hat, h_ue, snr_linear))
+                combo_data[(snr_db, tau)]["smr"].append(skip_miss_rate(h_hat, h_ue, stats.tiers, snr_linear, 0.05))
 
     results = {}
-
     for snr_db in SNR_LIST:
-        snr_linear = 10 ** (snr_db / 10)
         snr_key = f"snr{int(snr_db)}"
         results[snr_key] = {}
-
         for tau in TAU_LIST:
-            all_rate_loss = []
-            all_rpr = []
-            all_smr = []
-
-            for ue_idx in range(min(N_ue, 20)):
-                h_hat, stats = adaptive_ce_scheduling(
-                    h_tensor[ue_idx], ce,
-                    tau_low=tau, tau_high=2 * tau,
-                    snr_db=snr_db,
-                )
-
-                rl = rate_loss_per_slot(h_hat, h_tensor[ue_idx], snr_linear)
-                all_rate_loss.extend(rl.cpu().numpy().tolist())
-
-                rpr = rate_preservation_ratio(h_hat, h_tensor[ue_idx], snr_linear)
-                all_rpr.append(rpr)
-
-                smr = skip_miss_rate(
-                    h_hat, h_tensor[ue_idx], stats.tiers,
-                    snr_linear, rate_loss_threshold=0.05,
-                )
-                all_smr.append(smr)
+            cd = combo_data[(snr_db, tau)]
+            all_rate_loss = cd["rate_loss"]
+            all_rpr = cd["rpr"]
+            all_smr = cd["smr"]
 
             rl_arr = np.array(all_rate_loss)
             results[snr_key][f"tau{tau}"] = {

@@ -16,8 +16,9 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from src.config import SceneConfig, get_results_dir
+from src.config import get_results_dir
 from src.tracker import Tracker
+from src.ce_skip import ExperimentConfig
 from src.ce_skip.temporal_dataset import TemporalChannelData
 from src.ce_skip.ce_algorithms import LSEstimator, GenieLMMSE, DLCEEstimator
 from src.ce_skip.scheduling import adaptive_ce_scheduling, compute_scheduling_cost
@@ -53,7 +54,7 @@ def load_ce_times(preset: str) -> dict:
 
 def prepare_ce_methods(
     data_dir: str,
-    cfg: SceneConfig,
+    cfg: ExperimentConfig,
     device: str,
     load_dl_checkpoint: bool = True,
 ) -> dict:
@@ -104,33 +105,23 @@ def run_threshold_sweep(
     """Run threshold sweep for one preset."""
     device = f"cuda:{gpu}"
     torch.cuda.set_device(device)
-    cfg = SceneConfig.from_preset(preset)
+    cfg = ExperimentConfig.from_preset(preset)
 
-    temporal_dir = Path(cfg.data_dir).parent / f"{Path(cfg.data_dir).name}_temporal"
-    if not temporal_dir.exists():
-        print(f"  ⚠ Temporal data not found: {temporal_dir}")
+    if not cfg.temporal_dir.exists():
+        print(f"  ⚠ Temporal data not found: {cfg.temporal_dir}")
         return None
 
-    data = TemporalChannelData(temporal_dir, max_snapshots=max_snapshots)
+    data = TemporalChannelData(cfg.temporal_dir, max_snapshots=max_snapshots)
     ce_methods = prepare_ce_methods(cfg.data_dir, cfg, device)
     ce_times = load_ce_times(preset)
 
     snr_linear = 10 ** (snr_db / 10)
     tau_values = np.linspace(0.01, 1.0, n_tau)
 
+    from src.ce_skip.helpers import iter_ue_tensors
+
     results = {}
-    # Test on one BS from test set
-    test_bs = cfg.test_bs_ids[0] if hasattr(cfg, "test_bs_ids") and cfg.test_bs_ids else 1
-
-    h_all, ue_ids = data.get_all_series(test_bs, snap_range=(0, min(data.num_snapshots, max_snapshots)))
-    if len(ue_ids) == 0:
-        print(f"  ⚠ No UEs for BS {test_bs}")
-        return None
-
-    # Convert to torch real: (N_UE, T, 2, n_ant, n_sc)
-    N_ue, T, n_ant, n_sc = h_all.shape
-    h_real = np.stack([h_all.real, h_all.imag], axis=2).astype(np.float32)
-    h_tensor = torch.from_numpy(h_real).to(device)
+    test_bs = cfg.test_bs_ids[0]
 
     for ce_name, ce_method in ce_methods.items():
         print(f"  CE: {ce_name}")
@@ -141,53 +132,52 @@ def run_threshold_sweep(
         else:
             _ce = ce_method
 
-        sweep = []
-        for tau_low in tau_values:
-            tau_high = 2 * tau_low  # T1 band is [tau_low, 2*tau_low]
+        # Collect per-UE results across all taus (UE-by-UE to save GPU memory)
+        per_tau = {tau: {"nmse": [], "n_skip": 0, "n_delta": 0, "n_full": 0, "total": 0}
+                   for tau in tau_values}
 
-            all_nmse = []
-            all_stats_agg = {"n_skip": 0, "n_delta": 0, "n_full": 0, "total": 0}
+        for h_ue, uid, dist, speed in iter_ue_tensors(data, test_bs, device, max_snapshots, max_ue=20):
+            for tau_low in tau_values:
 
-            for ue_idx in range(min(N_ue, 20)):  # Profile up to 20 UEs
-                h_ue = h_tensor[ue_idx]  # (T, 2, n_ant, n_sc)
-
+                tau_high = 2 * tau_low
                 h_hat, stats = adaptive_ce_scheduling(
                     h_ue, _ce,
                     tau_low=tau_low, tau_high=tau_high,
                     snr_db=snr_db,
                 )
+                nm = nmse_per_slot(h_hat, h_ue).cpu().numpy()
+                pt = per_tau[tau_low]
+                pt["nmse"].extend(nm.tolist())
+                pt["n_skip"] += stats.n_skip
+                pt["n_delta"] += stats.n_delta
+                pt["n_full"] += stats.n_full
+                pt["total"] += stats.total
 
-                per_slot_nmse = nmse_per_slot(h_hat, h_ue).cpu().numpy()
-                all_nmse.extend(per_slot_nmse.tolist())
-
-                all_stats_agg["n_skip"] += stats.n_skip
-                all_stats_agg["n_delta"] += stats.n_delta
-                all_stats_agg["n_full"] += stats.n_full
-                all_stats_agg["total"] += stats.total
-
-            avg_nmse = np.mean(all_nmse)
+        sweep = []
+        for tau_low in tau_values:
+            pt = per_tau[tau_low]
+            avg_nmse = np.mean(pt["nmse"]) if pt["nmse"] else 1.0
             avg_nmse_db = 10 * np.log10(max(avg_nmse, 1e-30))
-
-            total = all_stats_agg["total"]
-            skip_rate = all_stats_agg["n_skip"] / max(total, 1)
+            total = pt["total"]
+            skip_rate = pt["n_skip"] / max(total, 1)
 
             cost_adaptive = (
-                all_stats_agg["n_full"] * ce_times.get(ce_name, 1.0)
-                + all_stats_agg["n_delta"] * 0.005
-                + all_stats_agg["n_skip"] * 0.005
+                pt["n_full"] * ce_times.get(ce_name, 1.0)
+                + pt["n_delta"] * 0.005
+                + pt["n_skip"] * 0.005
             )
             cost_full = total * ce_times.get(ce_name, 1.0)
             cr = cost_adaptive / max(cost_full, 1e-12)
 
             sweep.append({
                 "tau_low": float(tau_low),
-                "tau_high": float(tau_high),
+                "tau_high": float(2 * tau_low),
                 "skip_rate": skip_rate,
                 "avg_nmse_db": avg_nmse_db,
                 "computation_ratio": cr,
-                "n_skip": all_stats_agg["n_skip"],
-                "n_delta": all_stats_agg["n_delta"],
-                "n_full": all_stats_agg["n_full"],
+                "n_skip": pt["n_skip"],
+                "n_delta": pt["n_delta"],
+                "n_full": pt["n_full"],
             })
 
         results[ce_name] = sweep
