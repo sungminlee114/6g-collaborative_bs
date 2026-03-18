@@ -164,6 +164,9 @@ class DLCEEstimator(nn.Module):
         )
         self.blocks = nn.Sequential(*[ResBlock(channels) for _ in range(n_blocks)])
         self.output_proj = nn.Conv2d(channels, 2, 3, padding=1)
+        # Init output_proj near zero so initial refinement ≈ 0 (identity at start)
+        nn.init.zeros_(self.output_proj.weight)
+        nn.init.zeros_(self.output_proj.bias)
 
     def forward(self, h_ls: torch.Tensor) -> torch.Tensor:
         """Forward pass with residual learning."""
