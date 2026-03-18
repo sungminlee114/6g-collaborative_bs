@@ -1,13 +1,13 @@
-# Munich mMIMO Baseline — 64 elements (8x8 UPA), 256 SC, 28 GHz (FR2)
-# Comparable to majority of literature (P41, P56, P63, P70)
+# Munich mMIMO — 64 elements (8x8 UPA), 1024 SC, 15 GHz (FR3)
+# FR3 at conventional MIMO scale — isolates frequency effect vs mimo_28g
 # Same 8-BS UMi layout as ELAA configs for fair comparison
-# SC spacing: 100 MHz / 256 = 390.6 kHz (consistent with all configs)
+# SC spacing: 400 MHz / 1024 = 390.6 kHz (consistent with all configs)
 
 scene_name: munich
-deployment: mimo_28g
-frequency: 28000000000.0
-bandwidth: 100000000.0
-num_subcarriers: 256
+deployment: mimo_15g
+frequency: 15000000000.0
+bandwidth: 400000000.0
+num_subcarriers: 1024
 guard_band_ratio: 0.1
 temperature: 293.0
 tx_rows: 8
@@ -62,7 +62,7 @@ ue_device_types:
 - - 2
   - 2
   - V
-data_dir: assets/data/channels_mimo_28g
+data_dir: assets/data/channels_mimo_15g
 num_snapshots: 100
 train_bs_ids:
 - 0

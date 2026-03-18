@@ -1,23 +1,23 @@
-# Munich mMIMO Baseline — 64 elements (8x8 UPA), 256 SC, 28 GHz (FR2)
-# Comparable to majority of literature (P41, P56, P63, P70)
-# Same 8-BS UMi layout as ELAA configs for fair comparison
+# Munich ELAA Small — 256 elements (16x16 UPA), 256 SC, 3.5 GHz (FR1)
+# ELAA at sub-6 GHz — isolates antenna scale effect at FR1
+# Same 8-BS UMi layout as other configs for fair comparison
 # SC spacing: 100 MHz / 256 = 390.6 kHz (consistent with all configs)
 
 scene_name: munich
-deployment: mimo_28g
-frequency: 28000000000.0
+deployment: elaa_s_3g5
+frequency: 3500000000.0
 bandwidth: 100000000.0
 num_subcarriers: 256
 guard_band_ratio: 0.1
 temperature: 293.0
-tx_rows: 8
-tx_cols: 8
+tx_rows: 16
+tx_cols: 16
 tx_polarization: V
 rx_rows: 1
 rx_cols: 1
 rx_polarization: cross
 num_bs: 8
-power_dbm: 40.0
+power_dbm: 46.0
 bs_positions:
 - - 3.74
   - -69.727
@@ -43,7 +43,7 @@ bs_positions:
 - - -325.711
   - 38.019
   - 10.0
-synthetic_array: true
+synthetic_array: false
 max_depth: 5
 max_num_paths_per_src: 100000
 samples_per_src: 100000
@@ -62,7 +62,7 @@ ue_device_types:
 - - 2
   - 2
   - V
-data_dir: assets/data/channels_mimo_28g
+data_dir: assets/data/channels_elaa_s_256_3g5
 num_snapshots: 100
 train_bs_ids:
 - 0
