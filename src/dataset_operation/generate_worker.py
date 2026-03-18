@@ -106,6 +106,18 @@ def run_worker(preset, snapshot_start, snapshot_end, num_ue, data_dir,
     scene = build_scene(cfg)
 
     for snap_id in range(snapshot_start, snapshot_end):
+        # Resume: skip if valid snapshot already exists
+        snap_dir = data_dir / f"snapshot_{snap_id:04d}"
+        npz_path = snap_dir / "channels.npz"
+        if npz_path.exists():
+            try:
+                d = np.load(npz_path)
+                if "cfr" in d and d["cfr"].shape[0] > 0:
+                    print(f"  ⏭ Snapshot {snap_id} exists ({d['cfr'].shape}), skipping")
+                    continue
+            except Exception:
+                print(f"  ⚠ Snapshot {snap_id} corrupt, regenerating")
+
         seed = snap_id * 17 + 41
 
         # Build ue_infos from trajectories (temporal) or let generate_snapshot sample (independent)
@@ -115,6 +127,13 @@ def run_worker(preset, snapshot_start, snapshot_end, num_ue, data_dir,
             bs_ids = traj_data["bs_ids"]
             device_types = traj_data["device_types"]
             velocities = traj_data["velocities"]
+
+            # velocities shape: (num_snapshots, num_ue, 2) for Gauss-Markov
+            #                or (num_ue, 2) for legacy linear
+            if velocities.ndim == 3:
+                snap_vel = velocities[snap_id]  # (num_ue, 2)
+            else:
+                snap_vel = velocities  # (num_ue, 2) constant
 
             ue_infos = []
             for u in range(len(bs_ids)):
@@ -129,8 +148,8 @@ def run_worker(preset, snapshot_start, snapshot_end, num_ue, data_dir,
                     "ue_rx_rows": meta.get("ue_rx_rows", 1),
                     "ue_rx_cols": meta.get("ue_rx_cols", 1),
                     "ue_polarization": meta.get("ue_polarization", "cross"),
-                    "vx": float(velocities[u, 0]),
-                    "vy": float(velocities[u, 1]),
+                    "vx": float(snap_vel[u, 0]),
+                    "vy": float(snap_vel[u, 1]),
                 })
 
         snap_ue_infos = generate_snapshot(
