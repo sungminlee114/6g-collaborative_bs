@@ -1,5 +1,6 @@
 #!/bin/bash
 # Generate all channel datasets — independent + temporal modes.
+# 7 configs: 3 MIMO baselines + 4 ELAA (FR3/FR2 only).
 # Skips presets that already have all snapshots generated.
 # Task tracking is automatic (backlog.json).
 #
@@ -20,38 +21,22 @@ DT_MS=10
 VELOCITIES="0,1,8.3"
 SEED=42
 
-# ── All ELAA presets ───────────────────────────────────────────────
-ELAA_PRESETS=(
-    munich_elaa_s_1k_15g
-    munich_elaa_s_1k_28g
-    munich_elaa_s_2k_15g
-    munich_elaa_s_2k_28g
-    munich_elaa_m_1k_15g
-    munich_elaa_m_1k_28g
-    munich_elaa_m_2k_15g
-    munich_elaa_m_2k_28g
-    munich_elaa_l_1k_15g
-    munich_elaa_l_1k_28g
-    munich_elaa_l_2k_15g
-    munich_elaa_l_2k_28g
-    munich_elaa_s_4k_15g
-    munich_elaa_s_4k_28g
-    munich_elaa_m_4k_15g
-    munich_elaa_m_4k_28g
-    munich_elaa_l_4k_15g
-    munich_elaa_l_4k_28g
+# ── 7-config matrix (see docs/ce-skip/dataset_design.md) ─────────
+# Row 1: MIMO baselines (8×8, 3 freq bands)
+# Row 2-3: ELAA (16×16, 32×16) at FR3/FR2 only
+PRESETS=(
+    munich_5g_mimo_3g5      # 8×8,  3.5 GHz, 100M BW, 256 SC
+    munich_mimo_15g         # 8×8,  15 GHz,  400M BW, 1024 SC
+    munich_mimo_28g         # 8×8,  28 GHz,  100M BW, 256 SC
+    munich_elaa_s_1k_15g    # 16×16, 15 GHz, 400M BW, 1024 SC
+    munich_elaa_s_1k_28g    # 16×16, 28 GHz, 400M BW, 1024 SC
+    munich_elaa_m_1k_15g    # 32×16, 15 GHz, 400M BW, 1024 SC
+    munich_elaa_m_1k_28g    # 32×16, 28 GHz, 400M BW, 1024 SC
 )
-
-FIVEG_PRESETS=(
-    munich_5g_mimo_3g5
-)
-
-ALL_PRESETS=("${FIVEG_PRESETS[@]}" "${ELAA_PRESETS[@]}")
 
 # ── Skip check ─────────────────────────────────────────────────────
 count_snapshots() {
     local dir=$1
-    local expected=$2
     if [ ! -d "$dir" ]; then
         echo 0
         return
@@ -64,7 +49,7 @@ count_snapshots() {
 run_independent() {
     local preset=$1
     local data_dir=$2
-    local done=$(count_snapshots "$data_dir" "$INDEP_SNAPSHOTS")
+    local done=$(count_snapshots "$data_dir")
 
     if [ "$done" -ge "$INDEP_SNAPSHOTS" ]; then
         echo "  ⏭ Independent SKIP ($done/$INDEP_SNAPSHOTS snapshots exist)"
@@ -83,7 +68,7 @@ run_temporal() {
     local preset=$1
     local data_dir=$2
     local traj_file="$data_dir/trajectories.npz"
-    local done=$(count_snapshots "$data_dir" "$TEMPORAL_SNAPSHOTS")
+    local done=$(count_snapshots "$data_dir")
 
     if [ "$done" -ge "$TEMPORAL_SNAPSHOTS" ]; then
         echo "  ⏭ Temporal SKIP ($done/$TEMPORAL_SNAPSHOTS snapshots exist)"
@@ -119,13 +104,13 @@ run_temporal() {
 # ── Main loop ──────────────────────────────────────────────────────
 echo "════════════════════════════════════════════════════════════"
 echo "  Channel Dataset Generation"
-echo "  ${#ALL_PRESETS[@]} presets × 2 modes (independent + temporal)"
+echo "  ${#PRESETS[@]} presets × 2 modes (independent + temporal)"
 echo "  GPUs: $GPUS"
 echo "  Started: $(date '+%Y-%m-%d %H:%M:%S')"
 echo "════════════════════════════════════════════════════════════"
 
-for preset in "${ALL_PRESETS[@]}"; do
-    # Derive data dirs
+for preset in "${PRESETS[@]}"; do
+    # Derive data dirs from preset name (strip munich_ prefix)
     indep_dir="assets/data/channels_${preset#munich_}"
     temporal_dir="${indep_dir}_temporal"
 
