@@ -32,6 +32,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from src.tracker import ASSETS_DIR, RUNS_DIR, Tracker, pid_alive
 
 RESULTS_DIR = ASSETS_DIR / "results"
+DATA_DIR = ASSETS_DIR / "data"
 CHECKPOINTS_DIR = ASSETS_DIR / "checkpoints"
 BACKLOG_FILE = ASSETS_DIR / "backlog.json"
 
@@ -102,6 +103,41 @@ def _delete_backlog_item(item_id):
         _save_backlog(items)
         return True
     return False
+
+
+# ── Datagen progress ─────────────────────────────────────────────────
+
+
+def _scan_datagen_progress():
+    """Scan all channel data dirs for progress.json files."""
+    results = []
+    if not DATA_DIR.exists():
+        return results
+    for d in sorted(DATA_DIR.iterdir()):
+        if not d.is_dir() or not d.name.startswith("channels_"):
+            continue
+        prog = d / "progress.json"
+        info = d / "bs_info.json"
+        snap_count = sum(1 for _ in d.glob("snapshot_*/channels.npz"))
+        entry = {
+            "name": d.name,
+            "snapshots": snap_count,
+            "size_mb": round(sum(f.stat().st_size for f in d.rglob("*") if f.is_file()) / 1e6, 1),
+        }
+        if prog.exists():
+            try:
+                with open(prog) as f:
+                    entry["progress"] = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                pass
+        if info.exists():
+            try:
+                with open(info) as f:
+                    entry["info"] = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                pass
+        results.append(entry)
+    return results
 
 
 # ── Data helpers ─────────────────────────────────────────────────────
@@ -417,6 +453,8 @@ class Handler(BaseHTTPRequestHandler):
             exp = path[len("/api/experiment-meta/"):]
             meta = Tracker.get_experiment_meta(exp)
             self._respond_json(meta or {})
+        elif path == "/api/datagen":
+            self._respond_json(_scan_datagen_progress())
         elif path == "/api/cleanup-stale":
             n = Tracker.cleanup_stale()
             self._respond_json({"ok": True, "cleaned": n})

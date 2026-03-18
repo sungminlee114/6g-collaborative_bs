@@ -1,83 +1,126 @@
 #!/bin/bash
 # Generate all channel datasets — independent + temporal modes.
 # 7 configs: 3 MIMO baselines + 4 ELAA (FR3/FR2 only).
-# Skips presets that already have all snapshots generated.
-# Task tracking is automatic (backlog.json).
+# Runs ALL configs in parallel (1 GPU per config).
 #
-# Usage: bash scripts/run_all_datagen.sh
+# Usage: bash scripts/run_all_datagen.sh [phase]
+#   phase: "indep" | "temporal" | "all" (default: all)
 
 set -e
 
 NUM_UE=100
-GPUS="0 1 2 3 4 5 7"  # 7 GPUs (GPU6 = occupied)
-TRAJ_GPU=0
+TRAJ_GPU=0  # CPU-bound, any GPU for trajectory gen
 
-# ── Independent mode config ────────────────────────────────────────
+# ── Mode config ────────────────────────────────────────────────────
 INDEP_SNAPSHOTS=100
-
-# ── Temporal mode config ───────────────────────────────────────────
 TEMPORAL_SNAPSHOTS=1000
 DT_MS=10
 VELOCITIES="0,1,8.3"
 SEED=42
 
-# ── 7-config matrix (see docs/ce-skip/dataset_design.md) ─────────
-# Row 1: MIMO baselines (8×8, 3 freq bands)
-# Row 2-3: ELAA (16×16, 32×16) at FR3/FR2 only
-PRESETS=(
-    munich_5g_mimo_3g5      # 8×8,  3.5 GHz, 100M BW, 256 SC
-    munich_mimo_15g         # 8×8,  15 GHz,  400M BW, 1024 SC
-    munich_mimo_28g         # 8×8,  28 GHz,  100M BW, 256 SC
-    munich_elaa_s_1k_15g    # 16×16, 15 GHz, 400M BW, 1024 SC
-    munich_elaa_s_1k_28g    # 16×16, 28 GHz, 400M BW, 1024 SC
-    munich_elaa_m_1k_15g    # 32×16, 15 GHz, 400M BW, 1024 SC
-    munich_elaa_m_1k_28g    # 32×16, 28 GHz, 400M BW, 1024 SC
+# ── 7 configs × GPU assignments ──────────────────────────────────
+# Each config gets 1 dedicated GPU for max parallelism.
+# Config name        GPU   Array     Freq     BW    SC
+declare -A CONFIG_GPU=(
+    [munich_5g_mimo_3g5]=0      # 8×8    3.5GHz  100M  256
+    [munich_mimo_15g]=1         # 8×8    15GHz   400M  1024
+    [munich_mimo_28g]=2         # 8×8    28GHz   100M  256
+    [munich_elaa_s_1k_15g]=3    # 16×16  15GHz   400M  1024
+    [munich_elaa_s_1k_28g]=4    # 16×16  28GHz   400M  1024
+    [munich_elaa_m_1k_15g]=5    # 32×16  15GHz   400M  1024
+    [munich_elaa_m_1k_28g]=6    # 32×16  28GHz   400M  1024
 )
 
-# ── Skip check ─────────────────────────────────────────────────────
-count_snapshots() {
-    local dir=$1
-    if [ ! -d "$dir" ]; then
-        echo 0
-        return
-    fi
-    local count=$(find "$dir" -name "channels.npz" 2>/dev/null | wc -l)
-    echo "$count"
-}
+PRESETS=(${!CONFIG_GPU[@]})
 
 # ── Helpers ────────────────────────────────────────────────────────
-run_independent() {
-    local preset=$1
-    local data_dir=$2
-    local done=$(count_snapshots "$data_dir")
-
-    if [ "$done" -ge "$INDEP_SNAPSHOTS" ]; then
-        echo "  ⏭ Independent SKIP ($done/$INDEP_SNAPSHOTS snapshots exist)"
-        return
-    fi
-
-    echo "  ▶ Independent: $INDEP_SNAPSHOTS snapshots ($done exist, generating rest)"
-    uv run python -m src.dataset_operation.generate_parallel \
-        --preset "$preset" \
-        --num_snapshots "$INDEP_SNAPSHOTS" \
-        --num_ue "$NUM_UE" \
-        --gpus $GPUS
+count_snapshots() {
+    local dir=$1
+    if [ ! -d "$dir" ]; then echo 0; return; fi
+    find "$dir" -name "channels.npz" 2>/dev/null | wc -l
 }
 
-run_temporal() {
+data_dir_for() {
     local preset=$1
-    local data_dir=$2
-    local traj_file="$data_dir/trajectories.npz"
-    local done=$(count_snapshots "$data_dir")
+    echo "assets/data/channels_${preset#munich_}"
+}
 
-    if [ "$done" -ge "$TEMPORAL_SNAPSHOTS" ]; then
-        echo "  ⏭ Temporal SKIP ($done/$TEMPORAL_SNAPSHOTS snapshots exist)"
-        return
+# ── Phase: Independent ─────────────────────────────────────────────
+run_independent_all() {
+    echo ""
+    echo "═══ Phase 1: Independent ($INDEP_SNAPSHOTS snapshots) ═══"
+    echo "  Launching ${#PRESETS[@]} configs in parallel..."
+    echo ""
+
+    local pids=()
+    local names=()
+
+    for preset in "${PRESETS[@]}"; do
+        local gpu=${CONFIG_GPU[$preset]}
+        local dir=$(data_dir_for "$preset")
+        local done=$(count_snapshots "$dir")
+
+        if [ "$done" -ge "$INDEP_SNAPSHOTS" ]; then
+            echo "  GPU$gpu ⏭ $preset ($done/$INDEP_SNAPSHOTS exist)"
+            continue
+        fi
+
+        local log="/tmp/datagen_indep_${preset#munich_}.log"
+        echo "  GPU$gpu ▶ $preset ($done→$INDEP_SNAPSHOTS) → $log"
+
+        CUDA_VISIBLE_DEVICES=$gpu uv run python -m src.dataset_operation.generate_parallel \
+            --preset "$preset" \
+            --num_snapshots "$INDEP_SNAPSHOTS" \
+            --num_ue "$NUM_UE" \
+            --gpus "$gpu" \
+            --start_snapshot "$done" \
+            > "$log" 2>&1 &
+        pids+=($!)
+        names+=("$preset")
+    done
+
+    if [ ${#pids[@]} -eq 0 ]; then
+        echo "  All independent datasets complete!"
+        return 0
     fi
 
-    # Step 1: Trajectories
-    if [ ! -f "$traj_file" ]; then
-        echo "  ▶ Temporal [1/2]: Generating trajectories..."
+    echo ""
+    echo "  Monitor: tail -f /tmp/datagen_indep_*.log"
+    echo "  Progress: curl localhost:8765/api/datagen"
+    echo ""
+
+    # Wait for all
+    local failed=0
+    for i in "${!pids[@]}"; do
+        if wait ${pids[$i]}; then
+            echo "  ✓ ${names[$i]} done"
+        else
+            echo "  ✗ ${names[$i]} FAILED (rc=$?)"
+            ((failed++))
+        fi
+    done
+
+    return $failed
+}
+
+# ── Phase: Temporal ────────────────────────────────────────────────
+run_temporal_all() {
+    echo ""
+    echo "═══ Phase 2: Temporal ($TEMPORAL_SNAPSHOTS snapshots, dt=${DT_MS}ms) ═══"
+    echo ""
+
+    # Step 1: Generate trajectories (CPU-bound, sequential is fine)
+    echo "── Trajectory generation ──"
+    for preset in "${PRESETS[@]}"; do
+        local dir="$(data_dir_for "$preset")_temporal"
+        local traj="$dir/trajectories.npz"
+
+        if [ -f "$traj" ]; then
+            echo "  ⏭ $preset trajectories exist"
+            continue
+        fi
+
+        echo "  ▶ $preset trajectories..."
         CUDA_VISIBLE_DEVICES=$TRAJ_GPU uv run python -m src.dataset_operation.generate_trajectories \
             --preset "$preset" \
             --num_snapshots "$TEMPORAL_SNAPSHOTS" \
@@ -85,48 +128,96 @@ run_temporal() {
             --dt_ms "$DT_MS" \
             --velocities "$VELOCITIES" \
             --seed "$SEED" \
-            --data_dir "$data_dir"
-    else
-        echo "  ▶ Temporal [1/2]: Trajectories exist"
+            --data_dir "$dir"
+        echo "  ✓ $preset trajectories done"
+    done
+
+    # Step 2: Generate channels in parallel
+    echo ""
+    echo "── Channel generation (parallel) ──"
+
+    local pids=()
+    local names=()
+
+    for preset in "${PRESETS[@]}"; do
+        local gpu=${CONFIG_GPU[$preset]}
+        local dir="$(data_dir_for "$preset")_temporal"
+        local traj="$dir/trajectories.npz"
+        local done=$(count_snapshots "$dir")
+
+        if [ "$done" -ge "$TEMPORAL_SNAPSHOTS" ]; then
+            echo "  GPU$gpu ⏭ $preset ($done/$TEMPORAL_SNAPSHOTS exist)"
+            continue
+        fi
+
+        local log="/tmp/datagen_temporal_${preset#munich_}.log"
+        echo "  GPU$gpu ▶ $preset ($done→$TEMPORAL_SNAPSHOTS) → $log"
+
+        CUDA_VISIBLE_DEVICES=$gpu uv run python -m src.dataset_operation.generate_parallel \
+            --preset "$preset" \
+            --num_snapshots "$TEMPORAL_SNAPSHOTS" \
+            --num_ue "$NUM_UE" \
+            --gpus "$gpu" \
+            --trajectories "$traj" \
+            --data_dir "$dir" \
+            --start_snapshot "$done" \
+            > "$log" 2>&1 &
+        pids+=($!)
+        names+=("$preset")
+    done
+
+    if [ ${#pids[@]} -eq 0 ]; then
+        echo "  All temporal datasets complete!"
+        return 0
     fi
 
-    # Step 2: Channels
-    echo "  ▶ Temporal [2/2]: Generating channels ($done exist)..."
-    uv run python -m src.dataset_operation.generate_parallel \
-        --preset "$preset" \
-        --num_snapshots "$TEMPORAL_SNAPSHOTS" \
-        --num_ue "$NUM_UE" \
-        --gpus $GPUS \
-        --trajectories "$traj_file" \
-        --data_dir "$data_dir"
+    echo ""
+    echo "  Monitor: tail -f /tmp/datagen_temporal_*.log"
+    echo "  Progress: curl localhost:8765/api/datagen"
+    echo ""
+
+    local failed=0
+    for i in "${!pids[@]}"; do
+        if wait ${pids[$i]}; then
+            echo "  ✓ ${names[$i]} done"
+        else
+            echo "  ✗ ${names[$i]} FAILED (rc=$?)"
+            ((failed++))
+        fi
+    done
+
+    return $failed
 }
 
-# ── Main loop ──────────────────────────────────────────────────────
+# ── Main ───────────────────────────────────────────────────────────
+PHASE="${1:-all}"
+
 echo "════════════════════════════════════════════════════════════"
-echo "  Channel Dataset Generation"
-echo "  ${#PRESETS[@]} presets × 2 modes (independent + temporal)"
-echo "  GPUs: $GPUS"
+echo "  Channel Dataset Generation (parallel)"
+echo "  ${#PRESETS[@]} configs, 1 GPU each"
+echo "  Phase: $PHASE"
 echo "  Started: $(date '+%Y-%m-%d %H:%M:%S')"
 echo "════════════════════════════════════════════════════════════"
 
-for preset in "${PRESETS[@]}"; do
-    # Derive data dirs from preset name (strip munich_ prefix)
-    indep_dir="assets/data/channels_${preset#munich_}"
-    temporal_dir="${indep_dir}_temporal"
-
-    echo ""
-    echo "──── $preset ────"
-    echo "  $(date '+%H:%M:%S')"
-
-    # Independent
-    run_independent "$preset" "$indep_dir"
-
-    # Temporal
-    run_temporal "$preset" "$temporal_dir"
-done
+case "$PHASE" in
+    indep|independent)
+        run_independent_all
+        ;;
+    temporal)
+        run_temporal_all
+        ;;
+    all)
+        run_independent_all
+        echo ""
+        run_temporal_all
+        ;;
+    *)
+        echo "Unknown phase: $PHASE (use: indep|temporal|all)"
+        exit 1
+        ;;
+esac
 
 echo ""
 echo "════════════════════════════════════════════════════════════"
-echo "  All datasets generated!"
-echo "  $(date '+%Y-%m-%d %H:%M:%S')"
+echo "  Done! $(date '+%Y-%m-%d %H:%M:%S')"
 echo "════════════════════════════════════════════════════════════"

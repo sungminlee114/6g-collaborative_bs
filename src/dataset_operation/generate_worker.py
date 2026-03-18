@@ -6,6 +6,8 @@ Also handles --merge_only to combine per-worker metadata.
 """
 import argparse
 import json
+import os
+import time
 from pathlib import Path
 
 import numpy as np
@@ -105,6 +107,38 @@ def run_worker(preset, snapshot_start, snapshot_end, num_ue, data_dir,
 
     scene = build_scene(cfg)
 
+    # Progress tracking
+    gpu_id = os.environ.get("CUDA_VISIBLE_DEVICES", "?")
+    progress_file = data_dir / "progress.json"
+    total = snapshot_end - snapshot_start
+    snap_times = []  # rolling window for ETA
+    t_worker_start = time.time()
+
+    def _write_progress(done, snap_id, status="running"):
+        elapsed = time.time() - t_worker_start
+        avg_s = np.mean(snap_times[-10:]) if snap_times else 0
+        remaining = (total - done) * avg_s if avg_s > 0 else 0
+        progress = {
+            "preset": preset, "mode": mode, "gpu": gpu_id,
+            "snapshot_start": snapshot_start, "snapshot_end": snapshot_end,
+            "current": snap_id, "done": done, "total": total,
+            "pct": round(100 * done / max(total, 1), 1),
+            "elapsed_s": round(elapsed, 1),
+            "eta_s": round(remaining, 1),
+            "avg_snap_s": round(avg_s, 1),
+            "status": status,
+            "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        }
+        try:
+            tmp = progress_file.with_suffix(".tmp")
+            tmp.write_text(json.dumps(progress, indent=2))
+            os.replace(tmp, progress_file)
+        except OSError:
+            pass
+
+    _write_progress(0, snapshot_start, "starting")
+
+    done_count = 0
     for snap_id in range(snapshot_start, snapshot_end):
         # Resume: skip if valid snapshot already exists
         snap_dir = data_dir / f"snapshot_{snap_id:04d}"
@@ -114,10 +148,13 @@ def run_worker(preset, snapshot_start, snapshot_end, num_ue, data_dir,
                 d = np.load(npz_path)
                 if "cfr" in d and d["cfr"].shape[0] > 0:
                     print(f"  ⏭ Snapshot {snap_id} exists ({d['cfr'].shape}), skipping")
+                    done_count += 1
+                    _write_progress(done_count, snap_id)
                     continue
             except Exception:
                 print(f"  ⚠ Snapshot {snap_id} corrupt, regenerating")
 
+        t_snap = time.time()
         seed = snap_id * 17 + 41
 
         # Build ue_infos from trajectories (temporal) or let generate_snapshot sample (independent)
@@ -181,7 +218,18 @@ def run_worker(preset, snapshot_start, snapshot_end, num_ue, data_dir,
         with open(snap_dir / "metadata.json", "w") as f:
             json.dump(records, f)
 
-        print(f"  ✓ Snapshot {snap_id}/{snapshot_end-1} done ({len(snap_ue_infos)} UEs)")
+        snap_elapsed = time.time() - t_snap
+        snap_times.append(snap_elapsed)
+        done_count += 1
+        _write_progress(done_count, snap_id)
+
+        avg_s = np.mean(snap_times[-10:])
+        eta_s = (total - done_count) * avg_s
+        eta_str = f"{eta_s/60:.0f}m" if eta_s > 60 else f"{eta_s:.0f}s"
+        print(f"  ✓ Snapshot {snap_id}/{snapshot_end-1} done "
+              f"({len(snap_ue_infos)} UEs, {snap_elapsed:.1f}s, ETA {eta_str})")
+
+    _write_progress(done_count, snapshot_end - 1, "done")
 
 
 if __name__ == "__main__":
