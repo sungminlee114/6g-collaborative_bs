@@ -48,7 +48,9 @@ def iter_ue_tensors(
         h_complex = data.get_ue_series(uid, bs_id, snap_range=(0, T_max))
         # (T, n_ant, n_sc) complex → (T, 2, n_ant, n_sc) float32
         h_real = np.stack([h_complex.real, h_complex.imag], axis=1).astype(np.float32)
-        h_tensor = torch.from_numpy(h_real).to(device)
+        # δ computation is lightweight — keep on CPU to avoid OOM
+        # (CIR→CFR uses multi-GPU internally, result comes back to CPU)
+        h_tensor = torch.from_numpy(h_real)
 
         dist = data.get_ue_distance(uid, bs_id, snap_idx=0)
         speed = data.get_ue_speed(uid)

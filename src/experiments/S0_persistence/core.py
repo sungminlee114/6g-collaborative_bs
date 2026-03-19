@@ -31,7 +31,8 @@ def load_data(preset: str, max_snapshots: int = 20000) -> TemporalChannelData:
 
 
 def compute_delta_profile(data: TemporalChannelData, bs_id: int,
-                          max_snapshots: int = None, ue_per_speed: int = None) -> dict:
+                          max_snapshots: int = None, ue_per_speed: int = None,
+                          gpu: str = None) -> dict:
     """Compute δ_oracle(t) for all UEs served by a BS.
 
     Args:
@@ -46,20 +47,52 @@ def compute_delta_profile(data: TemporalChannelData, bs_id: int,
 
     T = max_snapshots or data.num_snapshots
 
-    # Iterate UEs one-by-one (memory safe). Track speed counts for ue_per_speed.
     import torch
-    from src.ce_skip.helpers import iter_ue_tensors
 
-    speed_counts = {}  # {rounded_speed: count of valid UEs processed}
+    # Pre-filter: peek first snapshot to find valid (non-zero) UEs, then pick N per speed
+    if data.ue_bs_ids is not None:
+        all_ue_ids = [i for i, b in enumerate(data.ue_bs_ids) if b == bs_id]
+    else:
+        all_ue_ids = list(range(data.num_ue))
 
-    for h_ue_gpu, uid, dist, speed in iter_ue_tensors(data, bs_id, gpu, T):
-        # Check ue_per_speed limit
+    # Quick validity check: load 1 snapshot, check which UEs have non-zero channel
+    h_peek = data.get_ue_series(all_ue_ids[0], bs_id, snap_range=(0, 1)) if all_ue_ids else None
+    valid_ue_ids = []
+    for uid in all_ue_ids:
+        h1 = data.get_ue_series(uid, bs_id, snap_range=(0, 1))  # (1, n_ant, n_sc) — 1 snap, fast
+        if np.abs(h1).sum() > 1e-12:
+            valid_ue_ids.append(uid)
+
+    # Select N per speed from valid UEs only
+    selected_ue_ids = []
+    if ue_per_speed is not None:
+        _counts = {}
+        for uid in valid_ue_ids:
+            spd = round(float(data.get_ue_speed(uid)), 1)
+            _counts.setdefault(spd, 0)
+            if _counts[spd] < ue_per_speed:
+                selected_ue_ids.append(uid)
+                _counts[spd] += 1
+    else:
+        selected_ue_ids = valid_ue_ids
+
+    # Print selection summary
+    _labels = {0.0: "static", 1.0: "ped", 8.3: "veh"}
+    _sel_str = ", ".join(f"UE{u}({_labels.get(round(data.get_ue_speed(u),1), '?')})" for u in selected_ue_ids)
+    _skip_str = ", ".join(f"UE{u}" for u in all_ue_ids if u not in valid_ue_ids)
+    print(f"    Selected {len(selected_ue_ids)} UEs: [{_sel_str}]"
+          + (f"  (skipped invalid: {_skip_str})" if _skip_str else ""))
+
+    # Now load only selected UEs (exactly N per speed, all valid)
+    speed_counts = {}
+    for uid in selected_ue_ids:
+        speed = data.get_ue_speed(uid)
+        h_complex = data.get_ue_series(uid, bs_id, snap_range=(0, T))
+        h_real = torch.from_numpy(
+            np.stack([h_complex.real, h_complex.imag], axis=1).astype(np.float32)
+        )
+        dist = data.get_ue_distance(uid, bs_id, snap_idx=0)
         spd_key = round(speed, 1)
-        speed_counts.setdefault(spd_key, 0)
-        if ue_per_speed is not None and speed_counts[spd_key] >= ue_per_speed:
-            continue
-
-        h_real = h_ue_gpu  # already (T, 2, n_ant, n_sc) float on CPU/GPU
 
         # Generate LS estimate (add AWGN at 20 dB SNR)
         import torch
@@ -102,6 +135,7 @@ def compute_delta_profile(data: TemporalChannelData, bs_id: int,
         if len(d_oracle) == 0:
             continue  # invalid UE (all-zero channel) — don't count toward ue_per_speed
 
+        speed_counts.setdefault(spd_key, 0)
         speed_counts[spd_key] += 1  # valid UE — count it
 
         per_ue.append({
@@ -160,7 +194,7 @@ def run_all_bs(data: TemporalChannelData, preset: str, gpu: str = None,
 
     all_per_ue = []
     for bs_id in bs_with_ues:
-        profile = compute_delta_profile(data, bs_id, max_snapshots=max_snapshots, ue_per_speed=ue_per_speed)
+        profile = compute_delta_profile(data, bs_id, max_snapshots=max_snapshots, ue_per_speed=ue_per_speed, gpu=gpu)
         all_per_ue.extend(profile["per_ue"])
         ov = profile["overall"]
         print(f"  BS {bs_id}: {ov['n_ues']} UEs, median δ={ov['median_delta_all']:.4f}, "
