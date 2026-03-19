@@ -74,18 +74,32 @@ def strip_cfr(data_dir: Path, dry_run: bool = False):
     print(f"\nTotal saved: {saved_total/1024**3:.1f} GB")
 
 
-def restore_cfr(data_dir: Path, dry_run: bool = False):
+def restore_cfr(data_dir: Path, dry_run: bool = False, preset_override: str = None):
     """Recompute CFR from CIR and save back into channels.npz."""
     from src.config import SceneConfig
 
-    # Get preset from progress.json
-    progress_path = data_dir / "progress.json"
-    if not progress_path.exists():
-        print("ERROR: progress.json not found, cannot determine preset")
-        sys.exit(1)
+    # Get preset from arg, progress.json, or trajectory_info.json
+    preset = preset_override
+    if not preset:
+        for fname in ["progress.json", "trajectory_info.json"]:
+            fpath = data_dir / fname
+            if fpath.exists():
+                with open(fpath) as f:
+                    preset = json.load(f).get("preset")
+                if preset:
+                    break
+        # Also check shared_trajectories
+        if not preset:
+            traj_info = Path("assets/data/shared_trajectories/trajectory_info.json")
+            if traj_info.exists():
+                with open(traj_info) as f:
+                    preset = json.load(f).get("preset")
 
-    with open(progress_path) as f:
-        preset = json.load(f)["preset"]
+    if not preset:
+        # Infer from directory name: channels_elaa_m_1k_28g_temporal → munich_elaa_m_1k_28g
+        dirname = data_dir.name.replace("channels_", "").replace("_temporal", "")
+        preset = f"munich_{dirname}"
+        print(f"  Inferred preset: {preset}")
     cfg = SceneConfig.from_preset(preset)
     print(f"Preset: {preset}, {cfg.num_subcarriers} subcarriers, "
           f"{cfg.subcarrier_spacing:.0f} Hz spacing")
@@ -130,6 +144,7 @@ def main():
     parser.add_argument("data_dir", type=Path, help="Path to temporal channel data directory")
     parser.add_argument("--restore", action="store_true", help="Restore CFR from CIR")
     parser.add_argument("--dry-run", action="store_true", help="Show what would happen")
+    parser.add_argument("--preset", type=str, default=None, help="Override preset name")
     args = parser.parse_args()
 
     if not args.data_dir.exists():
@@ -137,7 +152,7 @@ def main():
         sys.exit(1)
 
     if args.restore:
-        restore_cfr(args.data_dir, dry_run=args.dry_run)
+        restore_cfr(args.data_dir, dry_run=args.dry_run, preset_override=args.preset)
     else:
         strip_cfr(args.data_dir, dry_run=args.dry_run)
 
