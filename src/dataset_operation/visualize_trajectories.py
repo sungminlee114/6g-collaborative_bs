@@ -51,13 +51,24 @@ def make_gif(data_dir: str, output: str = "assets/plots/trajectory.gif",
     print(f"Trajectories: {T} snapshots, {N_UE} UEs, dt={dt_ms}ms")
     print(f"GIF: {len(frame_indices)} frames (subsample={subsample}), fps={fps}")
 
-    # Load BS positions
-    bs_info_path = data_dir / "bs_info.json"
+    # Load BS positions — try bs_info.json first, fallback to config YAML
     bs_positions = []
+    bs_info_path = data_dir / "bs_info.json"
     if bs_info_path.exists():
         with open(bs_info_path) as f:
-            bs = json.load(f)
-        bs_positions = bs.get("positions", [])
+            bs_positions = json.load(f).get("positions", [])
+    if not bs_positions:
+        # Read from trajectory_info → preset → YAML
+        traj_info_path = data_dir / "trajectory_info.json"
+        if traj_info_path.exists():
+            with open(traj_info_path) as f:
+                preset = json.load(f).get("preset", "")
+            if preset:
+                import yaml
+                yaml_path = Path("assets/configs") / f"{preset}.yaml"
+                if yaml_path.exists():
+                    with open(yaml_path) as f:
+                        bs_positions = yaml.safe_load(f).get("bs_positions", [])
 
     # Load buildings
     buildings = load_buildings()
