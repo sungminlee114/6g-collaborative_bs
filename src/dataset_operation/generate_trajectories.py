@@ -279,34 +279,45 @@ def generate_trajectories_gpu(preset, num_snapshots, num_ue, dt, velocities,
         vel_array[u] = [v * np.cos(angle), v * np.sin(angle)]
         speed_array[u] = v
 
-    # Fix initial positions inside buildings — push to nearest building edge
+    # Fix initial positions: ensure sufficient clearance from all buildings.
+    # Radio map sampling can place UEs inside or very near buildings.
+    # We need clearance so that Gauss-Markov steps don't immediately re-enter.
     if bboxes is not None:
+        CLEARANCE = 5.0  # meters from any building edge
         n_fixed = 0
         for u in range(num_ue):
-            if is_inside_building(positions[0, u, 0], positions[0, u, 1], bboxes):
-                # Find which building(s) contain this point
-                x, y = positions[0, u, 0], positions[0, u, 1]
-                inside = (bboxes[:, 0] <= x) & (x <= bboxes[:, 2]) & \
-                         (bboxes[:, 1] <= y) & (y <= bboxes[:, 3])
-                for bidx in np.where(inside)[0]:
-                    # Push to nearest edge + 1m margin
-                    bx0, by0, bx2, by2 = bboxes[bidx]
-                    dists = [abs(x - bx0), abs(x - bx2), abs(y - by0), abs(y - by2)]
-                    edge = np.argmin(dists)
-                    margin = 1.0
-                    if edge == 0:
-                        positions[0, u, 0] = bx0 - margin
-                    elif edge == 1:
-                        positions[0, u, 0] = bx2 + margin
-                    elif edge == 2:
-                        positions[0, u, 1] = by0 - margin
-                    else:
-                        positions[0, u, 1] = by2 + margin
-                    break  # fix for first containing building
-                if not is_inside_building(positions[0, u, 0], positions[0, u, 1], bboxes):
-                    n_fixed += 1
+            x, y = positions[0, u, 0], positions[0, u, 1]
+
+            def has_clearance(px, py):
+                """Check if point has sufficient clearance from all buildings."""
+                return not np.any(
+                    (bboxes[:, 0] - CLEARANCE <= px) & (px <= bboxes[:, 2] + CLEARANCE) &
+                    (bboxes[:, 1] - CLEARANCE <= py) & (py <= bboxes[:, 3] + CLEARANCE)
+                )
+
+            if has_clearance(x, y):
+                continue
+
+            # Try random offsets with increasing radius until clear
+            fixed = False
+            for radius in [10, 20, 40, 80]:
+                for _ in range(20):
+                    angle = rng.uniform(0, 2 * np.pi)
+                    cx = x + radius * np.cos(angle)
+                    cy = y + radius * np.sin(angle)
+                    if has_clearance(cx, cy):
+                        positions[0, u, 0] = cx
+                        positions[0, u, 1] = cy
+                        fixed = True
+                        break
+                if fixed:
+                    break
+
+            if fixed:
+                n_fixed += 1
+
         if n_fixed > 0:
-            print(f"  Fixed {n_fixed} UEs initially inside buildings (pushed to nearest edge)")
+            print(f"  Relocated {n_fixed}/{num_ue} UEs to ensure {CLEARANCE}m building clearance")
 
     # Propagate — coarse Gauss-Markov at dt_coarse, then interpolate to target dt.
     # This ensures building avoidance works (step size big enough to escape buildings)
@@ -321,16 +332,13 @@ def generate_trajectories_gpu(preset, num_snapshots, num_ue, dt, velocities,
               f"then {upsample}x interpolation → {num_snapshots} @ dt={dt*1000:.4f}ms")
 
     if upsample > 1:
-        # Step 1: Coarse trajectory WITHOUT building collision
-        # (buildings cause UEs to get stuck in dense urban areas;
-        #  initial positions are already fixed to be outside buildings,
-        #  and Sionna RT handles building geometry in channel computation)
+        # Step 1: Coarse trajectory with building avoidance
         coarse_pos = np.zeros((coarse_steps, num_ue, 3), dtype=np.float32)
         coarse_pos[0] = positions[0]
         if mobility == "gauss_markov":
             propagate_gauss_markov(
                 coarse_pos, vel_array, speed_array, coarse_dt, coarse_steps,
-                rng, bboxes=None, alpha=alpha,
+                rng, bboxes=bboxes, alpha=alpha,
             )
         else:
             propagate_linear(coarse_pos, vel_array, coarse_dt, coarse_steps)
