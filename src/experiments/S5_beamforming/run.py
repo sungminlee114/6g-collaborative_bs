@@ -26,10 +26,8 @@ from src.ce_skip.metrics import (
     rate_preservation_ratio, skip_miss_rate,
 )
 
-PRIMARY_PRESETS = [
-    "munich_elaa_s_1k_15g",   # 15 GHz, 16×16, 1024 SC
-    "munich_mimo_15g",        # 15 GHz, 8×8, 1024 SC (FF baseline)
-]
+from src.ce_skip import PRIMARY_PRESETS  # noqa: E402 (defined in ce_skip/__init__)
+# Presets imported from ce_skip — change there to update all experiments
 
 SNR_LIST = [10.0, 15.0, 20.0, 25.0]
 TAU_LIST = [0.1, 0.2, 0.3, 0.5]

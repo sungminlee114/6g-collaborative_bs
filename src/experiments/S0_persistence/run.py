@@ -26,10 +26,8 @@ from src.ce_skip import ExperimentConfig
 from src.ce_skip.temporal_dataset import TemporalChannelData
 
 # ─── Configs ────────────────────────────────────────────────────────
-PRIMARY_PRESETS = [
-    "munich_elaa_s_1k_15g",   # Config A: 15 GHz, 16×16, 1024 SC
-    "munich_mimo_15g",        # Config B: 15 GHz, 8×8, 1024 SC (FF baseline)
-]
+from src.ce_skip import PRIMARY_PRESETS  # noqa: E402 (defined in ce_skip/__init__)
+# Presets imported from ce_skip — change there to update all experiments
 
 SPEED_LABELS = {0.0: "static", 1.0: "pedestrian", 8.3: "low_vehicle"}
 

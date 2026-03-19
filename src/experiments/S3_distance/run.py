@@ -26,10 +26,8 @@ from src.ce_skip.scheduling import adaptive_ce_scheduling
 from src.ce_skip.metrics import nmse_per_slot, rate_preservation_ratio
 
 
-PRIMARY_PRESETS = [
-    "munich_elaa_s_1k_15g",   # R_Rayleigh ≈ 5.1m (16×16, 15GHz)
-    "munich_mimo_15g",        # R_Rayleigh ≈ 1.3m (8×8, 15GHz — mostly FF)
-]
+from src.ce_skip import PRIMARY_PRESETS  # noqa: E402 (defined in ce_skip/__init__)
+# Presets imported from ce_skip — change there to update all experiments
 
 
 def rayleigh_distance(cfg: ExperimentConfig) -> float:

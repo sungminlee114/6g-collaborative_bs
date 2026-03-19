@@ -26,10 +26,8 @@ from src.ce_skip.ce_algorithms import LSEstimator
 from src.ce_skip.scheduling import adaptive_ce_scheduling
 from src.ce_skip.metrics import nmse_per_slot
 
-PRIMARY_PRESETS = [
-    "munich_elaa_s_1k_15g",   # 15 GHz, 16×16, 1024 SC
-    "munich_mimo_15g",        # 15 GHz, 8×8, 1024 SC (FF baseline)
-]
+from src.ce_skip import PRIMARY_PRESETS  # noqa: E402 (defined in ce_skip/__init__)
+# Presets imported from ce_skip — change there to update all experiments
 
 DELTA_MODES = ["skip", "ema", "ls_delta"]
 ALPHA_VALUES = [0.3, 0.5, 0.7]  # sweep α for EMA and LS-delta

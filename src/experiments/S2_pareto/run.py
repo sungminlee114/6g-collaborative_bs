@@ -28,10 +28,8 @@ from src.ce_skip.metrics import (
 from src.dataset_operation.dataset import ChannelEstimationDataset
 from src.dataset_operation.utils import complex_to_real
 
-PRIMARY_PRESETS = [
-    "munich_elaa_s_1k_15g",   # 15 GHz, 16×16, 1024 SC
-    "munich_mimo_15g",        # 15 GHz, 8×8, 1024 SC (FF baseline)
-]
+from src.ce_skip import PRIMARY_PRESETS  # noqa: E402 (defined in ce_skip/__init__)
+# Presets imported from ce_skip — change there to update all experiments
 
 # CE profiling times (ms) — will be overridden by S1 results if available
 DEFAULT_CE_TIMES = {

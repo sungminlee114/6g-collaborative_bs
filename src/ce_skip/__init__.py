@@ -7,6 +7,14 @@ import yaml
 
 from src.config import SceneConfig, CONFIGS_DIR
 
+# ─── Shared experiment config ──────────────────────────────────────
+# All S0-S7 experiments use this list. Change here to re-run on different presets.
+PRIMARY_PRESETS = [
+    "munich_elaa_m_1k_15g",   # Config A: 24×24, 15 GHz, R_ray=10.2m (NF primary)
+    "munich_elaa_m_1k_28g",   # Config B: 24×24, 28 GHz, R_ray=5.5m  (NF secondary)
+    "munich_5g_mimo_3g5",     # Config C: 8×8,  3.5 GHz, R_ray=2.7m  (5G FF baseline)
+]
+
 
 @dataclass
 class ExperimentConfig:

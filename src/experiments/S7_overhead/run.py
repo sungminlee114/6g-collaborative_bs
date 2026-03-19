@@ -27,10 +27,8 @@ from src.ce_skip.metrics import scheduling_overhead, effective_throughput_gain
 from src.dataset_operation.dataset import ChannelEstimationDataset
 from torch.utils.data import DataLoader
 
-PRIMARY_PRESETS = [
-    "munich_elaa_s_1k_15g",
-    "munich_mimo_15g",
-]
+from src.ce_skip import PRIMARY_PRESETS  # noqa: E402 (defined in ce_skip/__init__)
+# Presets imported from ce_skip — change there to update all experiments
 
 
 def profile_operation(op_fn, *args, n_warmup=10, n_repeat=100):
