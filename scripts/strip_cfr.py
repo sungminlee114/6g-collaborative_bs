@@ -162,7 +162,7 @@ def restore_cfr(data_dir: Path, dry_run: bool = False, preset_override: str = No
 
     # Streaming pipeline: small mini-batches (read → GPU → save) to minimize RAM
     # Each mini-batch: read N snaps, convert on GPU, save immediately, free RAM
-    mini_batch = 100  # ~4GB RAM per mini-batch
+    mini_batch = 1500  # ~4GB RAM per mini-batch
     gpu_chunk = 1500  # samples per GPU call
 
     # Shared freqs tensor per device

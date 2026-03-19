@@ -17,8 +17,19 @@ print_status() {
             read -r snap_count speed eta < <(python3 -c "
 import json, os
 d=json.load(open('$dir/progress.json'))
-# Count snapshots via listdir (faster than ls -d glob)
-snaps=sum(1 for x in os.listdir('$dir') if x.startswith('snapshot_'))
+npz_count=sum(1 for x in os.listdir('$dir') if x.startswith('snapshot_'))
+if npz_count > 0:
+    snaps = npz_count
+else:
+    # h5 shard mode: progress shows one worker, estimate total
+    done = d.get('done', 0)
+    total_per_worker = d.get('total', 1)
+    # Estimate n_workers from snapshot range
+    s_start = d.get('snapshot_start', 0)
+    s_end = d.get('snapshot_end', 20000)
+    per_worker = s_end - s_start
+    n_workers = max(1, 20000 // max(per_worker, 1))
+    snaps = done * n_workers  # rough estimate
 print(f'{snaps} {d.get(\"avg_snap_s\",0):.1f}s {d.get(\"eta_s\",0)/3600:.1f}h')
 " 2>/dev/null)
         else

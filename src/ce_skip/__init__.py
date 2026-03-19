@@ -50,14 +50,20 @@ class ExperimentConfig:
         )
 
     @property
+    def _project_root(self) -> Path:
+        """Project root (where assets/ lives)."""
+        return Path(__file__).resolve().parent.parent.parent
+
+    @property
     def temporal_dir(self) -> Path:
         """Temporal channel data directory (per-preset, channels only)."""
-        return Path(self.data_dir).parent / f"{Path(self.data_dir).name}_temporal"
+        p = Path(self.data_dir).parent / f"{Path(self.data_dir).name}_temporal"
+        return self._project_root / p
 
     @property
     def trajectory_dir(self) -> Path:
         """Shared trajectory directory (same UE paths across all presets)."""
-        return SHARED_TRAJECTORY_DIR
+        return self._project_root / SHARED_TRAJECTORY_DIR
 
     # Delegate common SceneConfig properties
     @property
