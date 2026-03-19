@@ -146,8 +146,11 @@ def run_worker(preset, snapshot_start, snapshot_end, num_ue, data_dir,
         if npz_path.exists():
             try:
                 d = np.load(npz_path)
-                if "cfr" in d and d["cfr"].shape[0] > 0:
-                    print(f"  ⏭ Snapshot {snap_id} exists ({d['cfr'].shape}), skipping")
+                has_data = ("cfr" in d and d["cfr"].shape[0] > 0) or \
+                           ("cir_a" in d and d["cir_a"].shape[0] > 0)
+                if has_data:
+                    key = "cfr" if "cfr" in d else "cir_a"
+                    print(f"  ⏭ Snapshot {snap_id} exists ({d[key].shape}), skipping")
                     done_count += 1
                     _write_progress(done_count, snap_id)
                     continue

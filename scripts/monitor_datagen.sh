@@ -1,72 +1,68 @@
 #!/bin/bash
-# Monitor all temporal datagen progress. Run: bash scripts/monitor_datagen.sh
-while true; do
-    clear
+# Monitor datagen progress.
+# Usage:
+#   watch -n1 -d bash scripts/monitor_datagen.sh    ← recommended (diff highlight)
+#   bash scripts/monitor_datagen.sh --loop           ← self-refreshing fallback
+
+print_status() {
     echo "═══════════════════════════════════════════════════════════════════════"
     echo "  Channel Generation Monitor  $(date '+%H:%M:%S')"
     echo "═══════════════════════════════════════════════════════════════════════"
 
-    # ─── Dataset progress ─────────────────────────────────────────────
     for dir in assets/data/channels_*_temporal; do
         [ -d "$dir" ] || continue
         name=$(basename "$dir" | sed 's/channels_//;s/_temporal//')
-        total=$(ls -d "$dir"/snapshot_* 2>/dev/null | wc -l)
-        target=80000
-        pct=$((total * 100 / target))
 
+        if [ -f "$dir/progress.json" ]; then
+            read -r snap_count speed eta < <(python3 -c "
+import json, os
+d=json.load(open('$dir/progress.json'))
+# Count snapshots via listdir (faster than ls -d glob)
+snaps=sum(1 for x in os.listdir('$dir') if x.startswith('snapshot_'))
+print(f'{snaps} {d.get(\"avg_snap_s\",0):.1f}s {d.get(\"eta_s\",0)/3600:.1f}h')
+" 2>/dev/null)
+        else
+            snap_count=0; speed="-"; eta="-"
+        fi
+
+        pct=$((snap_count * 100 / 80000))
         filled=$((pct / 2))
         bar=$(printf '%0.s█' $(seq 1 $filled 2>/dev/null))
         empty=$(printf '%0.s░' $(seq 1 $((50 - filled)) 2>/dev/null))
 
-        if [ -f "$dir/progress.json" ]; then
-            speed=$(python3 -c "import json; d=json.load(open('$dir/progress.json')); print(f'{d[\"avg_snap_s\"]:.1f}s')" 2>/dev/null)
-            eta=$(python3 -c "import json; d=json.load(open('$dir/progress.json')); print(f'{d[\"eta_s\"]/3600:.1f}h')" 2>/dev/null)
-        else
-            speed="-"; eta="-"
-        fi
-
-        printf "  %-20s %s%s %5d/%d (%2d%%) %s/snap ETA %s\n" \
-            "$name" "$bar" "$empty" "$total" "$target" "$pct" "$speed" "$eta"
+        printf "  %-20s %s%s %5d/80000 (%2d%%) %s/snap ETA %s\n" \
+            "$name" "$bar" "$empty" "$snap_count" "$pct" "$speed" "$eta"
     done
 
-    # ─── CPU ──────────────────────────────────────────────────────────
+    # CPU / RAM
     echo ""
     n_workers=$(pgrep -fc "generate_worker" 2>/dev/null || echo 0)
-    cpu_usage=$(top -bn1 2>/dev/null | grep "Cpu(s)" | awk '{print $2}' 2>/dev/null || echo "?")
-    n_cores=$(nproc)
-    mem_info=$(free -h 2>/dev/null | awk '/^Mem:/{printf "%s / %s (%.0f%%)", $3, $2, $3/$2*100}')
+    read -r cpu_user cpu_idle < <(top -bn1 2>/dev/null | awk '/^%Cpu/{print $2, $8}' || echo "? ?")
+    mem_info=$(free -h 2>/dev/null | awk '/^Mem:/{printf "%s / %s", $3, $2}')
+    printf "  CPU: %s%% user (%s idle)  |  Workers: %s  |  RAM: %s\n" \
+        "$cpu_user" "$cpu_idle" "$n_workers" "$mem_info"
 
-    printf "  CPU:  %s%% used (%d cores)  |  Workers: %d  |  RAM: %s\n" \
-        "$cpu_usage" "$n_cores" "$n_workers" "$mem_info"
-
-    # Per-worker CPU (top 5)
-    if [ "$n_workers" -gt 0 ]; then
-        echo "  Top workers by CPU:"
-        ps aux --sort=-%cpu | grep "generate_worker" | grep -v grep | head -5 | \
-            awk '{printf "    PID %s: CPU %s%%  RSS %dMB\n", $2, $3, $6/1024}'
-    fi
-
-    # ─── GPU ──────────────────────────────────────────────────────────
+    # GPU
     echo ""
-    echo "  GPU:"
     nvidia-smi --query-gpu=index,utilization.gpu,memory.used,memory.total --format=csv,noheader,nounits 2>/dev/null | \
         while IFS=, read -r idx util mem total; do
             util=$(echo $util | tr -d ' ')
             mem=$(echo $mem | tr -d ' ')
             total=$(echo $total | tr -d ' ')
-            mem_pct=$((mem * 100 / total))
-            # Util bar (20 chars)
             ufilled=$((util / 5))
             ubar=$(printf '%0.s▓' $(seq 1 $ufilled 2>/dev/null))
             uempty=$(printf '%0.s░' $(seq 1 $((20 - ufilled)) 2>/dev/null))
-            printf "    GPU %s: %s%s %3d%%  |  VRAM %5d/%5d MB (%d%%)\n" \
-                "$idx" "$ubar" "$uempty" "$util" "$mem" "$total" "$mem_pct"
+            printf "    GPU %s: %s%s %3d%%  VRAM %5d/%5dMB\n" \
+                "$idx" "$ubar" "$uempty" "$util" "$mem" "$total"
         done
 
-    # ─── Disk ─────────────────────────────────────────────────────────
+    # Disk
     echo ""
-    disk_info=$(df -h /home/sungmin/Projects/ 2>/dev/null | awk 'NR==2{printf "Disk: %s used / %s total (%s)", $3, $2, $5}')
-    echo "  $disk_info"
+    df -h /home/sungmin/Projects/ 2>/dev/null | awk 'NR==2{printf "  Disk: %s / %s (%s)\n", $3, $2, $5}'
+}
 
-    sleep 1
-done
+if [ "$1" = "--loop" ]; then
+    while true; do clear; print_status; sleep 1; done
+else
+    print_status
+fi
