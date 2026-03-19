@@ -15,6 +15,7 @@ def iter_ue_tensors(
     max_snapshots: int = 200,
     max_ue: int = 20,
     desc: str = None,
+    ue_ids: set = None,
 ):
     """Iterate over UEs, yielding one (h_real, ue_id, distance, speed) at a time on GPU.
 
@@ -29,16 +30,18 @@ def iter_ue_tensors(
     """
     T_max = min(data.num_snapshots, max_snapshots)
 
-    # Get UE list for this BS
-    if data.ue_bs_ids is not None:
-        ue_ids = [i for i, b in enumerate(data.ue_bs_ids) if b == bs_id]
+    # Get UE list for this BS, optionally filtered
+    if ue_ids is not None:
+        _ue_list = sorted(ue_ids)
+    elif data.ue_bs_ids is not None:
+        _ue_list = [i for i, b in enumerate(data.ue_bs_ids) if b == bs_id]
     else:
         cfr0 = data._load_snapshot(0)
-        ue_ids = list(range(cfr0.shape[0]))
+        _ue_list = list(range(cfr0.shape[0]))
 
-    n = min(len(ue_ids), max_ue)
+    n = min(len(_ue_list), max_ue)
     label = desc or f"BS{bs_id} UEs"
-    pbar = tqdm(ue_ids[:n], desc=f"{label} ({T_max} snaps)", unit="ue")
+    pbar = tqdm(_ue_list[:n], desc=f"{label} ({T_max} snaps)", unit="ue")
 
     for uid in pbar:
         # Load one UE's time-series on CPU

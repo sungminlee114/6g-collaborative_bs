@@ -60,9 +60,8 @@ def compute_delta_profile(data: TemporalChannelData, bs_id: int,
                 speed_counts[spd] += 1
         ue_filter = set(selected)
 
-    for h_ue, uid, dist, speed in iter_ue_tensors(data, bs_id, "cpu", T, max_ue=50, desc=f"S0 BS{bs_id}"):
-        if ue_filter is not None and uid not in ue_filter:
-            continue
+    max_ue = len(ue_filter) if ue_filter else 50
+    for h_ue, uid, dist, speed in iter_ue_tensors(data, bs_id, "cpu", T, max_ue=max_ue, desc=f"S0 BS{bs_id}", ue_ids=ue_filter):
         T = h_ue.shape[0]
         deltas = []
         nmse_reuse = []
