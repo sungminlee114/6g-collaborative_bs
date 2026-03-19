@@ -3,6 +3,7 @@ from typing import Callable, List, Optional, Tuple
 
 import numpy as np
 import torch
+from tqdm.auto import tqdm
 
 from src.ce_skip.temporal_dataset import TemporalChannelData
 
@@ -13,10 +14,12 @@ def iter_ue_tensors(
     device: str = "cuda",
     max_snapshots: int = 200,
     max_ue: int = 20,
+    desc: str = None,
 ):
     """Iterate over UEs, yielding one (h_real, ue_id, distance, speed) at a time on GPU.
 
     Memory-safe: only one UE's data on GPU at a time.
+    Shows tqdm progress bar with UE count and snapshot loading speed.
 
     Yields:
         h_real: (T, 2, n_ant, n_sc) float32 tensor on device
@@ -33,7 +36,11 @@ def iter_ue_tensors(
         cfr0 = data._load_snapshot(0)
         ue_ids = list(range(cfr0.shape[0]))
 
-    for idx, uid in enumerate(ue_ids[:max_ue]):
+    n = min(len(ue_ids), max_ue)
+    label = desc or f"BS{bs_id} UEs"
+    pbar = tqdm(ue_ids[:n], desc=f"{label} ({T_max} snaps)", unit="ue")
+
+    for uid in pbar:
         # Load one UE's time-series on CPU
         h_complex = data.get_ue_series(uid, bs_id, snap_range=(0, T_max))
         # (T, n_ant, n_sc) complex → (T, 2, n_ant, n_sc) float32

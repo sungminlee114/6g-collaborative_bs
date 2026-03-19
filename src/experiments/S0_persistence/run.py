@@ -47,7 +47,7 @@ def compute_delta_profile(data: TemporalChannelData, bs_id: int) -> dict:
 
     per_ue = []
 
-    for h_ue_gpu, uid, dist, speed in iter_ue_tensors(data, bs_id, "cpu", data.num_snapshots, max_ue=50):
+    for h_ue_gpu, uid, dist, speed in iter_ue_tensors(data, bs_id, "cpu", data.num_snapshots, max_ue=50, desc=f"S0 BS{bs_id}"):
         # h_ue_gpu: (T, 2, n_ant, n_sc) float — ground truth (no noise added)
         T = h_ue_gpu.shape[0]
 
