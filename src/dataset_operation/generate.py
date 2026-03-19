@@ -238,7 +238,6 @@ def generate_snapshot(scene, cfg, snapshot_id: int, seed: int, data_dir: Path,
         snap_dir.mkdir(parents=True, exist_ok=True)
         np.savez_compressed(
             snap_dir / "channels.npz",
-            cfr=cfr,
             cir_a=cir_a,
             cir_tau=cir_tau,
         )
