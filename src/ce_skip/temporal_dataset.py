@@ -201,19 +201,17 @@ class TemporalChannelData:
         return self._gpu_cir_to_cfr(stacked_a, stacked_tau, n_sc, sc_spacing)
 
     def _gpu_cir_to_cfr(self, stacked_a, stacked_tau, n_sc, sc_spacing):
-        """GPU batch CIR→CFR via einsum. Shared by HDF5 and NPZ paths.
+        """GPU batch CIR→CFR via einsum, chunked to avoid OOM.
 
-        Args:
-            stacked_a:   (T, N, n_rx, n_tx, n_paths) complex64
-            stacked_tau: (T, N, n_paths) float32
-        Returns:
-            cfr: (T, N, n_rx, n_tx, n_sc) complex64
+        Processes in chunks of ~500 snapshots, output written to CPU numpy.
+        Uses all available CUDA devices if CUDA_VISIBLE_DEVICES has multiple.
         """
         import torch
         T, N, n_rx, n_tx, n_paths = stacked_a.shape
+        total = T * N
 
-        flat_a = stacked_a.reshape(T * N, n_rx, n_tx, n_paths)
-        flat_tau = stacked_tau.reshape(T * N, n_paths)
+        flat_a = stacked_a.reshape(total, n_rx, n_tx, n_paths)
+        flat_tau = stacked_tau.reshape(total, n_paths)
 
         if n_sc % 2 == 0:
             start = -n_sc // 2
@@ -221,20 +219,46 @@ class TemporalChannelData:
             start = -(n_sc - 1) // 2
         freqs = np.arange(start, start + n_sc, dtype=np.float32) * sc_spacing
 
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        freqs_t = torch.tensor(freqs, dtype=torch.float32, device=device)
+        # Determine available GPUs
+        n_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 0
+        if n_gpus == 0:
+            device = torch.device("cpu")
+            devices = [device]
+        else:
+            devices = [torch.device(f"cuda:{i}") for i in range(n_gpus)]
 
-        a_gpu = torch.tensor(flat_a, dtype=torch.complex64, device=device)
-        tau_gpu = torch.tensor(flat_tau, dtype=torch.float32, device=device)
+        # Output buffer on CPU
+        cfr_out = np.zeros((total, n_rx, n_tx, n_sc), dtype=np.complex64)
 
-        cfr_list = []
-        for i in range(T * N):
-            exp_phase = torch.exp(-2j * torch.pi * tau_gpu[i, :, None] * freqs_t[None, :])
-            cfr_list.append(torch.einsum('rtp,ps->rts', a_gpu[i], exp_phase))
+        # Chunk size: ~500 per GPU (einsum loop, ~1.5GB peak per chunk)
+        chunk_per_gpu = 500
+        chunk_total = chunk_per_gpu * len(devices)
 
-        cfr_flat = torch.stack(cfr_list).cpu().numpy()
-        del a_gpu, tau_gpu
-        return cfr_flat.reshape(T, N, n_rx, n_tx, n_sc)
+        for chunk_start in range(0, total, chunk_total):
+            chunk_end = min(chunk_start + chunk_total, total)
+            # Split across GPUs
+            per_dev = (chunk_end - chunk_start + len(devices) - 1) // len(devices)
+
+            results = {}
+            for di, dev in enumerate(devices):
+                dev_start = chunk_start + di * per_dev
+                dev_end = min(dev_start + per_dev, chunk_end)
+                if dev_start >= dev_end:
+                    break
+
+                freqs_t = torch.tensor(freqs, dtype=torch.float32, device=dev)
+                a_chunk = torch.tensor(flat_a[dev_start:dev_end], dtype=torch.complex64, device=dev)
+                tau_chunk = torch.tensor(flat_tau[dev_start:dev_end], dtype=torch.float32, device=dev)
+
+                cfr_chunk = []
+                for i in range(a_chunk.shape[0]):
+                    exp_phase = torch.exp(-2j * torch.pi * tau_chunk[i, :, None] * freqs_t[None, :])
+                    cfr_chunk.append(torch.einsum('rtp,ps->rts', a_chunk[i], exp_phase))
+
+                cfr_out[dev_start:dev_end] = torch.stack(cfr_chunk).cpu().numpy()
+                del a_chunk, tau_chunk, cfr_chunk
+
+        return cfr_out.reshape(T, N, n_rx, n_tx, n_sc)
 
     def get_ue_series(
         self,
