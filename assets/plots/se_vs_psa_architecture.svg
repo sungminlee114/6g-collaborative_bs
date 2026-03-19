@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#555"/>
+    </marker>
+    <linearGradient id="seGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#e8f4fd"/>
+      <stop offset="100%" stop-color="#d0e8f7"/>
+    </linearGradient>
+    <linearGradient id="psaGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fde8e8"/>
+      <stop offset="100%" stop-color="#f7d0d0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Title -->
+  <text x="450" y="28" text-anchor="middle" font-size="18" font-weight="bold" fill="#222">SEResBlock vs PACENetBlock — Architecture Comparison</text>
+
+  <!-- ===== SE ResBlock (Left) ===== -->
+  <rect x="20" y="45" width="410" height="460" rx="12" fill="url(#seGrad)" stroke="#4a90d9" stroke-width="2"/>
+  <text x="225" y="72" text-anchor="middle" font-size="15" font-weight="bold" fill="#2a6cb0">SEResBlock2D</text>
+  <text x="225" y="90" text-anchor="middle" font-size="11" fill="#555">ResBlock + Squeeze-and-Excitation (Hu et al., 2018)</text>
+
+  <!-- Input -->
+  <rect x="155" y="105" width="140" height="30" rx="6" fill="#fff" stroke="#4a90d9"/>
+  <text x="225" y="125" text-anchor="middle" font-size="12" font-weight="bold">x  (B,64,8,1024)</text>
+
+  <!-- Conv1 -->
+  <line x1="225" y1="135" x2="225" y2="155" stroke="#555" marker-end="url(#arrow)"/>
+  <rect x="135" y="155" width="180" height="28" rx="5" fill="#4a90d9" stroke="#2a6cb0"/>
+  <text x="225" y="174" text-anchor="middle" font-size="11" fill="#fff" font-weight="bold">Conv2d 3x3 + BN + ReLU</text>
+
+  <!-- Conv2 -->
+  <line x1="225" y1="183" x2="225" y2="200" stroke="#555" marker-end="url(#arrow)"/>
+  <rect x="135" y="200" width="180" height="28" rx="5" fill="#4a90d9" stroke="#2a6cb0"/>
+  <text x="225" y="219" text-anchor="middle" font-size="11" fill="#fff" font-weight="bold">Conv2d 3x3 + BN</text>
+
+  <!-- SE Module -->
+  <line x1="225" y1="228" x2="225" y2="248" stroke="#555" marker-end="url(#arrow)"/>
+  <rect x="95" y="248" width="260" height="120" rx="8" fill="#fff3cd" stroke="#e6a817" stroke-width="1.5"/>
+  <text x="225" y="268" text-anchor="middle" font-size="12" font-weight="bold" fill="#8a6d0b">SE Attention (Channel-only)</text>
+
+  <!-- SE internals -->
+  <rect x="115" y="278" width="220" height="22" rx="4" fill="#ffeeba" stroke="#e6a817"/>
+  <text x="225" y="294" text-anchor="middle" font-size="10">Global Avg Pool  (B,C,H,W) -> (B,C,1,1)</text>
+
+  <rect x="115" y="305" width="220" height="22" rx="4" fill="#ffeeba" stroke="#e6a817"/>
+  <text x="225" y="321" text-anchor="middle" font-size="10">FC(64->16) -> ReLU -> FC(16->64)</text>
+
+  <rect x="115" y="332" width="220" height="22" rx="4" fill="#ffeeba" stroke="#e6a817"/>
+  <text x="225" y="348" text-anchor="middle" font-size="10">Sigmoid -> Channel reweight  (B,C,1,1)</text>
+
+  <!-- Multiply -->
+  <line x1="225" y1="368" x2="225" y2="388" stroke="#555" marker-end="url(#arrow)"/>
+  <circle cx="225" cy="400" r="14" fill="#fff" stroke="#555" stroke-width="1.5"/>
+  <text x="225" y="405" text-anchor="middle" font-size="16" fill="#555">x</text>
+  <text x="260" y="405" font-size="10" fill="#777">scale</text>
+
+  <!-- Residual add -->
+  <line x1="225" y1="414" x2="225" y2="434" stroke="#555" marker-end="url(#arrow)"/>
+  <circle cx="225" cy="446" r="14" fill="#fff" stroke="#555" stroke-width="1.5"/>
+  <text x="225" y="451" text-anchor="middle" font-size="16" fill="#555">+</text>
+
+  <!-- Residual path -->
+  <line x1="90" y1="120" x2="90" y2="446" stroke="#4a90d9" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <line x1="90" y1="446" x2="211" y2="446" stroke="#4a90d9" stroke-width="1.5" stroke-dasharray="6,3" marker-end="url(#arrow)"/>
+  <text x="75" y="290" text-anchor="middle" font-size="10" fill="#4a90d9" transform="rotate(-90,75,290)">residual</text>
+
+  <!-- ReLU -->
+  <line x1="225" y1="460" x2="225" y2="480" stroke="#555" marker-end="url(#arrow)"/>
+  <rect x="175" y="480" width="100" height="20" rx="4" fill="#d4edda" stroke="#28a745"/>
+  <text x="225" y="495" text-anchor="middle" font-size="11" font-weight="bold" fill="#155724">ReLU</text>
+
+  <!-- ===== PSA PACENet Block (Right) ===== -->
+  <rect x="470" y="45" width="410" height="460" rx="12" fill="url(#psaGrad)" stroke="#d94a4a" stroke-width="2"/>
+  <text x="675" y="72" text-anchor="middle" font-size="15" font-weight="bold" fill="#b02a2a">PACENetBlock2D</text>
+  <text x="675" y="90" text-anchor="middle" font-size="11" fill="#555">Asymmetric Conv + PSA (Yang et al., 2025)</text>
+
+  <!-- Input -->
+  <rect x="605" y="105" width="140" height="30" rx="6" fill="#fff" stroke="#d94a4a"/>
+  <text x="675" y="125" text-anchor="middle" font-size="12" font-weight="bold">x  (B,64,8,1024)</text>
+
+  <!-- Conv 1x3 -->
+  <line x1="675" y1="135" x2="675" y2="150" stroke="#555" marker-end="url(#arrow)"/>
+  <rect x="575" y="150" width="200" height="24" rx="5" fill="#d94a4a" stroke="#b02a2a"/>
+  <text x="675" y="167" text-anchor="middle" font-size="10" fill="#fff" font-weight="bold">Conv2d 1x3 + LeakyReLU + Dropout</text>
+
+  <!-- Conv 3x1 -->
+  <line x1="675" y1="174" x2="675" y2="188" stroke="#555" marker-end="url(#arrow)"/>
+  <rect x="575" y="188" width="200" height="24" rx="5" fill="#d94a4a" stroke="#b02a2a"/>
+  <text x="675" y="205" text-anchor="middle" font-size="10" fill="#fff" font-weight="bold">Conv2d 3x1 + LeakyReLU + Dropout</text>
+
+  <!-- PSA Module -->
+  <line x1="675" y1="212" x2="675" y2="232" stroke="#555" marker-end="url(#arrow)"/>
+  <rect x="500" y="232" width="350" height="170" rx="8" fill="#fff3cd" stroke="#e6a817" stroke-width="1.5"/>
+  <text x="675" y="252" text-anchor="middle" font-size="12" font-weight="bold" fill="#8a6d0b">PSA (Channel + Spatial)</text>
+
+  <!-- Channel branch -->
+  <rect x="515" y="262" width="150" height="126" rx="6" fill="#cce5ff" stroke="#4a90d9"/>
+  <text x="590" y="280" text-anchor="middle" font-size="10" font-weight="bold" fill="#2a6cb0">Channel Branch</text>
+  <text x="590" y="296" text-anchor="middle" font-size="9" fill="#333">Q = Conv1x1(C->C/2)</text>
+  <text x="590" y="310" text-anchor="middle" font-size="9" fill="#333">K = Conv1x1(C->1)</text>
+  <text x="590" y="324" text-anchor="middle" font-size="9" fill="#333">Attn = Softmax(K) @ Q</text>
+  <text x="590" y="338" text-anchor="middle" font-size="9" fill="#333">V = Conv1x1(C/2->C)</text>
+  <text x="590" y="352" text-anchor="middle" font-size="9" fill="#333">LayerNorm + Sigmoid</text>
+  <text x="590" y="374" text-anchor="middle" font-size="10" font-weight="bold" fill="#2a6cb0">-> (B,C,1,1)</text>
+
+  <!-- Spatial branch -->
+  <rect x="685" y="262" width="150" height="126" rx="6" fill="#ffcccc" stroke="#d94a4a"/>
+  <text x="760" y="280" text-anchor="middle" font-size="10" font-weight="bold" fill="#b02a2a">Spatial Branch</text>
+  <text x="760" y="296" text-anchor="middle" font-size="9" fill="#333">Q = Conv1x1(C->C/2)</text>
+  <text x="760" y="310" text-anchor="middle" font-size="9" fill="#333">K = Conv1x1(C->C/2)</text>
+  <text x="760" y="324" text-anchor="middle" font-size="9" fill="#333">K = GlobalAvgPool(K)</text>
+  <text x="760" y="338" text-anchor="middle" font-size="9" fill="#333">Attn = Softmax(K) @ Q</text>
+  <text x="760" y="352" text-anchor="middle" font-size="9" fill="#333">Sigmoid</text>
+  <text x="760" y="374" text-anchor="middle" font-size="10" font-weight="bold" fill="#b02a2a">-> (B,1,H,W)</text>
+
+  <!-- Add PSA outputs -->
+  <line x1="675" y1="402" x2="675" y2="418" stroke="#555" marker-end="url(#arrow)"/>
+  <circle cx="675" cy="430" r="14" fill="#fff" stroke="#555" stroke-width="1.5"/>
+  <text x="675" y="435" text-anchor="middle" font-size="16" fill="#555">+</text>
+  <text x="710" y="435" font-size="10" fill="#777">ch + sp</text>
+
+  <!-- Residual add -->
+  <line x1="675" y1="444" x2="675" y2="458" stroke="#555" marker-end="url(#arrow)"/>
+  <circle cx="675" cy="470" r="14" fill="#fff" stroke="#555" stroke-width="1.5"/>
+  <text x="675" y="475" text-anchor="middle" font-size="16" fill="#555">+</text>
+
+  <!-- Residual path -->
+  <line x1="540" y1="120" x2="540" y2="470" stroke="#d94a4a" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <line x1="540" y1="470" x2="661" y2="470" stroke="#d94a4a" stroke-width="1.5" stroke-dasharray="6,3" marker-end="url(#arrow)"/>
+  <text x="525" y="310" text-anchor="middle" font-size="10" fill="#d94a4a" transform="rotate(-90,525,310)">residual</text>
+
+  <!-- LeakyReLU -->
+  <line x1="675" y1="484" x2="675" y2="494" stroke="#555" marker-end="url(#arrow)"/>
+  <rect x="615" y="494" width="120" height="18" rx="4" fill="#d4edda" stroke="#28a745"/>
+  <text x="675" y="507" text-anchor="middle" font-size="10" font-weight="bold" fill="#155724">LeakyReLU(0.08)</text>
+</svg>

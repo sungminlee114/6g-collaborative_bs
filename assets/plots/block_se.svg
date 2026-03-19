@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 520" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="a" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto">
+      <polygon points="0 0, 7 2.5, 0 5" fill="#555"/>
+    </marker>
+  </defs>
+
+  <text x="180" y="22" text-anchor="middle" font-size="14" font-weight="bold" fill="#2a6cb0">SEResBlock2D</text>
+  <text x="180" y="38" text-anchor="middle" font-size="10" fill="#777">Hu et al., CVPR 2018</text>
+
+  <!-- Input -->
+  <rect x="110" y="52" width="140" height="28" rx="6" fill="#e8f4fd" stroke="#4a90d9" stroke-width="1.5"/>
+  <text x="180" y="71" text-anchor="middle" font-size="11" font-weight="bold">x  (B, 64, 8, 1024)</text>
+
+  <!-- Conv1 -->
+  <line x1="180" y1="80" x2="180" y2="98" stroke="#555" marker-end="url(#a)"/>
+  <rect x="80" y="100" width="200" height="26" rx="5" fill="#4a90d9"/>
+  <text x="180" y="118" text-anchor="middle" font-size="10" fill="#fff" font-weight="bold">Conv2d(64, 64, 3x3) + pad</text>
+
+  <line x1="180" y1="126" x2="180" y2="138" stroke="#555" marker-end="url(#a)"/>
+  <rect x="110" y="140" width="140" height="22" rx="4" fill="#6c757d"/>
+  <text x="180" y="156" text-anchor="middle" font-size="10" fill="#fff">BatchNorm2d(64)</text>
+
+  <line x1="180" y1="162" x2="180" y2="174" stroke="#555" marker-end="url(#a)"/>
+  <rect x="130" y="176" width="100" height="22" rx="4" fill="#28a745"/>
+  <text x="180" y="192" text-anchor="middle" font-size="10" fill="#fff" font-weight="bold">ReLU</text>
+
+  <!-- Conv2 -->
+  <line x1="180" y1="198" x2="180" y2="212" stroke="#555" marker-end="url(#a)"/>
+  <rect x="80" y="214" width="200" height="26" rx="5" fill="#4a90d9"/>
+  <text x="180" y="232" text-anchor="middle" font-size="10" fill="#fff" font-weight="bold">Conv2d(64, 64, 3x3) + pad</text>
+
+  <line x1="180" y1="240" x2="180" y2="252" stroke="#555" marker-end="url(#a)"/>
+  <rect x="110" y="254" width="140" height="22" rx="4" fill="#6c757d"/>
+  <text x="180" y="270" text-anchor="middle" font-size="10" fill="#fff">BatchNorm2d(64)</text>
+
+  <!-- SE block -->
+  <line x1="180" y1="276" x2="180" y2="292" stroke="#555" marker-end="url(#a)"/>
+  <rect x="50" y="294" width="260" height="120" rx="8" fill="#fff3cd" stroke="#e6a817" stroke-width="2"/>
+  <text x="180" y="314" text-anchor="middle" font-size="12" font-weight="bold" fill="#8a6d0b">Squeeze-and-Excitation</text>
+
+  <rect x="70" y="322" width="220" height="20" rx="3" fill="#ffeeba" stroke="#daa520"/>
+  <text x="180" y="337" text-anchor="middle" font-size="9">AdaptiveAvgPool2d(1) -> (B, 64, 1, 1)</text>
+
+  <rect x="70" y="346" width="220" height="20" rx="3" fill="#ffeeba" stroke="#daa520"/>
+  <text x="180" y="361" text-anchor="middle" font-size="9">Linear(64 -> 16) + ReLU</text>
+
+  <rect x="70" y="370" width="220" height="20" rx="3" fill="#ffeeba" stroke="#daa520"/>
+  <text x="180" y="385" text-anchor="middle" font-size="9">Linear(16 -> 64) + Sigmoid -> w (B,64)</text>
+
+  <text x="180" y="407" text-anchor="middle" font-size="10" fill="#8a6d0b">out = out * w[:,:,None,None]</text>
+
+  <!-- Residual + -->
+  <line x1="180" y1="414" x2="180" y2="438" stroke="#555" marker-end="url(#a)"/>
+  <circle cx="180" cy="450" r="14" fill="#fff" stroke="#555" stroke-width="1.5"/>
+  <text x="180" y="455" text-anchor="middle" font-size="16">+</text>
+
+  <!-- Residual path -->
+  <line x1="40" y1="66" x2="40" y2="450" stroke="#4a90d9" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="40" y1="450" x2="166" y2="450" stroke="#4a90d9" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#a)"/>
+  <text x="28" y="260" text-anchor="middle" font-size="9" fill="#4a90d9" transform="rotate(-90,28,260)">skip (x)</text>
+
+  <!-- Final ReLU -->
+  <line x1="180" y1="464" x2="180" y2="478" stroke="#555" marker-end="url(#a)"/>
+  <rect x="130" y="480" width="100" height="22" rx="4" fill="#28a745"/>
+  <text x="180" y="496" text-anchor="middle" font-size="10" fill="#fff" font-weight="bold">ReLU</text>
+
+  <!-- Param count -->
+  <text x="180" y="518" text-anchor="middle" font-size="10" fill="#888">~77K params/block | C=64, reduction=4</text>
+</svg>

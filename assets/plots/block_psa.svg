@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 600" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="a" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto">
+      <polygon points="0 0, 7 2.5, 0 5" fill="#555"/>
+    </marker>
+  </defs>
+
+  <text x="200" y="22" text-anchor="middle" font-size="14" font-weight="bold" fill="#b02a2a">PACENetBlock2D</text>
+  <text x="200" y="38" text-anchor="middle" font-size="10" fill="#777">Yang et al., Entropy 2025 (faithful)</text>
+
+  <!-- Input -->
+  <rect x="130" y="52" width="140" height="28" rx="6" fill="#fde8e8" stroke="#d94a4a" stroke-width="1.5"/>
+  <text x="200" y="71" text-anchor="middle" font-size="11" font-weight="bold">x  (B, 64, 8, 1024)</text>
+
+  <!-- Asymmetric conv 1x3 -->
+  <line x1="200" y1="80" x2="200" y2="96" stroke="#555" marker-end="url(#a)"/>
+  <rect x="90" y="98" width="220" height="24" rx="5" fill="#d94a4a"/>
+  <text x="200" y="115" text-anchor="middle" font-size="10" fill="#fff" font-weight="bold">Conv2d(64, 64, 1x3) — horizontal</text>
+
+  <line x1="200" y1="122" x2="200" y2="134" stroke="#555" marker-end="url(#a)"/>
+  <rect x="115" y="136" width="170" height="20" rx="4" fill="#dc6c6c"/>
+  <text x="200" y="151" text-anchor="middle" font-size="9" fill="#fff">LeakyReLU(0.08) + Dropout2d(0.1)</text>
+
+  <!-- Asymmetric conv 3x1 -->
+  <line x1="200" y1="156" x2="200" y2="168" stroke="#555" marker-end="url(#a)"/>
+  <rect x="90" y="170" width="220" height="24" rx="5" fill="#d94a4a"/>
+  <text x="200" y="187" text-anchor="middle" font-size="10" fill="#fff" font-weight="bold">Conv2d(64, 64, 3x1) — vertical</text>
+
+  <line x1="200" y1="194" x2="200" y2="206" stroke="#555" marker-end="url(#a)"/>
+  <rect x="115" y="208" width="170" height="20" rx="4" fill="#dc6c6c"/>
+  <text x="200" y="223" text-anchor="middle" font-size="9" fill="#fff">LeakyReLU(0.08) + Dropout2d(0.1)</text>
+
+  <!-- PSA module -->
+  <line x1="200" y1="228" x2="200" y2="244" stroke="#555" marker-end="url(#a)"/>
+  <rect x="25" y="246" width="350" height="240" rx="8" fill="#fff3cd" stroke="#e6a817" stroke-width="2"/>
+  <text x="200" y="268" text-anchor="middle" font-size="12" font-weight="bold" fill="#8a6d0b">Polarized Self-Attention (PSA)</text>
+  <text x="200" y="282" text-anchor="middle" font-size="9" fill="#888">Liu et al., arXiv:2107.00782 — parallel layout</text>
+
+  <!-- Channel branch -->
+  <rect x="40" y="292" width="155" height="140" rx="6" fill="#cce5ff" stroke="#4a90d9" stroke-width="1.5"/>
+  <text x="117" y="310" text-anchor="middle" font-size="10" font-weight="bold" fill="#2a6cb0">Channel SA</text>
+  <text x="117" y="326" text-anchor="middle" font-size="8.5" fill="#333">Q = Conv1x1(64->32)</text>
+  <text x="117" y="340" text-anchor="middle" font-size="8.5" fill="#333">K = Conv1x1(64->1)</text>
+  <text x="117" y="354" text-anchor="middle" font-size="8.5" fill="#333">K = Softmax(K) over HW</text>
+  <text x="117" y="368" text-anchor="middle" font-size="8.5" fill="#333">A = Q @ K  -> (B,32,1)</text>
+  <text x="117" y="382" text-anchor="middle" font-size="8.5" fill="#333">V = Conv1x1(32->64)</text>
+  <text x="117" y="396" text-anchor="middle" font-size="8.5" fill="#333">LayerNorm + Sigmoid</text>
+  <text x="117" y="416" text-anchor="middle" font-size="9" font-weight="bold" fill="#2a6cb0">x * w  (B,C,1,1)</text>
+
+  <!-- Spatial branch -->
+  <rect x="205" y="292" width="155" height="140" rx="6" fill="#ffcccc" stroke="#d94a4a" stroke-width="1.5"/>
+  <text x="282" y="310" text-anchor="middle" font-size="10" font-weight="bold" fill="#b02a2a">Spatial SA</text>
+  <text x="282" y="326" text-anchor="middle" font-size="8.5" fill="#333">Q = Conv1x1(64->32)</text>
+  <text x="282" y="340" text-anchor="middle" font-size="8.5" fill="#333">K = Conv1x1(64->32)</text>
+  <text x="282" y="354" text-anchor="middle" font-size="8.5" fill="#333">K = AvgPool(K) -> (B,32,1,1)</text>
+  <text x="282" y="368" text-anchor="middle" font-size="8.5" fill="#333">K = Softmax(K) over C/2</text>
+  <text x="282" y="382" text-anchor="middle" font-size="8.5" fill="#333">A = K @ Q  -> (B,1,HW)</text>
+  <text x="282" y="396" text-anchor="middle" font-size="8.5" fill="#333">Reshape + Sigmoid</text>
+  <text x="282" y="416" text-anchor="middle" font-size="9" font-weight="bold" fill="#b02a2a">x * a  (B,1,H,W)</text>
+
+  <!-- Sum of branches -->
+  <line x1="117" y1="432" x2="117" y2="462" stroke="#555"/>
+  <line x1="282" y1="432" x2="282" y2="462" stroke="#555"/>
+  <line x1="117" y1="462" x2="282" y2="462" stroke="#555"/>
+  <line x1="200" y1="462" x2="200" y2="472" stroke="#555" marker-end="url(#a)"/>
+  <text x="200" y="482" text-anchor="middle" font-size="10" fill="#8a6d0b" font-weight="bold">ch_out + sp_out</text>
+
+  <!-- Residual + -->
+  <line x1="200" y1="486" x2="200" y2="518" stroke="#555" marker-end="url(#a)"/>
+  <circle cx="200" cy="530" r="14" fill="#fff" stroke="#555" stroke-width="1.5"/>
+  <text x="200" y="535" text-anchor="middle" font-size="16">+</text>
+
+  <!-- Residual path -->
+  <line x1="18" y1="66" x2="18" y2="530" stroke="#d94a4a" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <line x1="18" y1="530" x2="186" y2="530" stroke="#d94a4a" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#a)"/>
+  <text x="7" y="300" text-anchor="middle" font-size="9" fill="#d94a4a" transform="rotate(-90,7,300)">skip (x)</text>
+
+  <!-- Final activation -->
+  <line x1="200" y1="544" x2="200" y2="558" stroke="#555" marker-end="url(#a)"/>
+  <rect x="120" y="560" width="160" height="22" rx="4" fill="#28a745"/>
+  <text x="200" y="576" text-anchor="middle" font-size="10" fill="#fff" font-weight="bold">LeakyReLU(0.08)</text>
+
+  <!-- Param count -->
+  <text x="200" y="598" text-anchor="middle" font-size="10" fill="#888">~34K params/block | No BN, uses Dropout</text>
+</svg>

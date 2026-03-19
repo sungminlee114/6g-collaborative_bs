@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 280" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="a" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#555"/>
+    </marker>
+  </defs>
+
+  <text x="410" y="24" text-anchor="middle" font-size="16" font-weight="bold" fill="#222">Phase05Estimator — Shared Architecture (SE / PSA / ResNet / DWS)</text>
+
+  <!-- H_LS input -->
+  <rect x="15" y="95" width="90" height="50" rx="8" fill="#e8f4fd" stroke="#4a90d9" stroke-width="2"/>
+  <text x="60" y="116" text-anchor="middle" font-size="11" font-weight="bold" fill="#2a6cb0">H_LS</text>
+  <text x="60" y="132" text-anchor="middle" font-size="9" fill="#555">(B,2,8,1024)</text>
+
+  <!-- Arrow -->
+  <line x1="105" y1="120" x2="130" y2="120" stroke="#555" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- Stem -->
+  <rect x="132" y="85" width="80" height="70" rx="6" fill="#6c757d" stroke="#495057" stroke-width="1.5"/>
+  <text x="172" y="112" text-anchor="middle" font-size="11" fill="#fff" font-weight="bold">Stem</text>
+  <text x="172" y="127" text-anchor="middle" font-size="8" fill="#ddd">Conv2d(2,64)</text>
+  <text x="172" y="140" text-anchor="middle" font-size="8" fill="#ddd">BN + ReLU</text>
+
+  <line x1="212" y1="120" x2="232" y2="120" stroke="#555" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- Encoder blocks (0,1,2) -->
+  <rect x="234" y="55" width="250" height="130" rx="10" fill="#d4edda" stroke="#28a745" stroke-width="2" stroke-dasharray="6,3"/>
+  <text x="359" y="75" text-anchor="middle" font-size="11" font-weight="bold" fill="#155724">Encoder (blocks 0-2) — shared in FL</text>
+
+  <rect x="250" y="90" width="65" height="60" rx="6" fill="#fff" stroke="#28a745" stroke-width="1.5"/>
+  <text x="282" y="116" text-anchor="middle" font-size="10" font-weight="bold">Block 0</text>
+  <text x="282" y="132" text-anchor="middle" font-size="8" fill="#888">SE/PSA/...</text>
+
+  <line x1="315" y1="120" x2="325" y2="120" stroke="#555" marker-end="url(#a)"/>
+
+  <rect x="327" y="90" width="65" height="60" rx="6" fill="#fff" stroke="#28a745" stroke-width="1.5"/>
+  <text x="359" y="116" text-anchor="middle" font-size="10" font-weight="bold">Block 1</text>
+  <text x="359" y="132" text-anchor="middle" font-size="8" fill="#888">SE/PSA/...</text>
+
+  <line x1="392" y1="120" x2="402" y2="120" stroke="#555" marker-end="url(#a)"/>
+
+  <rect x="404" y="90" width="65" height="60" rx="6" fill="#fff" stroke="#28a745" stroke-width="1.5"/>
+  <text x="436" y="116" text-anchor="middle" font-size="10" font-weight="bold">Block 2</text>
+  <text x="436" y="132" text-anchor="middle" font-size="8" fill="#888">SE/PSA/...</text>
+
+  <line x1="469" y1="120" x2="500" y2="120" stroke="#555" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- Task head blocks (3,4) -->
+  <rect x="502" y="55" width="170" height="130" rx="10" fill="#fde8e8" stroke="#d94a4a" stroke-width="2" stroke-dasharray="6,3"/>
+  <text x="587" y="75" text-anchor="middle" font-size="11" font-weight="bold" fill="#b02a2a">Task Head (3-4) — local</text>
+
+  <rect x="518" y="90" width="65" height="60" rx="6" fill="#fff" stroke="#d94a4a" stroke-width="1.5"/>
+  <text x="550" y="116" text-anchor="middle" font-size="10" font-weight="bold">Block 3</text>
+  <text x="550" y="132" text-anchor="middle" font-size="8" fill="#888">SE/PSA/...</text>
+
+  <line x1="583" y1="120" x2="593" y2="120" stroke="#555" marker-end="url(#a)"/>
+
+  <rect x="595" y="90" width="65" height="60" rx="6" fill="#fff" stroke="#d94a4a" stroke-width="1.5"/>
+  <text x="627" y="116" text-anchor="middle" font-size="10" font-weight="bold">Block 4</text>
+  <text x="627" y="132" text-anchor="middle" font-size="8" fill="#888">SE/PSA/...</text>
+
+  <line x1="660" y1="120" x2="685" y2="120" stroke="#555" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- Out conv -->
+  <rect x="687" y="85" width="80" height="70" rx="6" fill="#6c757d" stroke="#495057" stroke-width="1.5"/>
+  <text x="727" y="108" text-anchor="middle" font-size="10" fill="#fff" font-weight="bold">Out Conv</text>
+  <text x="727" y="122" text-anchor="middle" font-size="8" fill="#ddd">Conv2d(64,2)</text>
+
+  <!-- Residual path from input -->
+  <path d="M 60 145 L 60 230 L 775 230 L 775 155" stroke="#4a90d9" stroke-width="2" fill="none" stroke-dasharray="8,4"/>
+  <text x="410" y="248" text-anchor="middle" font-size="11" fill="#4a90d9" font-weight="bold">Residual: H_est = H_LS + out_conv(blocks(stem(H_LS)))</text>
+
+  <!-- Plus circle -->
+  <circle cx="775" cy="140" r="12" fill="#fff" stroke="#555" stroke-width="1.5"/>
+  <text x="775" y="145" text-anchor="middle" font-size="14" fill="#555" font-weight="bold">+</text>
+
+  <line x1="767" y1="120" x2="763" y2="120" stroke="#555" stroke-width="1.5"/>
+
+  <!-- Output -->
+  <line x1="787" y1="140" x2="795" y2="140" stroke="#555" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- H_est output -->
+  <rect x="797" y="115" width="18" height="50" rx="4" fill="#e8f4fd" stroke="#4a90d9" stroke-width="1.5"/>
+  <text x="806" y="145" text-anchor="middle" font-size="8" font-weight="bold" fill="#2a6cb0" writing-mode="tb">H_est</text>
+
+  <!-- Feature map size annotation -->
+  <text x="172" y="170" text-anchor="middle" font-size="9" fill="#777">(B,64,8,1024)</text>
+  <text x="359" y="170" text-anchor="middle" font-size="9" fill="#777">(B,64,8,1024) — no downsampling</text>
+
+  <!-- Block type legend -->
+  <rect x="250" y="200" width="12" height="12" rx="2" fill="#d4edda" stroke="#28a745"/>
+  <text x="268" y="211" font-size="10" fill="#333">= Shared (FL aggregated)</text>
+  <rect x="420" y="200" width="12" height="12" rx="2" fill="#fde8e8" stroke="#d94a4a"/>
+  <text x="438" y="211" font-size="10" fill="#333">= Local (per-BS)</text>
+  <text x="570" y="211" font-size="10" fill="#888">Block type: resnet | se_resnet | pacenet | dws_resnet</text>
+</svg>
