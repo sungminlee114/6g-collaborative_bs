@@ -109,28 +109,33 @@ def run_persistence_profile(preset: str, gpu: int = 0, max_snapshots: int = 200)
     - NMSE of reusing previous estimate (skip quality impact)
     - Static UE sanity check (should be ~0 if simulator is deterministic)
     """
+    print(f"  [1/5] Loading config for preset '{preset}'...")
     cfg = ExperimentConfig.from_preset(preset)
+    print(f"         temporal_dir: {cfg.temporal_dir}")
+    print(f"         train/val/test BS: {len(cfg.train_bs_ids)}/{len(cfg.val_bs_ids)}/{len(cfg.test_bs_ids)}")
 
     if not cfg.temporal_dir.exists():
         print(f"  ⚠ Temporal data not found: {cfg.temporal_dir}")
         return None
 
-    print(f"  Loading temporal data from {cfg.temporal_dir}")
+    print(f"  [2/5] Loading temporal data from {cfg.temporal_dir}...")
     data = TemporalChannelData(cfg.temporal_dir, trajectory_dir=cfg.trajectory_dir, max_snapshots=max_snapshots, preset=preset)
-    print(f"  Snapshots: {data.num_snapshots}, UEs: {data.num_ue}, dt: {data.dt_s}s")
+    print(f"         Snapshots: {data.num_snapshots}, UEs: {data.num_ue}, dt: {data.dt_s}s")
 
     # Use ALL BSs for persistence profiling (not just test split)
     all_bs = sorted(set(cfg.train_bs_ids + cfg.val_bs_ids + cfg.test_bs_ids))
+    print(f"  [3/5] Computing delta_oracle for {len(all_bs)} BSs...")
     all_per_ue = []
-    for bs_id in all_bs:
-        print(f"  BS {bs_id}...")
+    for i, bs_id in enumerate(all_bs, 1):
+        print(f"    [{i}/{len(all_bs)}] BS {bs_id}...", end=" ", flush=True)
         profile = compute_delta_profile(data, bs_id)
         all_per_ue.extend(profile["per_ue"])
         ov = profile["overall"]
-        print(f"    {ov['n_ues']} UEs, median δ={ov['median_delta_all']:.4f}, "
-              f"static δ={ov['static_median_delta']:.4f} (n={ov['static_n']})")
+        print(f"-> {ov['n_ues']} UEs, median d={ov['median_delta_all']:.4f}, "
+              f"static d={ov['static_median_delta']:.4f} (n={ov['static_n']})")
 
     # Aggregate
+    print(f"  [4/5] Aggregating statistics over {len(all_per_ue)} UEs...")
     all_deltas = [u["median_delta"] for u in all_per_ue]
     all_nmse = [u["nmse_reuse_db"] for u in all_per_ue if not np.isnan(u["nmse_reuse_db"])]
     static_deltas = [u["median_delta"] for u in all_per_ue if u["speed"] == 0.0]
@@ -147,10 +152,10 @@ def run_persistence_profile(preset: str, gpu: int = 0, max_snapshots: int = 200)
         "static_n": len(static_deltas),
     }
 
-    print(f"  Overall: median δ={summary['median_delta']:.4f}, "
-          f"<0.1: {summary['frac_below_0.1']:.0%}, "
+    print(f"  [5/5] Done — median d={summary['median_delta']:.4f}, "
+          f"<0.1: {summary['frac_below_0.1']:.0%}, <0.3: {summary['frac_below_0.3']:.0%}, "
           f"NMSE(reuse)={summary['median_nmse_reuse_db']:.1f}dB, "
-          f"static δ={summary['static_median_delta']:.4f}")
+          f"static d={summary['static_median_delta']:.4f}")
 
     data.clear_cache()
     return {"preset": preset, "summary": summary, "per_ue": all_per_ue}
@@ -180,7 +185,7 @@ def main():
     parser.add_argument("--preset", type=str, default=None, help="Single preset to profile")
     parser.add_argument("--all", action="store_true", help="Profile all primary presets")
     parser.add_argument("--gpu", type=int, default=0)
-    parser.add_argument("--max-snapshots", type=int, default=200)
+    parser.add_argument("--max-snapshots", type=int, default=20000)
     args = parser.parse_args()
 
     presets = PRIMARY_PRESETS if args.all else [args.preset or PRIMARY_PRESETS[0]]

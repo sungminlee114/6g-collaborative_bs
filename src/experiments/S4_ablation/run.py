@@ -95,7 +95,7 @@ def main():
     parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument("--tau", type=float, nargs="+", default=[0.1, 0.2, 0.3, 0.5],
                         help="τ_low values to sweep")
-    parser.add_argument("--max-snapshots", type=int, default=200)
+    parser.add_argument("--max-snapshots", type=int, default=20000)
     args = parser.parse_args()
 
     presets = PRIMARY_PRESETS if args.all else [args.preset or PRIMARY_PRESETS[0]]
