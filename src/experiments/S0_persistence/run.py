@@ -116,7 +116,7 @@ def run_persistence_profile(preset: str, gpu: int = 0, max_snapshots: int = 200)
         return None
 
     print(f"  Loading temporal data from {cfg.temporal_dir}")
-    data = TemporalChannelData(cfg.temporal_dir, max_snapshots=max_snapshots)
+    data = TemporalChannelData(cfg.temporal_dir, trajectory_dir=cfg.trajectory_dir, max_snapshots=max_snapshots)
     print(f"  Snapshots: {data.num_snapshots}, UEs: {data.num_ue}, dt: {data.dt_s}s")
 
     all_per_ue = []

@@ -138,7 +138,7 @@ def run_threshold_sweep(
         print(f"  ⚠ Temporal data not found: {cfg.temporal_dir}")
         return None
 
-    data = TemporalChannelData(cfg.temporal_dir, max_snapshots=max_snapshots)
+    data = TemporalChannelData(cfg.temporal_dir, trajectory_dir=cfg.trajectory_dir, max_snapshots=max_snapshots)
     ce_methods = prepare_ce_methods(cfg.data_dir, cfg, device)
     ce_times = load_ce_times(preset)
 
