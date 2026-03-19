@@ -7,7 +7,22 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset, DataLoader
 
-from .utils import complex_to_real, add_awgn
+from .utils import complex_to_real, add_awgn, load_cfr_from_npz
+
+
+def _detect_subcarrier_params(data_dir: Path):
+    """Detect (num_subcarriers, subcarrier_spacing) from dataset metadata."""
+    progress = data_dir / "progress.json"
+    if progress.exists():
+        import json
+        with open(progress) as f:
+            preset = json.load(f).get("preset")
+        if preset:
+            from src.config import SceneConfig
+            cfg = SceneConfig.from_preset(preset)
+            return cfg.num_subcarriers, cfg.subcarrier_spacing
+    # Fallback: peek at first snapshot to infer from CFR shape
+    return 1024, 0.0
 
 
 class ChannelEstimationDataset(Dataset):
@@ -63,12 +78,18 @@ class ChannelEstimationDataset(Dataset):
 
         self.meta = meta.reset_index(drop=True)
 
+    def _get_subcarrier_params(self):
+        """Lazily detect num_subcarriers and subcarrier_spacing from preset."""
+        if not hasattr(self, "_sc_params"):
+            self._sc_params = _detect_subcarrier_params(self.data_dir)
+        return self._sc_params
+
     def _load_snapshot(self, snapshot_id: int) -> np.ndarray:
         """Load and cache CFR for a snapshot."""
         if snapshot_id not in self._cache:
             path = self.data_dir / f"snapshot_{snapshot_id:04d}" / "channels.npz"
-            data = np.load(path)
-            self._cache[snapshot_id] = data["cfr"]  # (N_UE, n_rx_ant, n_tx_ant, n_sc)
+            n_sc, sc_spacing = self._get_subcarrier_params()
+            self._cache[snapshot_id] = load_cfr_from_npz(path, n_sc, sc_spacing)
         return self._cache[snapshot_id]
 
     def __len__(self):

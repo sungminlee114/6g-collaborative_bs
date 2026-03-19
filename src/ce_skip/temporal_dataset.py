@@ -10,6 +10,8 @@ import json
 import numpy as np
 import torch
 
+from src.dataset_operation.utils import load_cfr_from_npz
+
 
 class TemporalChannelData:
     """Loads temporal channel data as contiguous time-series per (UE, BS).
@@ -84,11 +86,27 @@ class TemporalChannelData:
             self.speeds = None
             self.ue_bs_ids = None
 
+    def _get_subcarrier_params(self):
+        """Lazily detect num_subcarriers and subcarrier_spacing from preset."""
+        if not hasattr(self, "_sc_params"):
+            progress = self.data_dir / "progress.json"
+            if progress.exists():
+                with open(progress) as f:
+                    preset = json.load(f).get("preset")
+                if preset:
+                    from src.config import SceneConfig
+                    cfg = SceneConfig.from_preset(preset)
+                    self._sc_params = (cfg.num_subcarriers, cfg.subcarrier_spacing)
+                    return self._sc_params
+            self._sc_params = (1024, 0.0)
+        return self._sc_params
+
     def _load_snapshot(self, snap_idx: int) -> np.ndarray:
         """Load CFR for a snapshot. Returns (N_UE, n_rx, n_tx, n_sc) complex."""
         if snap_idx not in self._cfr_cache:
             path = self.data_dir / f"snapshot_{snap_idx:04d}" / "channels.npz"
-            self._cfr_cache[snap_idx] = np.load(path)["cfr"]
+            n_sc, sc_spacing = self._get_subcarrier_params()
+            self._cfr_cache[snap_idx] = load_cfr_from_npz(path, n_sc, sc_spacing)
         return self._cfr_cache[snap_idx]
 
     def get_ue_series(

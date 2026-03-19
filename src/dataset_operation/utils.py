@@ -1,6 +1,86 @@
 import numpy as np
 import torch
 
+_CFR_FROM_CIR_WARNED = False
+
+
+def cir_to_cfr(
+    cir_a: np.ndarray,
+    cir_tau: np.ndarray,
+    num_subcarriers: int,
+    subcarrier_spacing: float,
+) -> np.ndarray:
+    """Compute CFR from CIR path coefficients (path-domain DFT).
+
+    H(f_k) = sum_l a_l * exp(-j * 2*pi * f_k * tau_l)
+
+    Args:
+        cir_a:   (N_UE, n_rx, n_tx, n_paths) complex64 — path amplitudes
+        cir_tau: (N_UE, n_paths) float32 — path delays [s]
+        num_subcarriers: number of OFDM subcarriers
+        subcarrier_spacing: subcarrier spacing [Hz]
+
+    Returns:
+        cfr: (N_UE, n_rx, n_tx, n_sc) complex64
+    """
+    global _CFR_FROM_CIR_WARNED
+    if not _CFR_FROM_CIR_WARNED:
+        print(
+            "[dataset] CFR not found in channels.npz — computing from CIR on-the-fly.\n"
+            "          This adds ~0.3s per snapshot load.  If this is too slow,\n"
+            "          re-run data generation with CFR included, or use:\n"
+            "            python scripts/strip_cfr.py --restore <data_dir>"
+        )
+        _CFR_FROM_CIR_WARNED = True
+
+    # Subcarrier frequencies (baseband)
+    if num_subcarriers % 2 == 0:
+        start = -num_subcarriers // 2
+        stop = num_subcarriers // 2
+    else:
+        start = -(num_subcarriers - 1) // 2
+        stop = (num_subcarriers - 1) // 2 + 1
+    freqs = np.arange(start, stop, dtype=np.float32) * subcarrier_spacing
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    freqs_t = torch.tensor(freqs, dtype=torch.float32, device=device)
+
+    n_ue = cir_a.shape[0]
+    cfr_list = []
+    for i in range(n_ue):
+        a_t = torch.tensor(cir_a[i], dtype=torch.complex64, device=device)  # (n_rx, n_tx, n_paths)
+        tau_t = torch.tensor(cir_tau[i], dtype=torch.float32, device=device)  # (n_paths,)
+        phase = -2j * torch.pi * tau_t[:, None] * freqs_t[None, :]  # (n_paths, n_sc)
+        h = torch.sum(a_t[..., None] * torch.exp(phase), dim=-2)  # (n_rx, n_tx, n_sc)
+        cfr_list.append(h.cpu().numpy())
+        del a_t, tau_t, phase, h
+    return np.stack(cfr_list, axis=0)  # (N_UE, n_rx, n_tx, n_sc)
+
+
+def load_cfr_from_npz(
+    npz_path, num_subcarriers: int = 1024, subcarrier_spacing: float = 0.0
+) -> np.ndarray:
+    """Load CFR from channels.npz, computing from CIR if CFR key is missing.
+
+    Args:
+        npz_path: path to channels.npz
+        num_subcarriers: needed only when CFR must be reconstructed
+        subcarrier_spacing: needed only when CFR must be reconstructed
+
+    Returns:
+        cfr: (N_UE, n_rx, n_tx, n_sc) complex64
+    """
+    data = np.load(npz_path)
+    if "cfr" in data.files:
+        return data["cfr"]
+
+    # Reconstruct from CIR
+    assert subcarrier_spacing > 0, (
+        f"channels.npz has no 'cfr' key and subcarrier_spacing not provided. "
+        f"Available keys: {data.files}"
+    )
+    return cir_to_cfr(data["cir_a"], data["cir_tau"], num_subcarriers, subcarrier_spacing)
+
 
 def complex_to_real(h_complex: np.ndarray) -> np.ndarray:
     """Complex channel → real representation: stack real/imag along new axis 0.
