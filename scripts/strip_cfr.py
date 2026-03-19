@@ -25,6 +25,12 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 
+def _load_cir_for_restore(snap_dir_str):
+    """Load CIR from snapshot (module-level for pickling)."""
+    d = np.load(os.path.join(snap_dir_str, "channels.npz"))
+    return d["cir_a"], d["cir_tau"]
+
+
 def get_snapshot_dirs(data_dir: Path):
     return sorted(data_dir.glob("snapshot_*"))
 
@@ -104,37 +110,96 @@ def restore_cfr(data_dir: Path, dry_run: bool = False, preset_override: str = No
     print(f"Preset: {preset}, {cfg.num_subcarriers} subcarriers, "
           f"{cfg.subcarrier_spacing:.0f} Hz spacing")
 
-    from src.dataset_operation.utils import cir_to_cfr
+    import torch
+    from concurrent.futures import ProcessPoolExecutor
+    from tqdm.auto import tqdm
 
     snap_dirs = get_snapshot_dirs(data_dir)
-    print(f"Found {len(snap_dirs)} snapshots")
+    n_total = len(snap_dirs)
+    print(f"Found {n_total} snapshots")
 
-    for i, snap_dir in enumerate(snap_dirs):
+    # Filter: only those missing CFR
+    to_restore = []
+    for snap_dir in snap_dirs:
         npz_path = snap_dir / "channels.npz"
-        if not npz_path.exists():
-            continue
+        if npz_path.exists():
+            try:
+                d = np.load(npz_path)
+                if "cfr" not in d.files:
+                    to_restore.append(snap_dir)
+            except:
+                pass
+    print(f"  Need CFR restore: {len(to_restore)}/{n_total}")
 
-        data = np.load(npz_path)
-        if "cfr" in data.files:
-            if (i + 1) % 100 == 0:
-                print(f"  [{i+1}/{len(snap_dirs)}] {snap_dir.name}: already has CFR")
-            continue
+    if dry_run or not to_restore:
+        return
 
-        if dry_run:
-            print(f"  [{i+1}/{len(snap_dirs)}] {snap_dir.name}: would restore CFR")
-            continue
+    # Batch restore: load CIR in batches with ProcessPool, compute CFR with GPU bmm
+    n_sc = cfg.num_subcarriers
+    sc_spacing = cfg.subcarrier_spacing
+    if n_sc % 2 == 0:
+        start = -n_sc // 2
+    else:
+        start = -(n_sc - 1) // 2
+    freqs = np.arange(start, start + n_sc, dtype=np.float32) * sc_spacing
 
-        cfr = cir_to_cfr(
-            data["cir_a"], data["cir_tau"],
-            cfg.num_subcarriers, cfg.subcarrier_spacing,
-        )
-        arrays = {k: data[k] for k in data.files}
-        arrays["cfr"] = cfr
-        np.savez_compressed(npz_path, **arrays)
+    n_gpus = torch.cuda.device_count()
+    devices = [torch.device(f"cuda:{i}") for i in range(n_gpus)] if n_gpus > 0 else [torch.device("cpu")]
+    print(f"  Using {len(devices)} GPU(s)")
 
-        if (i + 1) % 50 == 0 or i == 0:
-            new_size = npz_path.stat().st_size
-            print(f"  [{i+1}/{len(snap_dirs)}] {snap_dir.name}: restored ({new_size/1024**2:.0f} MB)")
+    batch_size = 200
+    for batch_start in tqdm(range(0, len(to_restore), batch_size), desc="Restoring CFR", unit="batch"):
+        batch_dirs = to_restore[batch_start:batch_start + batch_size]
+
+        # Load CIR with ProcessPool
+        with ProcessPoolExecutor(max_workers=32) as pool:
+            cirs = list(pool.map(_load_cir_for_restore, [str(d) for d in batch_dirs]))
+
+        # Pad to max paths
+        max_p = max(a.shape[-1] for a, _ in cirs)
+        for idx in range(len(cirs)):
+            a, tau = cirs[idx]
+            if a.shape[-1] < max_p:
+                a = np.pad(a, [(0,0)]*(a.ndim-1) + [(0, max_p - a.shape[-1])])
+                tau = np.pad(tau, [(0,0), (0, max_p - tau.shape[-1])])
+                cirs[idx] = (a, tau)
+
+        # Stack: (batch, n_ue, n_rx, n_tx, paths)
+        all_a = np.stack([a for a, _ in cirs])
+        all_tau = np.stack([t for _, t in cirs])
+        B, n_ue, n_rx, n_tx, n_paths = all_a.shape
+
+        # GPU bmm: flatten (B*n_ue) → bmm → reshape
+        flat_a = all_a.reshape(B * n_ue, n_rx, n_tx, n_paths)
+        flat_tau = all_tau.reshape(B * n_ue, n_paths)
+        total = B * n_ue
+
+        cfr_out = np.zeros((total, n_rx, n_tx, n_sc), dtype=np.complex64)
+        chunk = 1500
+        for c_start in range(0, total, chunk * len(devices)):
+            for di, dev in enumerate(devices):
+                d_start = c_start + di * chunk
+                d_end = min(d_start + chunk, total)
+                if d_start >= d_end:
+                    break
+                freqs_t = torch.tensor(freqs, dtype=torch.float32, device=dev)
+                a_ch = torch.tensor(flat_a[d_start:d_end], dtype=torch.complex64, device=dev)
+                tau_ch = torch.tensor(flat_tau[d_start:d_end], dtype=torch.float32, device=dev)
+                exp_phase = torch.exp(-2j * torch.pi * tau_ch[:, :, None] * freqs_t[None, None, :])
+                n_ch = a_ch.shape[0]
+                cfr_flat = torch.bmm(a_ch.reshape(n_ch, n_rx * n_tx, n_paths), exp_phase)
+                cfr_out[d_start:d_end] = cfr_flat.reshape(n_ch, n_rx, n_tx, n_sc).cpu().numpy()
+                del a_ch, tau_ch, exp_phase, cfr_flat
+
+        cfr_all = cfr_out.reshape(B, n_ue, n_rx, n_tx, n_sc)
+
+        # Save back
+        for idx, snap_dir in enumerate(batch_dirs):
+            npz_path = snap_dir / "channels.npz"
+            d = np.load(npz_path)
+            arrays = {k: d[k] for k in d.files}
+            arrays["cfr"] = cfr_all[idx]
+            np.savez_compressed(npz_path, **arrays)
 
     print("Done.")
 
