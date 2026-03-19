@@ -131,7 +131,7 @@ def load_all_ues(
 def run_s0(ue_data: dict, snr_db: float = 20.0) -> dict:
     """S0: Temporal persistence — δ oracle + LS."""
     per_ue = []
-    for u in tqdm(ue_data["ue_list"], desc="S0: δ computation", unit="ue"):
+    for u in tqdm(ue_data["ue_list"], desc="S0: UEs", unit="ue", position=0):
         h = u["h_real"]
         T = h.shape[0]
 
@@ -140,7 +140,7 @@ def run_s0(ue_data: dict, snr_db: float = 20.0) -> dict:
         h_ls = h + (sig_pow / (10 ** (snr_db / 20))) * torch.randn_like(h)
 
         d_oracle, d_ls, nmse_reuse = [], [], []
-        for t in range(1, T):
+        for t in tqdm(range(1, T), desc=f"  S0 UE{u['uid']} δ", unit="snap", leave=False, position=1):
             ref = h[t - 1].norm()
             if ref > 1e-12:
                 d_oracle.append(float((h[t] - h[t - 1]).norm() / ref))
@@ -190,9 +190,9 @@ def run_s2(ue_data: dict, tau_values: list = None, snr_db: float = 20.0) -> dict
     per_tau = {tau: {"nmse": [], "n_skip": 0, "n_delta": 0, "n_full": 0, "total": 0}
                for tau in tau_values}
 
-    for u in tqdm(ue_data["ue_list"], desc="S2: τ sweep", unit="ue"):
+    for u in tqdm(ue_data["ue_list"], desc="S2: UEs", unit="ue", position=0):
         h = u["h_real"]
-        for tau in tau_values:
+        for tau in tqdm(tau_values, desc=f"  S2 UE{u['uid']} τ", unit="τ", leave=False, position=1):
             h_hat, stats = adaptive_ce_scheduling(h, ce, tau_low=tau, tau_high=2 * tau, snr_db=snr_db)
             nm = nmse_per_slot(h_hat, h).numpy()
             pt = per_tau[tau]
@@ -225,13 +225,13 @@ def run_s3(ue_data: dict, tau_values: list = None, snr_db: float = 20.0) -> dict
     ce = LSEstimator()
     per_ue = []
 
-    for u in tqdm(ue_data["ue_list"], desc="S3: distance analysis", unit="ue"):
+    for u in tqdm(ue_data["ue_list"], desc="S3: UEs", unit="ue", position=0):
         h = u["h_real"]
         dist = u["dist"]
         zone = "NF" if dist < r_ray else ("Transition" if dist < 3 * r_ray else "FF")
 
         sweep = {}
-        for tau in tau_values:
+        for tau in tqdm(tau_values, desc=f"  S3 UE{u['uid']} τ", unit="τ", leave=False, position=1):
             h_hat, stats = adaptive_ce_scheduling(h, ce, tau_low=tau, tau_high=2 * tau, snr_db=snr_db)
             nm = nmse_per_slot(h_hat, h).numpy()
             sweep[float(tau)] = {"nmse": float(np.mean(nm)), "skip_rate": stats.skip_rate}
@@ -270,13 +270,16 @@ def run_s4(ue_data: dict, tau_low: float = 0.2, snr_db: float = 20.0,
     ce = LSEstimator()
     results = {}
 
-    for u in tqdm(ue_data["ue_list"], desc="S4: ablation", unit="ue"):
+    combos = []
+    for mode in delta_modes:
+        for alpha in (alpha_values if mode != "skip" else [0.0]):
+            combos.append((mode, alpha, f"{mode}_a{alpha:.1f}" if mode != "skip" else "skip"))
+
+    for u in tqdm(ue_data["ue_list"], desc="S4: UEs", unit="ue", position=0):
         h = u["h_real"]
         spd_label = SPEED_LABELS.get(round(u["speed"], 1), f"v{u['speed']:.1f}")
 
-        for mode in delta_modes:
-            for alpha in (alpha_values if mode != "skip" else [0.0]):
-                key = f"{mode}_a{alpha:.1f}" if mode != "skip" else "skip"
+        for mode, alpha, key in tqdm(combos, desc=f"  S4 UE{u['uid']}", unit="mode", leave=False, position=1):
                 if key not in results:
                     results[key] = {}
                 if spd_label not in results[key]:
@@ -314,16 +317,17 @@ def run_s5(ue_data: dict, snr_list: list = None, tau_list: list = None) -> dict:
         for tau in tau_list:
             combo[(snr, tau)] = {"rate_loss": [], "rpr": [], "smr": []}
 
-    for u in tqdm(ue_data["ue_list"], desc="S5: beamforming", unit="ue"):
+    s5_combos = [(snr, tau) for snr in snr_list for tau in tau_list]
+
+    for u in tqdm(ue_data["ue_list"], desc="S5: UEs", unit="ue", position=0):
         h = u["h_real"]
-        for snr in snr_list:
+        for snr, tau in tqdm(s5_combos, desc=f"  S5 UE{u['uid']} SNR×τ", unit="pt", leave=False, position=1):
             snr_lin = 10 ** (snr / 10)
-            for tau in tau_list:
-                h_hat, stats = adaptive_ce_scheduling(h, ce, tau_low=tau, tau_high=2 * tau, snr_db=snr)
-                rl = rate_loss_per_slot(h_hat, h, snr_lin)
-                combo[(snr, tau)]["rate_loss"].extend(rl.numpy().tolist())
-                combo[(snr, tau)]["rpr"].append(rate_preservation_ratio(h_hat, h, snr_lin)["rpr_oracle"])
-                combo[(snr, tau)]["smr"].append(skip_miss_rate(h_hat, h, stats.tiers, snr_lin, 0.05))
+            h_hat, stats = adaptive_ce_scheduling(h, ce, tau_low=tau, tau_high=2 * tau, snr_db=snr)
+            rl = rate_loss_per_slot(h_hat, h, snr_lin)
+            combo[(snr, tau)]["rate_loss"].extend(rl.numpy().tolist())
+            combo[(snr, tau)]["rpr"].append(rate_preservation_ratio(h_hat, h, snr_lin)["rpr_oracle"])
+            combo[(snr, tau)]["smr"].append(skip_miss_rate(h_hat, h, stats.tiers, snr_lin, 0.05))
 
     agg = {}
     for snr in snr_list:
