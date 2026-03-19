@@ -46,69 +46,72 @@ def compute_delta_profile(data: TemporalChannelData, bs_id: int,
 
     T = max_snapshots or data.num_snapshots
 
-    # Filter UEs: pick N per speed category if requested
-    ue_filter = None
-    if ue_per_speed is not None and data.ue_bs_ids is not None and data.speeds is not None:
-        ue_ids_for_bs = [i for i, b in enumerate(data.ue_bs_ids) if b == bs_id]
-        selected = []
-        speed_counts = {}
-        for uid in ue_ids_for_bs:
-            spd = round(float(data.speeds[uid]), 1)
-            speed_counts.setdefault(spd, 0)
-            if speed_counts[spd] < ue_per_speed:
-                selected.append(uid)
-                speed_counts[spd] += 1
-        ue_filter = set(selected)
-
-    # Load all selected UEs at once (batch CIR→CFR, uses all GPUs)
+    # Iterate UEs one-by-one (memory safe). Track speed counts for ue_per_speed.
     import torch
-    target_ues = sorted(ue_filter) if ue_filter else None
-    h_all, ue_ids_loaded = data.get_all_series(bs_id, snap_range=(0, T))
-    # h_all: (N_UE_bs, T, n_ant, n_sc) complex
+    from src.ce_skip.helpers import iter_ue_tensors
 
-    if len(ue_ids_loaded) == 0:
-        return {"per_ue": [], "overall": {"n_ues": 0, "median_delta_all": float("nan"),
-                "mean_delta_all": float("nan"), "static_median_delta": float("nan"),
-                "static_n": 0, "frac_below_0.1": 0, "frac_below_0.3": 0}}
+    speed_counts = {}  # {rounded_speed: count of valid UEs processed}
 
-    for i, uid in enumerate(ue_ids_loaded):
-        if target_ues is not None and uid not in target_ues:
+    for h_ue_gpu, uid, dist, speed in iter_ue_tensors(data, bs_id, gpu, T):
+        # Check ue_per_speed limit
+        spd_key = round(speed, 1)
+        speed_counts.setdefault(spd_key, 0)
+        if ue_per_speed is not None and speed_counts[spd_key] >= ue_per_speed:
             continue
 
-        h_complex = h_all[i]  # (T, n_ant, n_sc) complex
-        h_real = torch.from_numpy(
-            np.stack([h_complex.real, h_complex.imag], axis=1).astype(np.float32)
-        )  # (T, 2, n_ant, n_sc)
+        h_real = h_ue_gpu  # already (T, 2, n_ant, n_sc) float on CPU/GPU
 
-        dist = data.get_ue_distance(uid, bs_id, snap_idx=0)
-        speed = data.get_ue_speed(uid)
+        # Generate LS estimate (add AWGN at 20 dB SNR)
+        import torch
+        snr_db = 20.0
+        signal_power = h_real.flatten(1).pow(2).mean(dim=1, keepdim=True).unsqueeze(-1).unsqueeze(-1)
+        noise_std = torch.sqrt(signal_power / (10 ** (snr_db / 10)))
+        h_ls = h_real + noise_std * torch.randn_like(h_real)
 
         T_actual = h_real.shape[0]
-        deltas = []
+        deltas_oracle = []
+        deltas_ls = []
         nmse_reuse = []
         for t in range(1, T_actual):
+            # Oracle δ (ground truth)
             h_t = h_real[t]
             h_prev = h_real[t - 1]
             ref_norm = h_prev.norm()
             if ref_norm > 1e-12:
-                delta = float((h_t - h_prev).norm() / ref_norm)
+                delta_oracle = float((h_t - h_prev).norm() / ref_norm)
                 h_t_norm = h_t.norm()
                 if h_t_norm > 1e-12:
                     nmse_reuse.append(float((h_t - h_prev).pow(2).sum() / h_t.pow(2).sum()))
             else:
-                delta = float("inf")
-            deltas.append(delta)
+                delta_oracle = float("inf")
+            deltas_oracle.append(delta_oracle)
 
-        d_arr = np.array([d for d in deltas if np.isfinite(d)])
+            # LS δ (noisy — what the scheduler actually sees)
+            h_ls_t = h_ls[t]
+            h_ls_prev = h_ls[t - 1]
+            ref_norm_ls = h_ls_prev.norm()
+            if ref_norm_ls > 1e-12:
+                delta_ls = float((h_ls_t - h_ls_prev).norm() / ref_norm_ls)
+            else:
+                delta_ls = float("inf")
+            deltas_ls.append(delta_ls)
+
+        d_oracle = np.array([d for d in deltas_oracle if np.isfinite(d)])
+        d_ls = np.array([d for d in deltas_ls if np.isfinite(d)])
         nm_arr = np.array(nmse_reuse)
-        if len(d_arr) == 0:
-            continue
+        if len(d_oracle) == 0:
+            continue  # invalid UE (all-zero channel) — don't count toward ue_per_speed
+
+        speed_counts[spd_key] += 1  # valid UE — count it
 
         per_ue.append({
             "uid": int(uid), "speed": float(speed), "dist": float(dist),
-            "median_delta": float(np.median(d_arr)),
-            "mean_delta": float(np.mean(d_arr)),
-            "p90_delta": float(np.percentile(d_arr, 90)),
+            "median_delta": float(np.median(d_oracle)),
+            "median_delta_ls": float(np.median(d_ls)),
+            "mean_delta": float(np.mean(d_oracle)),
+            "mean_delta_ls": float(np.mean(d_ls)),
+            "p90_delta": float(np.percentile(d_oracle, 90)),
+            "p90_delta_ls": float(np.percentile(d_ls, 90)),
             "nmse_reuse_db": float(10 * np.log10(max(np.mean(nm_arr), 1e-30))) if len(nm_arr) > 0 else float("nan"),
         })
 
