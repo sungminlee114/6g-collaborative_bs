@@ -71,10 +71,20 @@ def sample_ue_positions(radio_map, num_ue, cfg):
     positions = positions.numpy()  # (num_tx, num_ue, 3)
     num_tx = positions.shape[0]
 
-    # Random split across BSs
-    split_pts = np.sort(np.random.choice(range(1, num_ue), num_tx - 1, replace=False))
-    split_pts = np.concatenate([[0], split_pts, [num_ue]])
-    counts = [int(split_pts[i + 1] - split_pts[i]) for i in range(num_tx)]
+    # Soft-balanced split across BSs: each BS gets at least min_per_bs,
+    # remainder distributed with some randomness (Dirichlet).
+    min_per_bs = max(3, num_ue // (num_tx * 3))  # at least 3 or 1/3 of uniform
+    remainder = num_ue - min_per_bs * num_tx
+    if remainder < 0:
+        # Not enough UEs for minimum — just distribute uniformly
+        counts = [num_ue // num_tx] * num_tx
+        counts[0] += num_ue - sum(counts)
+    else:
+        # Dirichlet-distributed remainder for natural imbalance
+        weights = np.random.dirichlet(np.ones(num_tx) * 2.0)
+        extra = np.round(weights * remainder).astype(int)
+        extra[-1] = remainder - extra[:-1].sum()  # fix rounding
+        counts = [min_per_bs + int(e) for e in extra]
 
     # Assign device types to UEs
     device_types = cfg.ue_device_types
