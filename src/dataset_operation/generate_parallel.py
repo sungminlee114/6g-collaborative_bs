@@ -165,9 +165,16 @@ def main():
     signal.signal(signal.SIGINT, _cleanup)
     signal.signal(signal.SIGTERM, _cleanup)
 
+    # Count workers per GPU
+    from collections import Counter
+    gpu_counts = Counter(args.gpus)
+
     print(f"\nPreset: {args.preset}")
     print(f"Snapshots: {args.start_snapshot}..{args.num_snapshots} ({total} total)")
-    print(f"GPUs: {args.gpus} ({num_gpus} workers, ~{per_gpu} each)")
+    print(f"Workers: {num_gpus} total, ~{per_gpu} snapshots each")
+    print(f"GPU allocation: {dict(gpu_counts)} (workers per GPU)")
+    for gpu_id, count in sorted(gpu_counts.items()):
+        print(f"  GPU {gpu_id}: {count} workers × ~{per_gpu} snapshots = ~{count * per_gpu} snapshots")
     print()
 
     # Build worker commands
