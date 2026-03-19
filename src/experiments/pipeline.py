@@ -179,21 +179,25 @@ def run_s0(ue_data: dict, snr_db: float = 20.0) -> dict:
     return {"per_ue": per_ue, "summary": summary}
 
 
-def run_s1(ue_data: dict, tau: float = 0.2, snr_db: float = 20.0) -> dict:
+def run_s1(ue_data: dict, tau: float = 0.2, snr_db: float = 20.0,
+           use_oracle_monitor: bool = False) -> dict:
     """S1: Single-τ scheduling — the core question.
 
     Compares 3 strategies at one τ:
       1. Always Full CE (every slot)
       2. Always Skip (first slot only, reuse forever)
-      3. Adaptive (3-tier scheduling at given τ)
+      3. Adaptive LS-monitor (3-tier scheduling at given τ)
+      4. Adaptive Oracle-monitor (upper bound — if use_oracle_monitor=True)
 
     Returns per-UE results with NMSE and skip rate for each strategy.
     """
+    monitor_label = "oracle" if use_oracle_monitor else "LS"
     per_ue = []
-    for u in tqdm(ue_data["ue_list"], desc=f"S1: scheduling (τ={tau})", unit="ue"):
+    for u in tqdm(ue_data["ue_list"], desc=f"S1: scheduling τ={tau} ({monitor_label})", unit="ue"):
         h = u["h_real"]
-        h_ls, deltas, _ = _precompute_deltas(h, snr_db)
-        sched = _vectorized_scheduling(deltas, tau_low=tau, tau_high=2 * tau)
+        h_ls, deltas_ls, deltas_oracle, _ = _precompute_deltas(h, snr_db)
+        deltas_for_sched = deltas_oracle if use_oracle_monitor else deltas_ls
+        sched = _vectorized_scheduling(deltas_for_sched, tau_low=tau, tau_high=2 * tau)
 
         # Vectorized NMSE for all 3 strategies
         h_real_sq = h.flatten(1).pow(2).sum(1).clamp(min=1e-12)
@@ -227,29 +231,34 @@ def run_s1(ue_data: dict, tau: float = 0.2, snr_db: float = 20.0) -> dict:
 
 
 def _precompute_deltas(h_real: torch.Tensor, snr_db: float = 20.0):
-    """Precompute LS estimates and δ series for a UE (shared across all tau/mode sweeps).
+    """Precompute LS estimates and δ series for a UE.
 
     Returns:
         h_ls: (T, 2, n_ant, n_sc) noisy LS
-        deltas: (T-1,) normalized delta values
+        deltas_ls: (T-1,) LS-based normalized delta
+        deltas_oracle: (T-1,) oracle (ground truth) normalized delta
         nmse_reuse: (T-1,) NMSE if reusing previous slot
     """
     T = h_real.shape[0]
     sig_pow = h_real.flatten(1).pow(2).mean(1, keepdim=True).sqrt().unsqueeze(-1).unsqueeze(-1)
     h_ls = h_real + (sig_pow / (10 ** (snr_db / 20))) * torch.randn_like(h_real)
 
-    # Vectorized δ: ||h_ls(t) - h_ls(t-1)|| / ||h_ls(t-1)||
-    diff = h_ls[1:] - h_ls[:-1]  # (T-1, 2, n_ant, n_sc)
-    diff_norm = diff.flatten(1).norm(dim=1)  # (T-1,)
-    ref_norm = h_ls[:-1].flatten(1).norm(dim=1).clamp(min=1e-12)  # (T-1,)
-    deltas = (diff_norm / ref_norm).numpy()  # (T-1,)
+    # LS δ: ||h_ls(t) - h_ls(t-1)|| / ||h_ls(t-1)||
+    diff_ls = h_ls[1:] - h_ls[:-1]
+    deltas_ls = (diff_ls.flatten(1).norm(dim=1) /
+                 h_ls[:-1].flatten(1).norm(dim=1).clamp(min=1e-12)).numpy()
+
+    # Oracle δ: ||h(t) - h(t-1)|| / ||h(t-1)||
+    diff_oracle = h_real[1:] - h_real[:-1]
+    deltas_oracle = (diff_oracle.flatten(1).norm(dim=1) /
+                     h_real[:-1].flatten(1).norm(dim=1).clamp(min=1e-12)).numpy()
 
     # Vectorized NMSE(reuse): ||h(t) - h(t-1)||² / ||h(t)||²
     true_diff = h_real[1:] - h_real[:-1]
     nmse_reuse = (true_diff.flatten(1).pow(2).sum(1) /
                   h_real[1:].flatten(1).pow(2).sum(1).clamp(min=1e-12)).numpy()
 
-    return h_ls, deltas, nmse_reuse
+    return h_ls, deltas_ls, deltas_oracle, nmse_reuse
 
 
 def _vectorized_scheduling(deltas: np.ndarray, tau_low: float, tau_high: float,
@@ -378,8 +387,8 @@ def run_s2(ue_data: dict, tau_values: list = None, snr_db: float = 20.0) -> dict
 
     for u in tqdm(ue_data["ue_list"], desc="S2: UEs", unit="ue"):
         h = u["h_real"]
-        h_ls, deltas, _ = _precompute_deltas(h, snr_db)
-        batch = _batch_scheduling_sweep(h, h_ls, deltas, tau_values)
+        h_ls, deltas_ls, deltas_oracle, _ = _precompute_deltas(h, snr_db)
+        batch = _batch_scheduling_sweep(h, h_ls, deltas_ls, tau_values)
         tqdm.write(f"  UE{u['uid']}: {len(batch)} τ values swept")
         for r in batch:
             pt = per_tau[r["tau"]]
@@ -415,8 +424,8 @@ def run_s3(ue_data: dict, tau_values: list = None, snr_db: float = 20.0) -> dict
         h = u["h_real"]
         dist = u["dist"]
         zone = "NF" if dist < r_ray else ("Transition" if dist < 3 * r_ray else "FF")
-        h_ls, deltas, _ = _precompute_deltas(h, snr_db)
-        batch = _batch_scheduling_sweep(h, h_ls, deltas, tau_values)
+        h_ls, deltas_ls, deltas_oracle, _ = _precompute_deltas(h, snr_db)
+        batch = _batch_scheduling_sweep(h, h_ls, deltas_ls, tau_values)
         tqdm.write(f"  UE{u['uid']} ({zone}, {dist:.0f}m): {len(batch)} τ swept")
 
         sweep = {}
@@ -465,8 +474,8 @@ def run_s4(ue_data: dict, tau_low: float = 0.2, snr_db: float = 20.0,
     for u in tqdm(ue_data["ue_list"], desc="S4: UEs", unit="ue"):
         h = u["h_real"]
         spd_label = SPEED_LABELS.get(round(u["speed"], 1), f"v{u['speed']:.1f}")
-        h_ls, deltas, _ = _precompute_deltas(h, snr_db)
-        sched = _vectorized_scheduling(deltas, tau_low=tau_low, tau_high=2 * tau_low)
+        h_ls, deltas_ls, deltas_oracle, _ = _precompute_deltas(h, snr_db)
+        sched = _vectorized_scheduling(deltas_ls, tau_low=tau_low, tau_high=2 * tau_low)
 
         for mode, alpha, key in tqdm(combos, desc=f"  S4 UE{u['uid']} modes", unit="m", leave=False):
             if key not in results:
@@ -506,8 +515,8 @@ def run_s5(ue_data: dict, snr_list: list = None, tau_list: list = None) -> dict:
 
         for snr in tqdm(snr_list, desc=f"  S5 UE{u['uid']} SNR", unit="snr", leave=False):
             snr_lin = 10 ** (snr / 10)
-            h_ls, deltas, _ = _precompute_deltas(h, snr)
-            batch = _batch_scheduling_sweep(h, h_ls, deltas, tau_list)
+            h_ls, deltas_ls, _, _ = _precompute_deltas(h, snr)
+            batch = _batch_scheduling_sweep(h, h_ls, deltas_ls, tau_list)
 
             for r in batch:
                 tau = r["tau"]
