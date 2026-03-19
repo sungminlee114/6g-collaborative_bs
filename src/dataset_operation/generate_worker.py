@@ -165,20 +165,30 @@ def run_worker(preset, snapshot_start, snapshot_end, num_ue, data_dir,
     for snap_id in range(snapshot_start, snapshot_end):
         # Resume: skip if valid snapshot already exists
         snap_dir = data_dir / f"snapshot_{snap_id:04d}"
+        # Resume check: skip if already generated (npz or h5 shard)
         npz_path = snap_dir / "channels.npz"
-        if npz_path.exists():
+        already_exists = False
+        if h5_file is not None:
+            # In HDF5 mode, check if this snapshot has non-zero data in shard
+            try:
+                if np.any(h5_file["cir_a"][snap_id] != 0):
+                    already_exists = True
+            except (KeyError, IndexError):
+                pass
+        elif npz_path.exists():
             try:
                 d = np.load(npz_path)
                 has_data = ("cfr" in d and d["cfr"].shape[0] > 0) or \
                            ("cir_a" in d and d["cir_a"].shape[0] > 0)
                 if has_data:
-                    key = "cfr" if "cfr" in d else "cir_a"
-                    print(f"  ⏭ Snapshot {snap_id} exists ({d[key].shape}), skipping")
-                    done_count += 1
-                    _write_progress(done_count, snap_id)
-                    continue
+                    already_exists = True
             except Exception:
                 print(f"  ⚠ Snapshot {snap_id} corrupt, regenerating")
+
+        if already_exists:
+            done_count += 1
+            _write_progress(done_count, snap_id)
+            continue
 
         t_snap = time.time()
         # Temporal mode: fixed seed so static UEs get identical channels across snapshots.
@@ -245,9 +255,11 @@ def run_worker(preset, snapshot_start, snapshot_end, num_ue, data_dir,
             }
             records.append(record)
 
-        snap_dir = data_dir / f"snapshot_{snap_id:04d}"
-        with open(snap_dir / "metadata.json", "w") as f:
-            json.dump(records, f)
+        if h5_file is None:
+            # Only write per-snapshot metadata in npz mode
+            snap_dir = data_dir / f"snapshot_{snap_id:04d}"
+            with open(snap_dir / "metadata.json", "w") as f:
+                json.dump(records, f)
 
         snap_elapsed = time.time() - t_snap
         snap_times.append(snap_elapsed)
