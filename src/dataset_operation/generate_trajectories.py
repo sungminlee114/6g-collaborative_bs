@@ -333,15 +333,59 @@ def generate_trajectories_gpu(preset, num_snapshots, num_ue, dt, velocities,
 
     if upsample > 1:
         # Step 1: Coarse trajectory with building avoidance
-        coarse_pos = np.zeros((coarse_steps, num_ue, 3), dtype=np.float32)
-        coarse_pos[0] = positions[0]
-        if mobility == "gauss_markov":
-            propagate_gauss_markov(
-                coarse_pos, vel_array, speed_array, coarse_dt, coarse_steps,
-                rng, bboxes=bboxes, alpha=alpha,
-            )
-        else:
-            propagate_linear(coarse_pos, vel_array, coarse_dt, coarse_steps)
+        # Retry loop: detect stuck UEs (0% displacement) and relocate them
+        max_retries = 3
+        for attempt in range(max_retries + 1):
+            coarse_pos = np.zeros((coarse_steps, num_ue, 3), dtype=np.float32)
+            coarse_pos[0] = positions[0]
+            if mobility == "gauss_markov":
+                propagate_gauss_markov(
+                    coarse_pos, vel_array, speed_array, coarse_dt, coarse_steps,
+                    rng, bboxes=bboxes, alpha=alpha,
+                )
+            else:
+                propagate_linear(coarse_pos, vel_array, coarse_dt, coarse_steps)
+
+            # Detect stuck UEs: moving UEs with <1% expected displacement
+            stuck_ues = []
+            for u in range(num_ue):
+                if speed_array[u] < 0.01:
+                    continue
+                disp = np.linalg.norm(coarse_pos[-1, u, :2] - coarse_pos[0, u, :2])
+                expected = speed_array[u] * coarse_dt * coarse_steps
+                if disp < expected * 0.01:
+                    stuck_ues.append(u)
+
+            if not stuck_ues or attempt == max_retries:
+                if stuck_ues:
+                    print(f"  ⚠ {len(stuck_ues)} UEs still stuck after {max_retries} retries: {stuck_ues}")
+                break
+
+            # Relocate stuck UEs to random open positions farther from buildings
+            print(f"  Attempt {attempt+1}: relocating {len(stuck_ues)} stuck UEs")
+            for u in stuck_ues:
+                for radius in [20, 50, 100, 200]:
+                    relocated = False
+                    for _ in range(30):
+                        angle = rng.uniform(0, 2 * np.pi)
+                        cx = positions[0, u, 0] + radius * np.cos(angle)
+                        cy = positions[0, u, 1] + radius * np.sin(angle)
+                        if bboxes is not None and not is_inside_building(cx, cy, bboxes):
+                            # Also check 5m clearance
+                            expanded = np.column_stack([
+                                bboxes[:, 0] - 5, bboxes[:, 1] - 5,
+                                bboxes[:, 2] + 5, bboxes[:, 3] + 5,
+                            ])
+                            if not np.any(
+                                (expanded[:, 0] <= cx) & (cx <= expanded[:, 2]) &
+                                (expanded[:, 1] <= cy) & (cy <= expanded[:, 3])
+                            ):
+                                positions[0, u, 0] = cx
+                                positions[0, u, 1] = cy
+                                relocated = True
+                                break
+                    if relocated:
+                        break
 
         # Step 2: Linear interpolation to fine resolution
         from tqdm.auto import tqdm as _tqdm
