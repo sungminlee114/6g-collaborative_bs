@@ -147,7 +147,8 @@ def propagate_gauss_markov(positions, vel_array, speed_array, dt, num_snapshots,
     # Current velocities (will be updated each step)
     cur_vel = vel_array.copy()
 
-    for t in range(1, num_snapshots):
+    from tqdm.auto import tqdm
+    for t in tqdm(range(1, num_snapshots), desc="Propagating", unit="snap"):
         for u in range(num_ue):
             mean_speed = speed_array[u]
             if mean_speed < 0.01:
@@ -321,8 +322,9 @@ def generate_trajectories_gpu(preset, num_snapshots, num_ue, dt, velocities,
 
     # Count building collisions avoided
     if bboxes is not None and mobility == "gauss_markov":
+        from tqdm.auto import tqdm as _tqdm
         inside_count = 0
-        for t in range(num_snapshots):
+        for t in _tqdm(range(num_snapshots), desc="Verifying positions", unit="snap"):
             for u in range(num_ue):
                 if is_inside_building(positions[t, u, 0], positions[t, u, 1], bboxes):
                     inside_count += 1
