@@ -25,6 +25,16 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 
+def _save_snap_with_cfr(args):
+    """Save CFR back to npz (module-level for ProcessPool pickling)."""
+    snap_dir_str, cfr_data = args
+    npz_path = os.path.join(snap_dir_str, "channels.npz")
+    d = np.load(npz_path)
+    arrays = {k: d[k] for k in d.files}
+    arrays["cfr"] = cfr_data
+    np.savez_compressed(npz_path, **arrays)
+
+
 def _load_cir_for_restore(snap_dir_str):
     """Load CIR from snapshot (module-level for pickling)."""
     d = np.load(os.path.join(snap_dir_str, "channels.npz"))
@@ -150,69 +160,73 @@ def restore_cfr(data_dir: Path, dry_run: bool = False, preset_override: str = No
     devices = [torch.device(f"cuda:{i}") for i in range(n_gpus)] if n_gpus > 0 else [torch.device("cpu")]
     print(f"  Using {len(devices)} GPU(s)")
 
-    batch_size = 10000
-    n_batches = (len(to_restore) + batch_size - 1) // batch_size
-    for bi in range(n_batches):
-        batch_start = bi * batch_size
-        batch_dirs = to_restore[batch_start:batch_start + batch_size]
-        print(f"\n  Batch {bi+1}/{n_batches} ({len(batch_dirs)} snaps)")
+    # Streaming pipeline: small mini-batches (read → GPU → save) to minimize RAM
+    # Each mini-batch: read N snaps, convert on GPU, save immediately, free RAM
+    mini_batch = 100  # ~4GB RAM per mini-batch
+    gpu_chunk = 1500  # samples per GPU call
 
-        # 1. Disk read
-        with ProcessPoolExecutor(max_workers=64) as pool:
-            cirs = list(tqdm(
-                pool.map(_load_cir_for_restore, [str(d) for d in batch_dirs]),
-                total=len(batch_dirs), desc="    Disk read", unit="snap",
-            ))
+    # Shared freqs tensor per device
+    freqs_per_dev = {dev: torch.tensor(freqs, dtype=torch.float32, device=dev) for dev in devices}
 
-        # Pad to max paths
+    def _gpu_convert(flat_a, flat_tau, n_rx, n_tx):
+        """Convert CIR→CFR on multiple GPUs."""
+        total_s = flat_a.shape[0]
+        out = np.zeros((total_s, n_rx, n_tx, n_sc), dtype=np.complex64)
+        for c_start in range(0, total_s, gpu_chunk * len(devices)):
+            for di, dev in enumerate(devices):
+                d_start = c_start + di * gpu_chunk
+                d_end = min(d_start + gpu_chunk, total_s)
+                if d_start >= d_end:
+                    break
+                a_ch = torch.tensor(flat_a[d_start:d_end], dtype=torch.complex64, device=dev)
+                tau_ch = torch.tensor(flat_tau[d_start:d_end], dtype=torch.float32, device=dev)
+                exp_phase = torch.exp(-2j * torch.pi * tau_ch[:, :, None] * freqs_per_dev[dev][None, None, :])
+                n_ch = a_ch.shape[0]
+                out[d_start:d_end] = torch.bmm(
+                    a_ch.reshape(n_ch, n_rx * n_tx, a_ch.shape[-1]), exp_phase
+                ).reshape(n_ch, n_rx, n_tx, n_sc).cpu().numpy()
+                del a_ch, tau_ch, exp_phase
+        return out
+
+    pbar = tqdm(total=len(to_restore), desc="Restoring CFR", unit="snap")
+    for mb_start in range(0, len(to_restore), mini_batch):
+        mb_dirs = to_restore[mb_start:mb_start + mini_batch]
+
+        # 1. Read (ProcessPool, ~1s for 100 snaps)
+        with ProcessPoolExecutor(max_workers=32) as pool:
+            cirs = list(pool.map(_load_cir_for_restore, [str(d) for d in mb_dirs]))
+
+        # 2. Pad + stack
         max_p = max(a.shape[-1] for a, _ in cirs)
         for idx in range(len(cirs)):
             a, tau = cirs[idx]
             if a.shape[-1] < max_p:
-                a = np.pad(a, [(0,0)]*(a.ndim-1) + [(0, max_p - a.shape[-1])])
-                tau = np.pad(tau, [(0,0), (0, max_p - tau.shape[-1])])
-                cirs[idx] = (a, tau)
-
+                cirs[idx] = (
+                    np.pad(a, [(0,0)]*(a.ndim-1) + [(0, max_p - a.shape[-1])]),
+                    np.pad(tau, [(0,0), (0, max_p - tau.shape[-1])]),
+                )
         all_a = np.stack([a for a, _ in cirs])
         all_tau = np.stack([t for _, t in cirs])
         B, n_ue, n_rx, n_tx, n_paths = all_a.shape
+        del cirs
 
-        # 2. GPU bmm
+        # 3. GPU convert
         flat_a = all_a.reshape(B * n_ue, n_rx, n_tx, n_paths)
         flat_tau = all_tau.reshape(B * n_ue, n_paths)
-        total_samples = B * n_ue
+        cfr_flat = _gpu_convert(flat_a, flat_tau, n_rx, n_tx)
+        cfr_all = cfr_flat.reshape(B, n_ue, n_rx, n_tx, n_sc)
+        del all_a, all_tau, flat_a, flat_tau, cfr_flat
 
-        cfr_out = np.zeros((total_samples, n_rx, n_tx, n_sc), dtype=np.complex64)
-        chunk = 1500
-        gpu_pbar = tqdm(total=total_samples, desc="    GPU bmm", unit="sample")
-        for c_start in range(0, total_samples, chunk * len(devices)):
-            for di, dev in enumerate(devices):
-                d_start = c_start + di * chunk
-                d_end = min(d_start + chunk, total_samples)
-                if d_start >= d_end:
-                    break
-                freqs_t = torch.tensor(freqs, dtype=torch.float32, device=dev)
-                a_ch = torch.tensor(flat_a[d_start:d_end], dtype=torch.complex64, device=dev)
-                tau_ch = torch.tensor(flat_tau[d_start:d_end], dtype=torch.float32, device=dev)
-                exp_phase = torch.exp(-2j * torch.pi * tau_ch[:, :, None] * freqs_t[None, None, :])
-                n_ch = a_ch.shape[0]
-                cfr_flat = torch.bmm(a_ch.reshape(n_ch, n_rx * n_tx, n_paths), exp_phase)
-                cfr_out[d_start:d_end] = cfr_flat.reshape(n_ch, n_rx, n_tx, n_sc).cpu().numpy()
-                gpu_pbar.update(d_end - d_start)
-                del a_ch, tau_ch, exp_phase, cfr_flat
-        gpu_pbar.close()
+        # 4. Save (ProcessPool for parallel compression)
+        with ProcessPoolExecutor(max_workers=32) as pool:
+            list(pool.map(_save_snap_with_cfr, [
+                (str(d), cfr_all[i]) for i, d in enumerate(mb_dirs)
+            ]))
+        del cfr_all
 
-        cfr_all = cfr_out.reshape(B, n_ue, n_rx, n_tx, n_sc)
-        del all_a, all_tau, cfr_out
+        pbar.update(len(mb_dirs))
 
-        # 3. Save back
-        for idx, snap_dir in enumerate(tqdm(batch_dirs, desc="    Saving", unit="snap")):
-            npz_path = snap_dir / "channels.npz"
-            d = np.load(npz_path)
-            arrays = {k: d[k] for k in d.files}
-            arrays["cfr"] = cfr_all[idx]
-            np.savez_compressed(npz_path, **arrays)
-
+    pbar.close()
     print("Done.")
 
 
