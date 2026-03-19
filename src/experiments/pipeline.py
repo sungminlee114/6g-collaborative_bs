@@ -179,55 +179,155 @@ def run_s0(ue_data: dict, snr_db: float = 20.0) -> dict:
     return {"per_ue": per_ue, "summary": summary}
 
 
-def run_s1(ue_data: dict, tau: float = 0.2, snr_db: float = 20.0,
-           use_oracle_monitor: bool = False) -> dict:
-    """S1: Single-τ scheduling — the core question.
+def _doppler_scheduling(speed: float, frequency: float, dt_s: float, T: int, n_max: int = 50) -> np.ndarray:
+    """Doppler-based scheduling: skip for T_c slots, then full CE.
 
-    Compares 3 strategies at one τ:
-      1. Always Full CE (every slot)
-      2. Always Skip (first slot only, reuse forever)
-      3. Adaptive LS-monitor (3-tier scheduling at given τ)
-      4. Adaptive Oracle-monitor (upper bound — if use_oracle_monitor=True)
-
-    Returns per-UE results with NMSE and skip rate for each strategy.
+    T_c = λ/(2v) = coherence time. Skip interval = floor(T_c / dt).
+    Returns tiers array (T,) — 0=skip, 2=full.
     """
-    monitor_label = "oracle" if use_oracle_monitor else "LS"
-    per_ue = []
-    for u in tqdm(ue_data["ue_list"], desc=f"S1: scheduling τ={tau} ({monitor_label})", unit="ue"):
-        h = u["h_real"]
-        h_ls, deltas_ls, deltas_oracle, _ = _precompute_deltas(h, snr_db)
-        deltas_for_sched = deltas_oracle if use_oracle_monitor else deltas_ls
-        sched = _vectorized_scheduling(deltas_for_sched, tau_low=tau, tau_high=2 * tau)
+    c = 3e8
+    wavelength = c / frequency
+    if speed < 0.01:
+        # Static: skip everything except first and safety
+        skip_interval = n_max
+    else:
+        T_c = wavelength / (2 * speed)
+        skip_interval = max(1, int(T_c / dt_s))
+        skip_interval = min(skip_interval, n_max)
 
-        # Vectorized NMSE for all 3 strategies
+    tiers = np.zeros(T, dtype=np.int32)
+    tiers[0] = 2  # first slot always full
+    for t in range(1, T):
+        if (t % skip_interval) == 0:
+            tiers[t] = 2
+        else:
+            tiers[t] = 0
+    return tiers
+
+
+def _smoothed_ls_deltas(h_ls: torch.Tensor, K: int = 4) -> np.ndarray:
+    """Compute δ from K-slot averaged LS estimates. Noise reduces by √K."""
+    T = h_ls.shape[0]
+    # Running average with window K
+    h_avg = torch.zeros_like(h_ls)
+    for t in range(T):
+        t0 = max(0, t - K + 1)
+        h_avg[t] = h_ls[t0:t+1].mean(dim=0)
+
+    diff = h_avg[1:] - h_avg[:-1]
+    ref = h_avg[:-1].flatten(1).norm(dim=1).clamp(min=1e-12)
+    return (diff.flatten(1).norm(dim=1) / ref).numpy()
+
+
+def _snr_adaptive_tau(tau_base: float, snr_db: float) -> float:
+    """SNR-adaptive threshold: τ_eff = τ_base + noise_floor.
+
+    Noise floor of LS δ ≈ √(2/SNR_linear).
+    """
+    snr_lin = 10 ** (snr_db / 10)
+    noise_floor = np.sqrt(2.0 / snr_lin)
+    return tau_base + noise_floor
+
+
+def run_s1(ue_data: dict, tau: float = 0.2, snr_db: float = 20.0) -> dict:
+    """S1: Monitor comparison — which scheduling strategy works best?
+
+    Compares 5 strategies at one τ:
+      1. Always Full CE (baseline)
+      2. Always Skip (lower bound)
+      3. LS monitor (current proposal)
+      4. Oracle monitor (upper bound)
+      5. Doppler-based (coherence time, no per-slot monitor)
+      6. SNR-adaptive τ (LS + noise floor compensation)
+      7. Smoothed LS (K-slot averaging)
+
+    Returns per-UE results for all strategies.
+    """
+    cfg = ExperimentConfig.from_preset(ue_data["preset"])
+    frequency = cfg.frequency
+    dt_s = 0.00025  # TODO: get from trajectory_info
+
+    # SNR-adaptive τ
+    tau_snr = _snr_adaptive_tau(tau, snr_db)
+
+    per_ue = []
+    for u in tqdm(ue_data["ue_list"], desc=f"S1: monitor comparison (τ={tau})", unit="ue"):
+        h = u["h_real"]
+        T = h.shape[0]
+        h_ls, deltas_ls, deltas_oracle, _ = _precompute_deltas(h, snr_db)
         h_real_sq = h.flatten(1).pow(2).sum(1).clamp(min=1e-12)
 
-        # Strategy 1: Always Full CE → h_hat = h_ls
-        nmse_full = float(10 * np.log10(max(
-            ((h_ls - h).flatten(1).pow(2).sum(1) / h_real_sq).mean().item(), 1e-30)))
+        def _nmse_from_tiers(tiers):
+            nm = _compute_nmse_from_tiers(h, h_ls, tiers)
+            return float(10 * np.log10(max(np.mean(nm), 1e-30)))
 
-        # Strategy 2: Always Skip → h_hat = h_ls[0] repeated
+        def _sr(tiers):
+            return float((tiers == 0).sum() / len(tiers))
+
+        strategies = {}
+
+        # 1. Always Full CE
+        strategies["full_ce"] = {
+            "nmse_db": float(10 * np.log10(max(
+                ((h_ls - h).flatten(1).pow(2).sum(1) / h_real_sq).mean().item(), 1e-30))),
+            "skip_rate": 0.0,
+        }
+
+        # 2. Always Skip
         h_skip = h_ls[0:1].expand_as(h)
-        nmse_skip = float(10 * np.log10(max(
-            ((h_skip - h).flatten(1).pow(2).sum(1) / h_real_sq).mean().item(), 1e-30)))
+        strategies["always_skip"] = {
+            "nmse_db": float(10 * np.log10(max(
+                ((h_skip - h).flatten(1).pow(2).sum(1) / h_real_sq).mean().item(), 1e-30))),
+            "skip_rate": 1.0,
+        }
 
-        # Strategy 3: Adaptive — uses _compute_nmse_from_tiers (has sequential loop)
-        nm_adaptive = _compute_nmse_from_tiers(h, h_ls, sched["tiers"])
-        nmse_adaptive = float(10 * np.log10(max(np.mean(nm_adaptive), 1e-30)))
+        # 3. LS monitor
+        sched_ls = _vectorized_scheduling(deltas_ls, tau_low=tau, tau_high=2 * tau)
+        strategies["ls_monitor"] = {
+            "nmse_db": _nmse_from_tiers(sched_ls["tiers"]),
+            "skip_rate": _sr(sched_ls["tiers"]),
+        }
+
+        # 4. Oracle monitor
+        sched_oracle = _vectorized_scheduling(deltas_oracle, tau_low=tau, tau_high=2 * tau)
+        strategies["oracle_monitor"] = {
+            "nmse_db": _nmse_from_tiers(sched_oracle["tiers"]),
+            "skip_rate": _sr(sched_oracle["tiers"]),
+        }
+
+        # 5. Doppler-based
+        tiers_doppler = _doppler_scheduling(u["speed"], frequency, dt_s, T)
+        strategies["doppler"] = {
+            "nmse_db": _nmse_from_tiers(tiers_doppler),
+            "skip_rate": _sr(tiers_doppler),
+        }
+
+        # 6. SNR-adaptive τ
+        sched_snr = _vectorized_scheduling(deltas_ls, tau_low=tau_snr, tau_high=2 * tau_snr)
+        strategies["snr_adaptive"] = {
+            "nmse_db": _nmse_from_tiers(sched_snr["tiers"]),
+            "skip_rate": _sr(sched_snr["tiers"]),
+        }
+
+        # 7. Smoothed LS (K=4)
+        deltas_smooth = _smoothed_ls_deltas(h_ls, K=4)
+        sched_smooth = _vectorized_scheduling(deltas_smooth, tau_low=tau, tau_high=2 * tau)
+        strategies["smoothed_ls_K4"] = {
+            "nmse_db": _nmse_from_tiers(sched_smooth["tiers"]),
+            "skip_rate": _sr(sched_smooth["tiers"]),
+        }
 
         per_ue.append({
             "uid": u["uid"], "speed": u["speed"], "dist": u["dist"],
-            "nmse_full_db": nmse_full,
-            "nmse_skip_db": nmse_skip,
-            "nmse_adaptive_db": nmse_adaptive,
-            "skip_rate": sched["n_skip"] / sched["total"],
-            "full_rate": sched["n_full"] / sched["total"],
-            "delta_rate": sched["n_delta"] / sched["total"],
+            "strategies": strategies,
         })
-        tqdm.write(f"  UE{u['uid']}: Full={nmse_full:.1f}dB, Adaptive={nmse_adaptive:.1f}dB, "
-                   f"Skip={nmse_skip:.1f}dB | SR={sched['n_skip']/sched['total']:.0%}")
 
-    return {"per_ue": per_ue, "tau": tau, "snr_db": snr_db}
+        # Print summary
+        tqdm.write(f"  UE{u['uid']} (v={u['speed']:.1f}):")
+        for name, s in strategies.items():
+            tqdm.write(f"    {name:20s}: NMSE={s['nmse_db']:+6.1f}dB  SR={s['skip_rate']:.0%}")
+
+    return {"per_ue": per_ue, "tau": tau, "snr_db": snr_db, "tau_snr_adaptive": tau_snr}
 
 
 def _precompute_deltas(h_real: torch.Tensor, snr_db: float = 20.0):
