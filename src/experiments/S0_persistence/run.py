@@ -119,8 +119,10 @@ def run_persistence_profile(preset: str, gpu: int = 0, max_snapshots: int = 200)
     data = TemporalChannelData(cfg.temporal_dir, trajectory_dir=cfg.trajectory_dir, max_snapshots=max_snapshots)
     print(f"  Snapshots: {data.num_snapshots}, UEs: {data.num_ue}, dt: {data.dt_s}s")
 
+    # Use ALL BSs for persistence profiling (not just test split)
+    all_bs = sorted(set(cfg.train_bs_ids + cfg.val_bs_ids + cfg.test_bs_ids))
     all_per_ue = []
-    for bs_id in cfg.test_bs_ids[:2]:
+    for bs_id in all_bs:
         print(f"  BS {bs_id}...")
         profile = compute_delta_profile(data, bs_id)
         all_per_ue.extend(profile["per_ue"])
