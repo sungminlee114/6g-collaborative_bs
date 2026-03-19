@@ -20,7 +20,7 @@ from src.config import get_results_dir
 from src.tracker import Tracker
 from src.ce_skip import ExperimentConfig
 from src.ce_skip.temporal_dataset import TemporalChannelData
-from src.ce_skip.ce_algorithms import LSEstimator, GenieLMMSE, DLCEEstimator
+from src.ce_skip.ce_algorithms import LSEstimator, GenieLMMSE
 from src.ce_skip.scheduling import adaptive_ce_scheduling, compute_scheduling_cost
 from src.ce_skip.metrics import (
     nmse_per_slot, nmse_db_per_slot, rate_preservation_ratio,
@@ -79,18 +79,31 @@ def prepare_ce_methods(
         lmmse.fit(torch.cat(h_samples)[:2000].to(device))
     methods["lmmse"] = lmmse
 
-    # DL-CE
-    dl_ce = DLCEEstimator(n_blocks=8, channels=64).to(device)
-    # Try to load trained checkpoint from S1
-    ckpt_dir = Path("assets/checkpoints/ce_skip")
-    ckpt_path = ckpt_dir / f"dl_ce_{cfg.deployment}_{cfg.num_subcarriers}_{int(cfg.frequency/1e9)}g.pt"
+    # DL-CE — uses SiteAwareEstimator (same as E0) with per-sample RMS normalization
+    from src.models.estimator import create_model as create_estimator
+    from src.training.trainer import load_checkpoint
+
+    ckpt_name = f"ce_skip/dl_ce_{cfg.deployment}_{cfg.num_subcarriers}_{int(cfg.frequency/1e9)}g"
+    ckpt_path = Path("assets/checkpoints") / f"{ckpt_name}.pt"
     if ckpt_path.exists() and load_dl_checkpoint:
-        dl_ce.load_state_dict(torch.load(ckpt_path, map_location=device, weights_only=True))
-        print(f"  Loaded DL-CE checkpoint: {ckpt_path}")
+        dl_ce = create_estimator(site_integration="none").to(device)
+        meta = load_checkpoint(dl_ce, ckpt_name, device=device)
+        dl_ce.eval()
+        # Wrap with per-sample RMS normalization (training used normalized data)
+        class NormalizedDLCE:
+            def __init__(self, model):
+                self.model = model
+            def __call__(self, h_ls):
+                rms = h_ls.flatten(1).pow(2).mean(1, keepdim=True).sqrt().unsqueeze(-1).unsqueeze(-1).clamp(min=1e-12)
+                h_norm = h_ls / rms
+                h_hat_norm = self.model(h_norm)
+                return h_hat_norm * rms
+            def to(self, device): self.model.to(device); return self
+            def eval(self): self.model.eval(); return self
+        methods["dl_ce"] = NormalizedDLCE(dl_ce)
+        print(f"  Loaded DL-CE: {ckpt_path}")
     else:
-        print(f"  DL-CE: using untrained model (no checkpoint at {ckpt_path})")
-    dl_ce.eval()
-    methods["dl_ce"] = dl_ce
+        print(f"  DL-CE: skipped (no checkpoint at {ckpt_path})")
 
     return methods
 

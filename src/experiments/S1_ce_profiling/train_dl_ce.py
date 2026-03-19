@@ -42,27 +42,35 @@ def ckpt_path_for(cfg: ExperimentConfig) -> Path:
 class NormalizedCEDataset(Dataset):
     """Wraps ChannelEstimationDataset with per-sample RMS normalization.
 
-    Each sample is divided by its target RMS so the model trains at unit scale.
-    The RMS is stored so inference can denormalize.
+    Filters out near-zero samples (complete blockage) that would cause
+    division-by-zero in NMSE loss.
     """
 
-    def __init__(self, base_dataset: ChannelEstimationDataset):
+    def __init__(self, base_dataset: ChannelEstimationDataset, min_rms: float = 1e-10):
         self.base = base_dataset
+        # Pre-filter: find valid indices (non-zero target)
+        self.valid_indices = []
+        for i in range(len(base_dataset)):
+            target = base_dataset[i]["target"]
+            rms = target.pow(2).mean().sqrt()
+            if rms > min_rms:
+                self.valid_indices.append(i)
+        n_filtered = len(base_dataset) - len(self.valid_indices)
+        if n_filtered > 0:
+            print(f"  NormalizedCEDataset: filtered {n_filtered}/{len(base_dataset)} near-zero samples")
 
     def __len__(self):
-        return len(self.base)
+        return len(self.valid_indices)
 
     def __getitem__(self, idx):
-        sample = self.base[idx]
+        sample = self.base[self.valid_indices[idx]]
         target = sample["target"]
-        # Per-sample RMS normalization
-        rms = target.pow(2).mean().sqrt().clamp(min=1e-12)
+        rms = target.pow(2).mean().sqrt()
         return {
             "input": sample["input"] / rms,
             "target": target / rms,
             "bs_id": sample["bs_id"],
             "snr_db": sample["snr_db"],
-            "rms": rms,
         }
 
 
