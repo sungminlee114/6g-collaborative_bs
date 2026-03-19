@@ -120,11 +120,11 @@ def run_worker(preset, snapshot_start, snapshot_end, num_ue, data_dir,
         h5_file = h5py.File(h5_shard_path, "w")
         h5_file.create_dataset(
             "cir_a", shape=(snapshot_end, num_ue, cfg.num_rx_ant, cfg.num_tx_ant, max_paths),
-            dtype="complex64", fillvalue=0,
+            dtype="complex64",
         )
         h5_file.create_dataset(
             "cir_tau", shape=(snapshot_end, num_ue, max_paths),
-            dtype="float32", fillvalue=0,
+            dtype="float32",
         )
         h5_file.attrs["snapshot_start"] = snapshot_start
         h5_file.attrs["snapshot_end"] = snapshot_end
