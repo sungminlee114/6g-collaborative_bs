@@ -321,13 +321,16 @@ def generate_trajectories_gpu(preset, num_snapshots, num_ue, dt, velocities,
               f"then {upsample}x interpolation → {num_snapshots} @ dt={dt*1000:.4f}ms")
 
     if upsample > 1:
-        # Step 1: Coarse trajectory with building avoidance
+        # Step 1: Coarse trajectory WITHOUT building collision
+        # (buildings cause UEs to get stuck in dense urban areas;
+        #  initial positions are already fixed to be outside buildings,
+        #  and Sionna RT handles building geometry in channel computation)
         coarse_pos = np.zeros((coarse_steps, num_ue, 3), dtype=np.float32)
         coarse_pos[0] = positions[0]
         if mobility == "gauss_markov":
             propagate_gauss_markov(
                 coarse_pos, vel_array, speed_array, coarse_dt, coarse_steps,
-                rng, bboxes=bboxes, alpha=alpha,
+                rng, bboxes=None, alpha=alpha,
             )
         else:
             propagate_linear(coarse_pos, vel_array, coarse_dt, coarse_steps)
