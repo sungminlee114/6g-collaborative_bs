@@ -15,6 +15,10 @@ from src.ce_skip.helpers import iter_ue_tensors
 
 def load_data(preset: str, max_snapshots: int = 20000) -> TemporalChannelData:
     """Load temporal channel data for a preset. Returns TemporalChannelData instance."""
+    import os
+    # Ensure we're at project root (notebooks may run from subdirs)
+    project_root = Path(__file__).resolve().parent.parent.parent.parent
+    os.chdir(project_root)
     cfg = ExperimentConfig.from_preset(preset)
     if not cfg.temporal_dir.exists():
         raise FileNotFoundError(f"Temporal data not found: {cfg.temporal_dir}")
@@ -80,13 +84,33 @@ def compute_delta_profile(data: TemporalChannelData, bs_id: int) -> dict:
     return {"per_ue": per_ue, "overall": overall}
 
 
-def run_all_bs(data: TemporalChannelData, preset: str) -> dict:
-    """Run delta profile across all BSs. Returns full result dict."""
+def run_all_bs(data: TemporalChannelData, preset: str, gpu: str = None) -> dict:
+    """Run delta profile across all BSs with UEs.
+
+    Args:
+        gpu: CUDA device string, e.g. "0" or "0,1". None = use all available.
+    """
+    import os
+    if gpu is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu)
+
     cfg = ExperimentConfig.from_preset(preset)
     all_bs = sorted(set(cfg.train_bs_ids + cfg.val_bs_ids + cfg.test_bs_ids))
 
+    # Only process BSs that have UEs
+    bs_with_ues = []
+    if data.ue_bs_ids is not None:
+        for bs_id in all_bs:
+            n = sum(1 for b in data.ue_bs_ids if b == bs_id)
+            if n > 0:
+                bs_with_ues.append(bs_id)
+            else:
+                print(f"  BS {bs_id}: 0 UEs, skipping")
+    else:
+        bs_with_ues = all_bs
+
     all_per_ue = []
-    for bs_id in all_bs:
+    for bs_id in bs_with_ues:
         profile = compute_delta_profile(data, bs_id)
         all_per_ue.extend(profile["per_ue"])
         ov = profile["overall"]
