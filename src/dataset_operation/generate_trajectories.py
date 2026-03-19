@@ -100,7 +100,7 @@ def reflect_off_building(pos_old, pos_new, vel, bboxes, rng=None):
 
     # Strategy 4: Try 8 random directions from pos_old
     speed = np.linalg.norm(vel)
-    step = max(abs(dx), abs(dy), 0.5)
+    step = max(abs(dx), abs(dy), 2.0)  # minimum 2m step to escape buildings
     _rng = rng if rng is not None else np.random.default_rng()
     for _ in range(8):
         angle = _rng.uniform(0, 2 * np.pi)
@@ -278,12 +278,34 @@ def generate_trajectories_gpu(preset, num_snapshots, num_ue, dt, velocities,
         vel_array[u] = [v * np.cos(angle), v * np.sin(angle)]
         speed_array[u] = v
 
-    # Check that initial positions are not inside buildings
+    # Fix initial positions inside buildings — push to nearest building edge
     if bboxes is not None:
+        n_fixed = 0
         for u in range(num_ue):
             if is_inside_building(positions[0, u, 0], positions[0, u, 1], bboxes):
-                print(f"  Warning: UE {u} initial position inside building, "
-                      f"radio map sampling should prevent this")
+                # Find which building(s) contain this point
+                x, y = positions[0, u, 0], positions[0, u, 1]
+                inside = (bboxes[:, 0] <= x) & (x <= bboxes[:, 2]) & \
+                         (bboxes[:, 1] <= y) & (y <= bboxes[:, 3])
+                for bidx in np.where(inside)[0]:
+                    # Push to nearest edge + 1m margin
+                    bx0, by0, bx2, by2 = bboxes[bidx]
+                    dists = [abs(x - bx0), abs(x - bx2), abs(y - by0), abs(y - by2)]
+                    edge = np.argmin(dists)
+                    margin = 1.0
+                    if edge == 0:
+                        positions[0, u, 0] = bx0 - margin
+                    elif edge == 1:
+                        positions[0, u, 0] = bx2 + margin
+                    elif edge == 2:
+                        positions[0, u, 1] = by0 - margin
+                    else:
+                        positions[0, u, 1] = by2 + margin
+                    break  # fix for first containing building
+                if not is_inside_building(positions[0, u, 0], positions[0, u, 1], bboxes):
+                    n_fixed += 1
+        if n_fixed > 0:
+            print(f"  Fixed {n_fixed} UEs initially inside buildings (pushed to nearest edge)")
 
     # Propagate
     print(f"Mobility model: {mobility} (alpha={alpha})")
@@ -359,7 +381,7 @@ def generate_trajectories_gpu(preset, num_snapshots, num_ue, dt, velocities,
     max_displacement = max(speed_array) * dt * num_snapshots if max(speed_array) > 0 else 0
     print(f"\nTrajectories saved to {data_dir}/trajectories.npz")
     print(f"  {num_snapshots} snapshots × {num_ue} UEs")
-    print(f"  dt={dt*1000:.1f}ms, total={total_ms:.0f}ms ({total_ms/1000:.1f}s)")
+    print(f"  dt={dt*1000:.4f}ms, total={total_ms:.0f}ms ({total_ms/1000:.1f}s)")
     print(f"  Speed distribution: {np.unique(speed_array, return_counts=True)}")
     print(f"  Max displacement: {max_displacement:.1f}m")
     return str(data_dir)

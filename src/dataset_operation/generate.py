@@ -216,13 +216,12 @@ def generate_snapshot(scene, cfg, snapshot_id: int, seed: int, data_dir: Path,
 
     torch.cuda.empty_cache()
 
-    # Save
+    # Save CIR only (CFR reconstructed on-the-fly during loading)
     snap_dir = data_dir / f"snapshot_{snapshot_id:04d}"
     snap_dir.mkdir(parents=True, exist_ok=True)
 
     np.savez_compressed(
         snap_dir / "channels.npz",
-        cfr=cfr,
         cir_a=cir_a,
         cir_tau=cir_tau,
     )
