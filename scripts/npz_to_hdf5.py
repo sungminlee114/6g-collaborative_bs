@@ -28,16 +28,22 @@ def _load_snap(args):
     path = os.path.join(snap_dir, f"snapshot_{snap_idx:04d}", "channels.npz")
     if not os.path.exists(path):
         return snap_idx, None, None
-    d = np.load(path)
-    return snap_idx, d["cir_a"], d["cir_tau"]
+    try:
+        d = np.load(path)
+        return snap_idx, d["cir_a"], d["cir_tau"]
+    except (EOFError, Exception):
+        return snap_idx, None, None  # corrupt/incomplete
 
 
 def _get_n_paths(args):
     """Get path count from one snapshot (module-level for pickling)."""
     snap_dir_str, idx = args
     path = os.path.join(snap_dir_str, f"snapshot_{idx:04d}", "channels.npz")
-    d = np.load(path)
-    return d["cir_a"].shape[-1]
+    try:
+        d = np.load(path)
+        return d["cir_a"].shape[-1]
+    except (EOFError, Exception):
+        return -1  # corrupt/incomplete
 
 
 def convert_dir(data_dir: Path, delete_npz: bool = False):
@@ -74,8 +80,19 @@ def convert_dir(data_dir: Path, delete_npz: bool = False):
             _get_n_paths,
             [(data_dir_str, i) for i in snap_indices],
         ))
+    # Filter corrupt snapshots
+    valid = [(i, c) for i, c in zip(snap_indices, path_counts) if c > 0]
+    n_corrupt = len(snap_indices) - len(valid)
+    if n_corrupt > 0:
+        print(f"  ⚠ Skipping {n_corrupt} corrupt/incomplete snapshots")
+    snap_indices = [i for i, _ in valid]
+    path_counts = [c for _, c in valid]
+    n_snaps = len(snap_indices)
+    if n_snaps == 0:
+        print("  No valid snapshots, skipping")
+        return
     max_paths = max(path_counts)
-    print(f"  Max paths: {max_paths} (range {min(path_counts)}-{max_paths})")
+    print(f"  Valid: {n_snaps} snapshots, max paths: {max_paths} (range {min(path_counts)}-{max_paths})")
 
     # Create HDF5
     print(f"  Creating {h5_path}...")
