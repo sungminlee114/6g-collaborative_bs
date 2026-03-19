@@ -150,15 +150,19 @@ def restore_cfr(data_dir: Path, dry_run: bool = False, preset_override: str = No
     devices = [torch.device(f"cuda:{i}") for i in range(n_gpus)] if n_gpus > 0 else [torch.device("cpu")]
     print(f"  Using {len(devices)} GPU(s)")
 
-    batch_size = 800
-    pbar = tqdm(total=len(to_restore), desc="Restoring CFR", unit="snap")
-    for batch_start in range(0, len(to_restore), batch_size):
+    batch_size = 10000
+    n_batches = (len(to_restore) + batch_size - 1) // batch_size
+    for bi in range(n_batches):
+        batch_start = bi * batch_size
         batch_dirs = to_restore[batch_start:batch_start + batch_size]
+        print(f"\n  Batch {bi+1}/{n_batches} ({len(batch_dirs)} snaps)")
 
-        # Load CIR with ProcessPool
-        pbar.set_postfix(stage="disk read")
-        with ProcessPoolExecutor(max_workers=32) as pool:
-            cirs = list(pool.map(_load_cir_for_restore, [str(d) for d in batch_dirs]))
+        # 1. Disk read
+        with ProcessPoolExecutor(max_workers=64) as pool:
+            cirs = list(tqdm(
+                pool.map(_load_cir_for_restore, [str(d) for d in batch_dirs]),
+                total=len(batch_dirs), desc="    Disk read", unit="snap",
+            ))
 
         # Pad to max paths
         max_p = max(a.shape[-1] for a, _ in cirs)
@@ -169,23 +173,22 @@ def restore_cfr(data_dir: Path, dry_run: bool = False, preset_override: str = No
                 tau = np.pad(tau, [(0,0), (0, max_p - tau.shape[-1])])
                 cirs[idx] = (a, tau)
 
-        # Stack: (batch, n_ue, n_rx, n_tx, paths)
         all_a = np.stack([a for a, _ in cirs])
         all_tau = np.stack([t for _, t in cirs])
         B, n_ue, n_rx, n_tx, n_paths = all_a.shape
 
-        # GPU bmm: flatten (B*n_ue) → bmm → reshape
-        pbar.set_postfix(stage="GPU bmm")
+        # 2. GPU bmm
         flat_a = all_a.reshape(B * n_ue, n_rx, n_tx, n_paths)
         flat_tau = all_tau.reshape(B * n_ue, n_paths)
-        total = B * n_ue
+        total_samples = B * n_ue
 
-        cfr_out = np.zeros((total, n_rx, n_tx, n_sc), dtype=np.complex64)
+        cfr_out = np.zeros((total_samples, n_rx, n_tx, n_sc), dtype=np.complex64)
         chunk = 1500
-        for c_start in range(0, total, chunk * len(devices)):
+        gpu_pbar = tqdm(total=total_samples, desc="    GPU bmm", unit="sample")
+        for c_start in range(0, total_samples, chunk * len(devices)):
             for di, dev in enumerate(devices):
                 d_start = c_start + di * chunk
-                d_end = min(d_start + chunk, total)
+                d_end = min(d_start + chunk, total_samples)
                 if d_start >= d_end:
                     break
                 freqs_t = torch.tensor(freqs, dtype=torch.float32, device=dev)
@@ -195,22 +198,21 @@ def restore_cfr(data_dir: Path, dry_run: bool = False, preset_override: str = No
                 n_ch = a_ch.shape[0]
                 cfr_flat = torch.bmm(a_ch.reshape(n_ch, n_rx * n_tx, n_paths), exp_phase)
                 cfr_out[d_start:d_end] = cfr_flat.reshape(n_ch, n_rx, n_tx, n_sc).cpu().numpy()
+                gpu_pbar.update(d_end - d_start)
                 del a_ch, tau_ch, exp_phase, cfr_flat
+        gpu_pbar.close()
 
         cfr_all = cfr_out.reshape(B, n_ue, n_rx, n_tx, n_sc)
+        del all_a, all_tau, cfr_out
 
-        # Save back
-        pbar.set_postfix(stage="saving npz")
-        for idx, snap_dir in enumerate(batch_dirs):
+        # 3. Save back
+        for idx, snap_dir in enumerate(tqdm(batch_dirs, desc="    Saving", unit="snap")):
             npz_path = snap_dir / "channels.npz"
             d = np.load(npz_path)
             arrays = {k: d[k] for k in d.files}
             arrays["cfr"] = cfr_all[idx]
             np.savez_compressed(npz_path, **arrays)
 
-        pbar.update(len(batch_dirs))
-
-    pbar.close()
     print("Done.")
 
 
