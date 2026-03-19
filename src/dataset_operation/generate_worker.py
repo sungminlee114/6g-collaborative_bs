@@ -107,6 +107,29 @@ def run_worker(preset, snapshot_start, snapshot_end, num_ue, data_dir,
 
     scene = build_scene(cfg)
 
+    # Open per-worker HDF5 for direct writing (if temporal mode)
+    # Each worker writes its own shard; merged later by generate_parallel.
+    h5_file = None
+    h5_shard_path = None
+    if traj_data is not None:
+        import h5py
+        h5_shard_path = data_dir / f"_shard_{snapshot_start}_{snapshot_end}.h5"
+        n_snap = snapshot_end - snapshot_start
+        # Peek at max_paths from config (estimate, will pad if needed)
+        max_paths = 200  # generous default, actual usually ~126
+        h5_file = h5py.File(h5_shard_path, "w")
+        h5_file.create_dataset(
+            "cir_a", shape=(snapshot_end, num_ue, cfg.num_rx_ant, cfg.num_tx_ant, max_paths),
+            dtype="complex64", fillvalue=0,
+        )
+        h5_file.create_dataset(
+            "cir_tau", shape=(snapshot_end, num_ue, max_paths),
+            dtype="float32", fillvalue=0,
+        )
+        h5_file.attrs["snapshot_start"] = snapshot_start
+        h5_file.attrs["snapshot_end"] = snapshot_end
+        print(f"  HDF5 shard: {h5_shard_path}")
+
     # Progress tracking
     gpu_id = os.environ.get("CUDA_VISIBLE_DEVICES", "?")
     progress_file = data_dir / "progress.json"
@@ -199,7 +222,7 @@ def run_worker(preset, snapshot_start, snapshot_end, num_ue, data_dir,
 
         snap_ue_infos = generate_snapshot(
             scene, cfg, snap_id, seed, data_dir,
-            ue_infos=ue_infos,
+            ue_infos=ue_infos, h5_file=h5_file,
         )
 
         # Save per-snapshot metadata as JSON (merged later)
@@ -236,6 +259,11 @@ def run_worker(preset, snapshot_start, snapshot_end, num_ue, data_dir,
         eta_str = f"{eta_s/60:.0f}m" if eta_s > 60 else f"{eta_s:.0f}s"
         print(f"  ✓ Snapshot {snap_id}/{snapshot_end-1} done "
               f"({len(snap_ue_infos)} UEs, {snap_elapsed:.1f}s, ETA {eta_str})")
+
+    # Close HDF5 shard
+    if h5_file is not None:
+        h5_file.close()
+        print(f"  HDF5 shard saved: {h5_shard_path}")
 
     _write_progress(done_count, snapshot_end - 1, "done")
 

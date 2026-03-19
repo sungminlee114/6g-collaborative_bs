@@ -241,6 +241,50 @@ def main():
             merge_cmd += ["--data_dir", args.data_dir]
         subprocess.run(merge_cmd, check=True)
 
+        # Merge HDF5 shards if they exist
+        data_dir = Path(args.data_dir or f"assets/data/channels_{args.preset}_temporal")
+        shards = sorted(data_dir.glob("_shard_*.h5"))
+        if shards:
+            print(f"Merging {len(shards)} HDF5 shards...")
+            import h5py
+            # Read first shard for shape info
+            with h5py.File(shards[0], "r") as f0:
+                _, n_ue, n_rx, n_tx, max_paths = f0["cir_a"].shape
+
+            h5_path = data_dir / "channels.h5"
+            with h5py.File(h5_path, "w") as out:
+                ds_a = out.create_dataset(
+                    "cir_a", shape=(args.num_snapshots, n_ue, n_rx, n_tx, max_paths),
+                    dtype="complex64", chunks=(min(100, args.num_snapshots), 1, n_rx, n_tx, max_paths),
+                    compression="gzip", compression_opts=1,
+                )
+                ds_tau = out.create_dataset(
+                    "cir_tau", shape=(args.num_snapshots, n_ue, max_paths),
+                    dtype="float32", chunks=(min(100, args.num_snapshots), 1, max_paths),
+                    compression="gzip", compression_opts=1,
+                )
+                out.attrs["n_snapshots"] = args.num_snapshots
+                out.attrs["n_ue"] = n_ue
+
+                for shard_path in shards:
+                    with h5py.File(shard_path, "r") as sh:
+                        s_start = sh.attrs["snapshot_start"]
+                        s_end = sh.attrs["snapshot_end"]
+                        # Copy non-zero rows
+                        for t in range(s_start, s_end):
+                            if t < args.num_snapshots:
+                                a = sh["cir_a"][t]
+                                if np.any(a != 0):
+                                    n_p = min(a.shape[-1], max_paths)
+                                    ds_a[t, :, :, :, :n_p] = a[:, :, :, :n_p]
+                                    ds_tau[t, :, :n_p] = sh["cir_tau"][t, :, :n_p]
+
+            print(f"  Merged: {h5_path} ({h5_path.stat().st_size/1024**3:.1f} GB)")
+            # Clean shards
+            for s in shards:
+                s.unlink()
+            print(f"  Deleted {len(shards)} shards")
+
         task_done(task_id, f"{args.num_snapshots} snapshots × {args.num_ue} UE, "
                            f"{num_gpus} GPUs, {elapsed_str}")
         print("Done!")

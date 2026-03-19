@@ -125,7 +125,7 @@ def compute_radio_map(scene, cfg):
 
 
 def generate_snapshot(scene, cfg, snapshot_id: int, seed: int, data_dir: Path,
-                      ue_infos=None, radio_map=None):
+                      ue_infos=None, radio_map=None, h5_file=None):
     """Generate one snapshot: place UEs, compute paths, extract CIR/CFR, save.
 
     Args:
@@ -226,15 +226,21 @@ def generate_snapshot(scene, cfg, snapshot_id: int, seed: int, data_dir: Path,
 
     torch.cuda.empty_cache()
 
-    # Save CIR only (CFR reconstructed on-the-fly during loading)
-    snap_dir = data_dir / f"snapshot_{snapshot_id:04d}"
-    snap_dir.mkdir(parents=True, exist_ok=True)
-
-    np.savez_compressed(
-        snap_dir / "channels.npz",
-        cir_a=cir_a,
-        cir_tau=cir_tau,
-    )
+    # Save CIR — to HDF5 if h5_file provided, else npz fallback
+    if h5_file is not None:
+        import h5py
+        n_paths = cir_a.shape[-1]
+        max_paths = h5_file["cir_a"].shape[-1]
+        h5_file["cir_a"][snapshot_id, :, :, :, :n_paths] = cir_a
+        h5_file["cir_tau"][snapshot_id, :, :n_paths] = cir_tau
+    else:
+        snap_dir = data_dir / f"snapshot_{snapshot_id:04d}"
+        snap_dir.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(
+            snap_dir / "channels.npz",
+            cir_a=cir_a,
+            cir_tau=cir_tau,
+        )
 
     # Clean up GPU memory
     dr.flush_malloc_cache()
