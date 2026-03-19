@@ -155,7 +155,12 @@ def run_worker(preset, snapshot_start, snapshot_end, num_ue, data_dir,
                 print(f"  ⚠ Snapshot {snap_id} corrupt, regenerating")
 
         t_snap = time.time()
-        seed = snap_id * 17 + 41
+        # Temporal mode: fixed seed so static UEs get identical channels across snapshots.
+        # Independent mode: varying seed for diversity across snapshots.
+        if traj_data is not None:
+            seed = 42  # deterministic RT paths — temporal variation comes from UE movement only
+        else:
+            seed = snap_id * 17 + 41
 
         # Build ue_infos from trajectories (temporal) or let generate_snapshot sample (independent)
         ue_infos = None

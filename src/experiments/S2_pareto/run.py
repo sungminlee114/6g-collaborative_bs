@@ -65,22 +65,32 @@ def prepare_ce_methods(
     methods["ls"] = LSEstimator()
 
     # Genie-LMMSE (oracle covariance from training data)
+    # Need N > D for well-conditioned covariance (D = 2 * n_ant)
     lmmse = GenieLMMSE(device=device)
     if Path(data_dir).exists():
-        # Limit snapshots to avoid OOM on large antenna arrays
         n_ant = cfg.num_rx_ant * cfg.num_tx_ant
-        max_snap = 3 if n_ant > 256 else 10
+        D = 2 * n_ant
+        # Need at least 2*D samples for reasonable covariance estimate
+        min_samples = max(2 * D, 500)
+        # Estimate snapshots needed: ~25 UEs/BS × 2 train BSs = ~50 UE/snap
+        max_snap = max(min_samples // 30, 5)  # conservative
+        # But cap memory: each snapshot × n_ant cache
+        max_snap = min(max_snap, 50 if n_ant <= 256 else 10)
         ds = ChannelEstimationDataset(
             data_dir, bs_ids=cfg.train_bs_ids, snapshot_ids=list(range(max_snap)),
             snr_range_db=(20, 20),
         )
+        n_fit = min(min_samples, len(ds))
         loader = DataLoader(ds, batch_size=min(64, len(ds)), shuffle=False)
         h_samples = []
         for batch in loader:
             h_samples.append(batch["target"])
-            if sum(s.shape[0] for s in h_samples) >= 500:
+            if sum(s.shape[0] for s in h_samples) >= n_fit:
                 break
-        lmmse.fit(torch.cat(h_samples)[:500].to(device))
+        h_fit = torch.cat(h_samples)[:n_fit].to(device)
+        print(f"  LMMSE fit: N={len(h_fit)}, D={D} (N/D={len(h_fit)/D:.1f})")
+        lmmse.fit(h_fit)
+        del h_fit
     methods["lmmse"] = lmmse
 
     # DL-CE — uses SiteAwareEstimator (same as E0) with per-sample RMS normalization

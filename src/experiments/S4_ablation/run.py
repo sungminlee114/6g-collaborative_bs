@@ -93,7 +93,8 @@ def main():
     parser.add_argument("--preset", type=str, default=None)
     parser.add_argument("--all", action="store_true")
     parser.add_argument("--gpu", type=int, default=0)
-    parser.add_argument("--tau", type=float, default=0.2, help="Fixed τ_low for ablation")
+    parser.add_argument("--tau", type=float, nargs="+", default=[0.1, 0.2, 0.3, 0.5],
+                        help="τ_low values to sweep")
     parser.add_argument("--max-snapshots", type=int, default=200)
     args = parser.parse_args()
 
@@ -102,7 +103,7 @@ def main():
 
     with Tracker(
         "S4/ablation",
-        config={"presets": presets, "tau_low": args.tau, "alphas": ALPHA_VALUES},
+        config={"presets": presets, "tau_values": args.tau, "alphas": ALPHA_VALUES},
         capture_output=True,
         purpose="Delta update ablation: skip vs EMA vs LS-delta",
         variables={
@@ -118,9 +119,14 @@ def main():
             print(f"\n{'═'*60}")
             print(f"  Preset: {preset}")
             print(f"{'═'*60}")
-            r = run_ablation(preset, gpu=args.gpu, tau_low=args.tau, max_snapshots=args.max_snapshots)
-            if r is not None:
-                all_results[preset] = r
+            preset_results = {}
+            for tau in args.tau:
+                print(f"  τ = {tau}")
+                r = run_ablation(preset, gpu=args.gpu, tau_low=tau, max_snapshots=args.max_snapshots)
+                if r is not None:
+                    preset_results[f"tau_{tau}"] = r
+            if preset_results:
+                all_results[preset] = preset_results
 
         with open(results_dir / "delta_ablation.json", "w") as f:
             json.dump(all_results, f, indent=2)

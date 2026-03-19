@@ -33,112 +33,143 @@ SPEED_LABELS = {0.0: "static", 1.0: "pedestrian", 8.3: "low_vehicle"}
 
 
 def compute_delta_profile(data: TemporalChannelData, bs_id: int) -> dict:
-    """Compute δ(t) for all UEs served by a BS, grouped by speed.
+    """Compute δ_oracle(t) for all UEs served by a BS.
 
-    Returns dict: {speed_label: {"deltas": [...], "distances": [...], "ue_ids": [...]}}
+    Computes ground truth channel variation (no noise) and
+    the NMSE that results from reusing the previous channel estimate.
+
+    Returns dict with:
+        - per_ue: list of {uid, speed, dist, median_delta, nmse_reuse_db}
+        - overall: aggregate statistics
+        - static_sanity: δ for static UEs (should be ~0 if simulator is deterministic)
     """
-    results = {}
+    from src.ce_skip.helpers import iter_ue_tensors
 
-    h_all, ue_ids = data.get_all_series(bs_id)
-    if len(ue_ids) == 0:
-        return results
+    per_ue = []
 
-    # h_all: (N_UE, T, n_ant, n_sc) complex
-    N_ue, T, n_ant, n_sc = h_all.shape
+    for h_ue_gpu, uid, dist, speed in iter_ue_tensors(data, bs_id, "cpu", data.num_snapshots, max_ue=50):
+        # h_ue_gpu: (T, 2, n_ant, n_sc) float — ground truth (no noise added)
+        T = h_ue_gpu.shape[0]
 
-    for i, uid in enumerate(ue_ids):
-        speed = data.get_ue_speed(uid)
-        label = SPEED_LABELS.get(speed, f"v{speed:.1f}")
-        dist = data.get_ue_distance(uid, bs_id, snap_idx=0)
-
-        if label not in results:
-            results[label] = {"deltas": [], "distances": [], "ue_ids": []}
-
-        # Compute δ(t) for this UE
-        h_ue = h_all[i]  # (T, n_ant, n_sc)
+        deltas = []
+        nmse_reuse = []  # NMSE when reusing h(t-1) as estimate for h(t)
         for t in range(1, T):
-            diff = h_ue[t] - h_ue[t - 1]
-            ref = h_ue[t - 1]
-            ref_norm = np.linalg.norm(ref)
+            h_t = h_ue_gpu[t]
+            h_prev = h_ue_gpu[t - 1]
+            ref_norm = h_prev.norm()
             if ref_norm > 1e-12:
-                delta = float(np.linalg.norm(diff) / ref_norm)
+                delta = float((h_t - h_prev).norm() / ref_norm)
+                # NMSE of reuse: ‖h(t) - h(t-1)‖² / ‖h(t)‖²
+                h_t_norm = h_t.norm()
+                if h_t_norm > 1e-12:
+                    reuse_nmse = float((h_t - h_prev).pow(2).sum() / h_t.pow(2).sum())
+                    nmse_reuse.append(reuse_nmse)
             else:
                 delta = float("inf")
-            results[label]["deltas"].append(delta)
-            results[label]["distances"].append(dist)
+            deltas.append(delta)
 
-        results[label]["ue_ids"].append(uid)
+        d_arr = np.array([d for d in deltas if np.isfinite(d)])
+        nm_arr = np.array(nmse_reuse)
 
-    return results
+        if len(d_arr) == 0:
+            continue
+
+        per_ue.append({
+            "uid": int(uid),
+            "speed": float(speed),
+            "dist": float(dist),
+            "median_delta": float(np.median(d_arr)),
+            "mean_delta": float(np.mean(d_arr)),
+            "p90_delta": float(np.percentile(d_arr, 90)),
+            "nmse_reuse_db": float(10 * np.log10(max(np.mean(nm_arr), 1e-30))) if len(nm_arr) > 0 else float("nan"),
+        })
+
+    # Aggregate
+    all_deltas = [u["median_delta"] for u in per_ue]
+    static_deltas = [u["median_delta"] for u in per_ue if u["speed"] == 0.0]
+
+    overall = {
+        "n_ues": len(per_ue),
+        "median_delta_all": float(np.median(all_deltas)) if all_deltas else float("nan"),
+        "mean_delta_all": float(np.mean(all_deltas)) if all_deltas else float("nan"),
+        "static_median_delta": float(np.median(static_deltas)) if static_deltas else float("nan"),
+        "static_n": len(static_deltas),
+        "frac_below_0.1": float(np.mean(np.array(all_deltas) < 0.1)) if all_deltas else 0.0,
+        "frac_below_0.3": float(np.mean(np.array(all_deltas) < 0.3)) if all_deltas else 0.0,
+    }
+
+    return {"per_ue": per_ue, "overall": overall}
 
 
 def run_persistence_profile(preset: str, gpu: int = 0, max_snapshots: int = 200):
-    """Run persistence profiling for a single preset."""
+    """Run persistence profiling for a single preset.
+
+    Computes:
+    - δ_oracle: ground truth channel variation (no noise)
+    - NMSE of reusing previous estimate (skip quality impact)
+    - Static UE sanity check (should be ~0 if simulator is deterministic)
+    """
     cfg = ExperimentConfig.from_preset(preset)
 
     if not cfg.temporal_dir.exists():
         print(f"  ⚠ Temporal data not found: {cfg.temporal_dir}")
-        print(f"    Generate with: bash scripts/run_all_datagen.sh")
         return None
 
     print(f"  Loading temporal data from {cfg.temporal_dir}")
     data = TemporalChannelData(cfg.temporal_dir, max_snapshots=max_snapshots)
     print(f"  Snapshots: {data.num_snapshots}, UEs: {data.num_ue}, dt: {data.dt_s}s")
 
-    all_results = {}
-    bs_ids = cfg.test_bs_ids
-
-    # Use a subset of BSs for profiling (test set)
-    for bs_id in bs_ids[:2]:  # Profile 2 BSs to save time
+    all_per_ue = []
+    for bs_id in cfg.test_bs_ids[:2]:
         print(f"  BS {bs_id}...")
         profile = compute_delta_profile(data, bs_id)
-        for label, vals in profile.items():
-            if label not in all_results:
-                all_results[label] = {"deltas": [], "distances": []}
-            all_results[label]["deltas"].extend(vals["deltas"])
-            all_results[label]["distances"].extend(vals["distances"])
+        all_per_ue.extend(profile["per_ue"])
+        ov = profile["overall"]
+        print(f"    {ov['n_ues']} UEs, median δ={ov['median_delta_all']:.4f}, "
+              f"static δ={ov['static_median_delta']:.4f} (n={ov['static_n']})")
 
-    # Summary statistics
-    summary = {}
-    for label, vals in all_results.items():
-        d = np.array(vals["deltas"])
-        d_finite = d[np.isfinite(d)]
-        if len(d_finite) == 0:
-            continue
-        summary[label] = {
-            "count": len(d_finite),
-            "median": float(np.median(d_finite)),
-            "mean": float(np.mean(d_finite)),
-            "p10": float(np.percentile(d_finite, 10)),
-            "p25": float(np.percentile(d_finite, 25)),
-            "p75": float(np.percentile(d_finite, 75)),
-            "p90": float(np.percentile(d_finite, 90)),
-            "p99": float(np.percentile(d_finite, 99)),
-            "frac_below_0.1": float(np.mean(d_finite < 0.1)),
-            "frac_below_0.3": float(np.mean(d_finite < 0.3)),
-            "frac_below_0.5": float(np.mean(d_finite < 0.5)),
-        }
-        print(f"  {label}: median={summary[label]['median']:.4f}, "
-              f"<0.1: {summary[label]['frac_below_0.1']:.1%}, "
-              f"<0.5: {summary[label]['frac_below_0.5']:.1%}")
+    # Aggregate
+    all_deltas = [u["median_delta"] for u in all_per_ue]
+    all_nmse = [u["nmse_reuse_db"] for u in all_per_ue if not np.isnan(u["nmse_reuse_db"])]
+    static_deltas = [u["median_delta"] for u in all_per_ue if u["speed"] == 0.0]
+
+    summary = {
+        "n_ues": len(all_per_ue),
+        "median_delta": float(np.median(all_deltas)) if all_deltas else float("nan"),
+        "mean_delta": float(np.mean(all_deltas)) if all_deltas else float("nan"),
+        "frac_below_0.1": float(np.mean(np.array(all_deltas) < 0.1)) if all_deltas else 0.0,
+        "frac_below_0.3": float(np.mean(np.array(all_deltas) < 0.3)) if all_deltas else 0.0,
+        "frac_below_0.5": float(np.mean(np.array(all_deltas) < 0.5)) if all_deltas else 0.0,
+        "median_nmse_reuse_db": float(np.median(all_nmse)) if all_nmse else float("nan"),
+        "static_median_delta": float(np.median(static_deltas)) if static_deltas else float("nan"),
+        "static_n": len(static_deltas),
+    }
+
+    print(f"  Overall: median δ={summary['median_delta']:.4f}, "
+          f"<0.1: {summary['frac_below_0.1']:.0%}, "
+          f"NMSE(reuse)={summary['median_nmse_reuse_db']:.1f}dB, "
+          f"static δ={summary['static_median_delta']:.4f}")
 
     data.clear_cache()
-    return {"preset": preset, "summary": summary, "raw": all_results}
+    return {"preset": preset, "summary": summary, "per_ue": all_per_ue}
 
 
 def check_go_nogo(results: list) -> bool:
-    """Check kill criterion: pedestrian median δ > 0.5 → no-go."""
+    """Check kill criterion: overall median δ > 0.5 → no-go."""
     go = True
     for r in results:
         if r is None:
             continue
-        preset = r["preset"]
-        for label, stats in r["summary"].items():
-            if "pedestrian" in label and stats["median"] > 0.5:
-                print(f"  ✗ KILL: {preset} {label} median δ = {stats['median']:.3f} > 0.5")
-                go = False
-            elif "pedestrian" in label:
-                print(f"  ✓ GO: {preset} {label} median δ = {stats['median']:.3f} ≤ 0.5")
+        s = r["summary"]
+        med = s["median_delta"]
+        static = s["static_median_delta"]
+        if med > 0.5:
+            print(f"  ✗ KILL: {r['preset']} median δ = {med:.3f} > 0.5")
+            go = False
+        else:
+            print(f"  ✓ GO: {r['preset']} median δ = {med:.3f} ≤ 0.5")
+        if static > 0.01:
+            print(f"    ⚠ Static δ = {static:.4f} (simulator noise — should be ~0)")
     return go
 
 
@@ -158,14 +189,14 @@ def main():
         "S0/persistence",
         config={"presets": presets},
         capture_output=True,
-        purpose="Temporal persistence profiling — go/no-go for CE skip",
+        purpose="Temporal persistence: δ_oracle + NMSE degradation + static sanity check",
         variables={
-            "independent": ["preset", "mobility"],
-            "dependent": ["delta_median", "delta_cdf"],
+            "independent": ["preset"],
+            "dependent": ["delta_oracle", "nmse_reuse_db", "static_delta"],
             "controlled": ["dt=10ms", "test_bs_ids"],
         },
-        hypothesis="Pedestrian median δ ≤ 0.5 (go condition)",
-        eval_criteria="Kill if any primary preset fails go condition",
+        hypothesis="Overall median δ_oracle ≤ 0.5 and static δ ≈ 0",
+        eval_criteria="Kill if median δ > 0.5 or static δ > 0.01 (simulator noise)",
     ) as run:
         all_results = []
         for preset in presets:
@@ -176,15 +207,9 @@ def main():
             all_results.append(r)
 
             if r is not None:
-                # Save per-preset results
                 out_path = results_dir / f"persistence_{preset}.json"
-                # Convert raw deltas to serializable format (truncate for size)
-                save_data = {
-                    "preset": r["preset"],
-                    "summary": r["summary"],
-                }
                 with open(out_path, "w") as f:
-                    json.dump(save_data, f, indent=2)
+                    json.dump({"preset": r["preset"], "summary": r["summary"], "per_ue": r["per_ue"]}, f, indent=2)
                 run.log(**{f"{preset}_done": True})
 
         # Go/no-go check
