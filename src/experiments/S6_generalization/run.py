@@ -101,7 +101,7 @@ def run_generalization(preset: str, gpu: int = 0, max_snapshots: int = 200):
 
     from src.ce_skip.helpers import iter_ue_tensors
 
-    data = TemporalChannelData(cfg.temporal_dir, trajectory_dir=cfg.trajectory_dir, max_snapshots=max_snapshots)
+    data = TemporalChannelData(cfg.temporal_dir, trajectory_dir=cfg.trajectory_dir, max_snapshots=max_snapshots, preset=preset)
     tau_values = np.linspace(0.01, 0.8, 30)
 
     def find_tau_for_bs(bs_id):

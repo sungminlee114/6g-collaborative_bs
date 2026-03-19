@@ -49,7 +49,7 @@ def run_beamforming_analysis(
 
     from src.ce_skip.helpers import iter_ue_tensors
 
-    data = TemporalChannelData(cfg.temporal_dir, trajectory_dir=cfg.trajectory_dir, max_snapshots=max_snapshots)
+    data = TemporalChannelData(cfg.temporal_dir, trajectory_dir=cfg.trajectory_dir, max_snapshots=max_snapshots, preset=preset)
     ce = LSEstimator()
     test_bs = cfg.test_bs_ids[0]
 

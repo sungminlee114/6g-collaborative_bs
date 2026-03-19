@@ -29,7 +29,7 @@ def run_controlled(preset: str, max_snapshots: int = 200):
         print(f"  ⚠ No temporal data: {cfg.temporal_dir}")
         return None
 
-    data = TemporalChannelData(cfg.temporal_dir, trajectory_dir=cfg.trajectory_dir, max_snapshots=max_snapshots)
+    data = TemporalChannelData(cfg.temporal_dir, trajectory_dir=cfg.trajectory_dir, max_snapshots=max_snapshots, preset=preset)
     test_bs = cfg.test_bs_ids[0]
 
     # Collect per-UE: (distance, speed, median_delta)

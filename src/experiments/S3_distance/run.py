@@ -131,7 +131,7 @@ def run_distance_analysis(preset: str, gpu: int = 0, max_snapshots: int = 200):
         print(f"  ⚠ Temporal data not found: {cfg.temporal_dir}")
         return None
 
-    data = TemporalChannelData(cfg.temporal_dir, trajectory_dir=cfg.trajectory_dir, max_snapshots=max_snapshots)
+    data = TemporalChannelData(cfg.temporal_dir, trajectory_dir=cfg.trajectory_dir, max_snapshots=max_snapshots, preset=preset)
     r_rayleigh = rayleigh_distance(cfg)
     print(f"  Rayleigh distance: {r_rayleigh:.1f} m")
 

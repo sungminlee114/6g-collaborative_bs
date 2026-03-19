@@ -46,7 +46,7 @@ def run_ablation(preset: str, gpu: int = 0, tau_low: float = 0.2, max_snapshots:
 
     from src.ce_skip.helpers import iter_ue_tensors
 
-    data = TemporalChannelData(cfg.temporal_dir, trajectory_dir=cfg.trajectory_dir, max_snapshots=max_snapshots)
+    data = TemporalChannelData(cfg.temporal_dir, trajectory_dir=cfg.trajectory_dir, max_snapshots=max_snapshots, preset=preset)
     ce = LSEstimator()
     test_bs = cfg.test_bs_ids[0]
 

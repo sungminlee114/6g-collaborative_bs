@@ -50,9 +50,11 @@ class TemporalChannelData:
         trajectory_dir: str | Path = None,
         max_snapshots: Optional[int] = None,
         bs_ids: Optional[List[int]] = None,
+        preset: str = None,
     ):
         self.data_dir = Path(data_dir)
         self.trajectory_dir = Path(trajectory_dir) if trajectory_dir else self.data_dir
+        self._preset = preset
         self._bs_ids = bs_ids
 
         # Load metadata
@@ -114,16 +116,25 @@ class TemporalChannelData:
     def _get_subcarrier_params(self):
         """Lazily detect num_subcarriers and subcarrier_spacing from preset."""
         if not hasattr(self, "_sc_params"):
-            progress = self.data_dir / "progress.json"
-            if progress.exists():
-                with open(progress) as f:
-                    preset = json.load(f).get("preset")
-                if preset:
-                    from src.config import SceneConfig
-                    cfg = SceneConfig.from_preset(preset)
-                    self._sc_params = (cfg.num_subcarriers, cfg.subcarrier_spacing)
-                    return self._sc_params
-            self._sc_params = (1024, 0.0)
+            preset = self._preset
+            if not preset:
+                # Auto-detect from progress.json or trajectory_info.json
+                for search_dir in [self.data_dir, self.trajectory_dir]:
+                    for fname in ["progress.json", "trajectory_info.json"]:
+                        fpath = search_dir / fname
+                        if fpath.exists():
+                            with open(fpath) as f:
+                                preset = json.load(f).get("preset")
+                            if preset:
+                                break
+                    if preset:
+                        break
+            if preset:
+                from src.config import SceneConfig
+                cfg = SceneConfig.from_preset(preset)
+                self._sc_params = (cfg.num_subcarriers, cfg.subcarrier_spacing)
+            else:
+                self._sc_params = (1024, 0.0)
         return self._sc_params
 
     def _load_snapshot(self, snap_idx: int) -> np.ndarray:
