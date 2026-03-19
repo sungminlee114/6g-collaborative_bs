@@ -111,6 +111,73 @@ class TemporalChannelData:
             self._cfr_cache[snap_idx] = load_cfr_from_npz(path, n_sc, sc_spacing)
         return self._cfr_cache[snap_idx]
 
+    def _batch_cir_to_cfr(self, snap_indices: List[int], ue_id: int = None):
+        """Load CIR from multiple snapshots and batch-convert to CFR on GPU.
+
+        Much faster than per-snapshot conversion: one GPU kernel for all snapshots.
+        If ue_id is given, only extracts that UE (saves memory).
+        """
+        import torch
+        n_sc, sc_spacing = self._get_subcarrier_params()
+        if sc_spacing <= 0:
+            # Fallback to per-snapshot loading (CFR already stored)
+            return None
+
+        # Read all CIR data from disk (CPU, fast)
+        all_a, all_tau = [], []
+        for t in snap_indices:
+            path = self.data_dir / f"snapshot_{t:04d}" / "channels.npz"
+            data = np.load(path)
+            if "cfr" in data.files:
+                return None  # CFR already stored, use normal path
+            a = data["cir_a"]  # (N_UE, n_rx, n_tx, n_paths)
+            tau = data["cir_tau"]  # (N_UE, n_paths)
+            if ue_id is not None:
+                a = a[ue_id:ue_id+1]
+                tau = tau[ue_id:ue_id+1]
+            all_a.append(a)
+            all_tau.append(tau)
+
+        # Stack: (T, N_UE, n_rx, n_tx, n_paths), (T, N_UE, n_paths)
+        stacked_a = np.stack(all_a, axis=0)
+        stacked_tau = np.stack(all_tau, axis=0)
+        T, N, n_rx, n_tx, n_paths = stacked_a.shape
+
+        # Flatten T*N for batch GPU processing
+        flat_a = stacked_a.reshape(T * N, n_rx, n_tx, n_paths)
+        flat_tau = stacked_tau.reshape(T * N, n_paths)
+
+        # Expand tau for broadcasting
+        tau_exp = flat_tau[:, np.newaxis, np.newaxis, :]  # (T*N, 1, 1, n_paths)
+
+        # Subcarrier frequencies
+        if n_sc % 2 == 0:
+            start = -n_sc // 2
+        else:
+            start = -(n_sc - 1) // 2
+        freqs = np.arange(start, start + n_sc, dtype=np.float32) * sc_spacing
+
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        freqs_t = torch.tensor(freqs, dtype=torch.float32, device=device)
+
+        # Batch GPU: chunk to avoid OOM
+        free_vram = torch.cuda.mem_get_info(device)[0] if device.type == "cuda" else 8e9
+        per_sample_bytes = n_rx * n_tx * n_paths * n_sc * 8 * 3
+        chunk = max(1, int(free_vram * 0.4) // max(per_sample_bytes, 1))
+
+        cfr_chunks = []
+        for i in range(0, T * N, chunk):
+            j = min(i + chunk, T * N)
+            a_t = torch.tensor(flat_a[i:j], dtype=torch.complex64, device=device)
+            tau_t = torch.tensor(tau_exp[i:j], dtype=torch.float32, device=device)
+            phase = -2j * torch.pi * tau_t[..., None] * freqs_t
+            cfr_chunks.append(
+                torch.sum(a_t[..., None] * torch.exp(phase), dim=-2).cpu().numpy()
+            )
+            del a_t, tau_t, phase
+        cfr_flat = np.concatenate(cfr_chunks, axis=0)  # (T*N, n_rx, n_tx, n_sc)
+        return cfr_flat.reshape(T, N, n_rx, n_tx, n_sc)
+
     def get_ue_series(
         self,
         ue_id: int,
@@ -122,13 +189,24 @@ class TemporalChannelData:
         Returns: (T, n_ant, n_sc) complex64 where n_ant = n_rx * n_tx
         """
         t_start, t_end = snap_range or (0, self.num_snapshots)
+        snap_indices = list(range(t_start, t_end))
+
+        # Try batch CIR→CFR (fast GPU path)
+        batch_cfr = self._batch_cir_to_cfr(snap_indices, ue_id=ue_id)
+        if batch_cfr is not None:
+            # batch_cfr: (T, 1, n_rx, n_tx, n_sc) — squeeze UE dim
+            h = batch_cfr[:, 0]  # (T, n_rx, n_tx, n_sc)
+            n_rx, n_tx, n_sc = h.shape[1], h.shape[2], h.shape[3]
+            return h.reshape(len(snap_indices), n_rx * n_tx, n_sc)
+
+        # Fallback: per-snapshot (CFR already stored)
         series = []
-        for t in range(t_start, t_end):
+        for t in snap_indices:
             cfr = self._load_snapshot(t)
-            h = cfr[ue_id]  # (n_rx, n_tx, n_sc)
+            h = cfr[ue_id]
             n_rx, n_tx, n_sc = h.shape
             series.append(h.reshape(n_rx * n_tx, n_sc))
-        return np.stack(series, axis=0)  # (T, n_ant, n_sc)
+        return np.stack(series, axis=0)
 
     def get_all_series(
         self,

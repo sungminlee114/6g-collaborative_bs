@@ -45,16 +45,34 @@ def cir_to_cfr(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     freqs_t = torch.tensor(freqs, dtype=torch.float32, device=device)
 
+    # Batched GPU computation — all UEs at once (or in chunks if OOM)
     n_ue = cir_a.shape[0]
-    cfr_list = []
-    for i in range(n_ue):
-        a_t = torch.tensor(cir_a[i], dtype=torch.complex64, device=device)  # (n_rx, n_tx, n_paths)
-        tau_t = torch.tensor(cir_tau[i], dtype=torch.float32, device=device)  # (n_paths,)
-        phase = -2j * torch.pi * tau_t[:, None] * freqs_t[None, :]  # (n_paths, n_sc)
-        h = torch.sum(a_t[..., None] * torch.exp(phase), dim=-2)  # (n_rx, n_tx, n_sc)
-        cfr_list.append(h.cpu().numpy())
-        del a_t, tau_t, phase, h
-    return np.stack(cfr_list, axis=0)  # (N_UE, n_rx, n_tx, n_sc)
+
+    # Expand tau for broadcasting: (N_UE, n_paths) → (N_UE, 1, 1, n_paths)
+    tau_expanded = cir_tau
+    while tau_expanded.ndim < cir_a.ndim:
+        tau_expanded = np.expand_dims(tau_expanded, axis=1)
+
+    # Estimate memory: n_ue * n_rx * n_tx * n_paths * n_sc * 8 bytes (complex64)
+    n_paths = cir_a.shape[-1]
+    n_sc = len(freqs_t)
+    elem_bytes = n_ue * int(np.prod(cir_a.shape[1:])) * n_sc * 8 * 3  # phase + a + exp
+    free_vram = torch.cuda.mem_get_info(device)[0] if device.type == "cuda" else 8e9
+    chunk_size = max(1, int(free_vram * 0.5) // max(elem_bytes // n_ue, 1))
+    chunk_size = min(chunk_size, n_ue)
+
+    cfr_chunks = []
+    for i in range(0, n_ue, chunk_size):
+        j = min(i + chunk_size, n_ue)
+        a_t = torch.tensor(cir_a[i:j], dtype=torch.complex64, device=device)
+        tau_t = torch.tensor(tau_expanded[i:j], dtype=torch.float32, device=device)
+        # phase: (chunk, n_rx, n_tx, n_paths, n_sc)
+        phase = -2j * torch.pi * tau_t[..., None] * freqs_t
+        cfr_chunks.append(
+            torch.sum(a_t[..., None] * torch.exp(phase), dim=-2).cpu().numpy()
+        )
+        del a_t, tau_t, phase
+    return np.concatenate(cfr_chunks, axis=0)  # (N_UE, n_rx, n_tx, n_sc)
 
 
 def load_cfr_from_npz(
