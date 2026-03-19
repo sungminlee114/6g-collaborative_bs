@@ -335,7 +335,7 @@ def _batch_scheduling_sweep(h_real: torch.Tensor, h_ls: torch.Tensor,
     h_real_flat = h_real.flatten(1)
     h_real_sq = h_real_flat.pow(2).sum(1)  # (T,)
 
-    for tau in tau_values:
+    for tau in tqdm(tau_values, desc="    τ sweep", unit="τ", leave=False):
         sched = _vectorized_scheduling(deltas, tau_low=tau, tau_high=2 * tau, n_max=n_max)
         tiers = sched["tiers"]
 
@@ -380,6 +380,7 @@ def run_s2(ue_data: dict, tau_values: list = None, snr_db: float = 20.0) -> dict
         h = u["h_real"]
         h_ls, deltas, _ = _precompute_deltas(h, snr_db)
         batch = _batch_scheduling_sweep(h, h_ls, deltas, tau_values)
+        tqdm.write(f"  UE{u['uid']}: {len(batch)} τ values swept")
         for r in batch:
             pt = per_tau[r["tau"]]
             pt["nmse"].extend(r["nmse_arr"].tolist())
@@ -416,6 +417,7 @@ def run_s3(ue_data: dict, tau_values: list = None, snr_db: float = 20.0) -> dict
         zone = "NF" if dist < r_ray else ("Transition" if dist < 3 * r_ray else "FF")
         h_ls, deltas, _ = _precompute_deltas(h, snr_db)
         batch = _batch_scheduling_sweep(h, h_ls, deltas, tau_values)
+        tqdm.write(f"  UE{u['uid']} ({zone}, {dist:.0f}m): {len(batch)} τ swept")
 
         sweep = {}
         for r in batch:
@@ -466,7 +468,7 @@ def run_s4(ue_data: dict, tau_low: float = 0.2, snr_db: float = 20.0,
         h_ls, deltas, _ = _precompute_deltas(h, snr_db)
         sched = _vectorized_scheduling(deltas, tau_low=tau_low, tau_high=2 * tau_low)
 
-        for mode, alpha, key in combos:
+        for mode, alpha, key in tqdm(combos, desc=f"  S4 UE{u['uid']} modes", unit="m", leave=False):
             if key not in results:
                 results[key] = {}
             if spd_label not in results[key]:
@@ -502,7 +504,7 @@ def run_s5(ue_data: dict, snr_list: list = None, tau_list: list = None) -> dict:
     for u in tqdm(ue_data["ue_list"], desc="S5: UEs", unit="ue"):
         h = u["h_real"]
 
-        for snr in snr_list:
+        for snr in tqdm(snr_list, desc=f"  S5 UE{u['uid']} SNR", unit="snr", leave=False):
             snr_lin = 10 ** (snr / 10)
             h_ls, deltas, _ = _precompute_deltas(h, snr)
             batch = _batch_scheduling_sweep(h, h_ls, deltas, tau_list)
