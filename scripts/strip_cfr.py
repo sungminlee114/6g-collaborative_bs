@@ -80,7 +80,8 @@ def strip_cfr(data_dir: Path, dry_run: bool = False):
     print(f"\nTotal saved: {saved_total/1024**3:.1f} GB")
 
 
-def restore_cfr(data_dir: Path, dry_run: bool = False, preset_override: str = None):
+def restore_cfr(data_dir: Path, dry_run: bool = False, preset_override: str = None,
+                 max_snapshots: int = None):
     """Recompute CFR from CIR and save back into channels.npz."""
     from src.config import SceneConfig
 
@@ -129,6 +130,8 @@ def restore_cfr(data_dir: Path, dry_run: bool = False, preset_override: str = No
                     to_restore.append(snap_dir)
             except:
                 pass
+    if max_snapshots and len(to_restore) > max_snapshots:
+        to_restore = to_restore[:max_snapshots]
     print(f"  Need CFR restore: {len(to_restore)}/{n_total}")
 
     if dry_run or not to_restore:
@@ -210,14 +213,23 @@ def main():
     parser.add_argument("--restore", action="store_true", help="Restore CFR from CIR")
     parser.add_argument("--dry-run", action="store_true", help="Show what would happen")
     parser.add_argument("--preset", type=str, default=None, help="Override preset name")
+    parser.add_argument("--gpus", type=int, nargs="+", default=None,
+                        help="GPU IDs to use (default: all available)")
+    parser.add_argument("--max-snapshots", type=int, default=None,
+                        help="Max snapshots to restore (default: all)")
     args = parser.parse_args()
+
+    if args.gpus is not None:
+        import os
+        os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in args.gpus)
 
     if not args.data_dir.exists():
         print(f"ERROR: {args.data_dir} does not exist")
         sys.exit(1)
 
     if args.restore:
-        restore_cfr(args.data_dir, dry_run=args.dry_run, preset_override=args.preset)
+        restore_cfr(args.data_dir, dry_run=args.dry_run, preset_override=args.preset,
+                     max_snapshots=args.max_snapshots)
     else:
         strip_cfr(args.data_dir, dry_run=args.dry_run)
 
