@@ -226,13 +226,30 @@ class TemporalChannelData:
             cfr0 = self._load_snapshot(0)
             ue_ids = list(range(cfr0.shape[0]))
 
+        if not ue_ids:
+            return np.array([]), ue_ids
+
+        t_start, t_end = snap_range or (0, self.num_snapshots)
+        snap_indices = list(range(t_start, t_end))
+
+        # Try batch CIR→CFR for ALL UEs at once (one GPU kernel, one disk pass)
+        batch_cfr = self._batch_cir_to_cfr(snap_indices, ue_id=None)
+        if batch_cfr is not None:
+            # batch_cfr: (T, N_UE_all, n_rx, n_tx, n_sc)
+            h_selected = batch_cfr[:, ue_ids]  # (T, N_UE_bs, n_rx, n_tx, n_sc)
+            n_rx, n_tx, n_sc = h_selected.shape[2], h_selected.shape[3], h_selected.shape[4]
+            T = len(snap_indices)
+            N = len(ue_ids)
+            # Reshape to (N_UE_bs, T, n_ant, n_sc)
+            h_all = h_selected.transpose(1, 0, 2, 3, 4).reshape(N, T, n_rx * n_tx, n_sc)
+            return h_all, ue_ids
+
+        # Fallback: per-UE loading (CFR already stored on disk)
         series_list = []
         for uid in ue_ids:
             s = self.get_ue_series(uid, bs_id, snap_range)
             series_list.append(s)
 
-        if not series_list:
-            return np.array([]), ue_ids
         return np.stack(series_list, axis=0), ue_ids
 
     def get_ue_distance(self, ue_id: int, bs_id: int, snap_idx: int = 0) -> float:
