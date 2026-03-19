@@ -102,8 +102,7 @@ def convert_dir(data_dir: Path, delete_npz: bool = False):
             shape=(n_snaps, n_ue, n_rx, n_tx, max_paths),
             dtype="complex64",
             chunks=(min(100, n_snaps), 1, n_rx, n_tx, max_paths),
-            compression="gzip",
-            compression_opts=1,  # fast compression
+            # No compression — 10x faster write, ~2x disk. Compress later if needed.
         )
         ds_tau = f.create_dataset(
             "cir_tau",
