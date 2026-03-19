@@ -63,11 +63,15 @@ def make_gif(data_dir: str, output: str = "assets/plots/trajectory.gif",
     buildings = load_buildings()
 
     # Speed-based colors
-    speed_colors = {0.0: "blue", 1.0: "green", 8.3: "red"}
     ue_colors = []
     for u in range(N_UE):
         s = float(speeds[u])
-        ue_colors.append(speed_colors.get(s, "gray"))
+        if s < 0.01:
+            ue_colors.append("blue")      # static
+        elif s < 5.0:
+            ue_colors.append("green")     # pedestrian
+        else:
+            ue_colors.append("red")       # vehicle
 
     # Figure
     fig, ax = plt.subplots(1, 1, figsize=(10, 8))
