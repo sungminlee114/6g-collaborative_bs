@@ -308,30 +308,55 @@ def generate_trajectories_gpu(preset, num_snapshots, num_ue, dt, velocities,
         if n_fixed > 0:
             print(f"  Fixed {n_fixed} UEs initially inside buildings (pushed to nearest edge)")
 
-    # Propagate
-    print(f"Mobility model: {mobility} (alpha={alpha})")
-    if mobility == "gauss_markov":
-        vel_history = propagate_gauss_markov(
-            positions, vel_array, speed_array, dt, num_snapshots,
-            rng, bboxes=bboxes, alpha=alpha,
-        )
-    elif mobility == "linear":
-        vel_history = propagate_linear(positions, vel_array, dt, num_snapshots)
-    else:
-        raise ValueError(f"Unknown mobility model: {mobility}")
+    # Propagate — coarse Gauss-Markov at dt_coarse, then interpolate to target dt.
+    # This ensures building avoidance works (step size big enough to escape buildings)
+    # while providing fine temporal resolution for channel measurement.
+    coarse_dt = 0.01  # 10ms — proven to work with building avoidance
+    upsample = max(1, round(coarse_dt / dt))
+    coarse_steps = max(2, num_snapshots // upsample + 1)
 
-    # Count building collisions avoided
-    if bboxes is not None and mobility == "gauss_markov":
-        from tqdm.auto import tqdm as _tqdm
-        inside_count = 0
-        for t in _tqdm(range(num_snapshots), desc="Verifying positions", unit="snap"):
-            for u in range(num_ue):
-                if is_inside_building(positions[t, u, 0], positions[t, u, 1], bboxes):
-                    inside_count += 1
-        if inside_count > 0:
-            print(f"  Warning: {inside_count} positions still inside buildings")
+    print(f"Mobility model: {mobility} (alpha={alpha})")
+    if upsample > 1:
+        print(f"  Coarse propagation: {coarse_steps} steps @ dt={coarse_dt*1000:.1f}ms, "
+              f"then {upsample}x interpolation → {num_snapshots} @ dt={dt*1000:.4f}ms")
+
+    if upsample > 1:
+        # Step 1: Coarse trajectory with building avoidance
+        coarse_pos = np.zeros((coarse_steps, num_ue, 3), dtype=np.float32)
+        coarse_pos[0] = positions[0]
+        if mobility == "gauss_markov":
+            propagate_gauss_markov(
+                coarse_pos, vel_array, speed_array, coarse_dt, coarse_steps,
+                rng, bboxes=bboxes, alpha=alpha,
+            )
         else:
-            print(f"  All {num_snapshots * num_ue} positions verified outside buildings")
+            propagate_linear(coarse_pos, vel_array, coarse_dt, coarse_steps)
+
+        # Step 2: Linear interpolation to fine resolution
+        from tqdm.auto import tqdm as _tqdm
+        for c in _tqdm(range(coarse_steps - 1), desc="Interpolating", unit="seg"):
+            t_start = c * upsample
+            t_end = min((c + 1) * upsample, num_snapshots)
+            for t in range(t_start, t_end):
+                frac = (t - t_start) / upsample
+                positions[t] = (1 - frac) * coarse_pos[c] + frac * coarse_pos[min(c + 1, coarse_steps - 1)]
+
+        vel_history = np.zeros((num_snapshots, num_ue, 2), dtype=np.float32)
+        for t in range(1, num_snapshots):
+            vel_history[t, :, 0] = (positions[t, :, 0] - positions[t-1, :, 0]) / dt
+            vel_history[t, :, 1] = (positions[t, :, 1] - positions[t-1, :, 1]) / dt
+        vel_history[0] = vel_history[1]
+    else:
+        # No upsampling needed — direct propagation
+        if mobility == "gauss_markov":
+            vel_history = propagate_gauss_markov(
+                positions, vel_array, speed_array, dt, num_snapshots,
+                rng, bboxes=bboxes, alpha=alpha,
+            )
+        elif mobility == "linear":
+            vel_history = propagate_linear(positions, vel_array, dt, num_snapshots)
+        else:
+            raise ValueError(f"Unknown mobility model: {mobility}")
 
     # Save
     np.savez_compressed(
