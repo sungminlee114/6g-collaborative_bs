@@ -18,8 +18,6 @@ from tqdm.auto import tqdm
 
 from src.ce_skip import ExperimentConfig
 from src.ce_skip.temporal_dataset import TemporalChannelData
-from src.ce_skip.ce_algorithms import LSEstimator
-from src.ce_skip.scheduling import adaptive_ce_scheduling
 from src.ce_skip.metrics import (
     nmse_per_slot, rate_preservation_ratio,
     rate_loss_per_slot, skip_miss_rate,
@@ -181,26 +179,118 @@ def run_s0(ue_data: dict, snr_db: float = 20.0) -> dict:
     return {"per_ue": per_ue, "summary": summary}
 
 
+def _precompute_deltas(h_real: torch.Tensor, snr_db: float = 20.0):
+    """Precompute LS estimates and δ series for a UE (shared across all tau/mode sweeps).
+
+    Returns:
+        h_ls: (T, 2, n_ant, n_sc) noisy LS
+        deltas: (T-1,) normalized delta values
+        nmse_reuse: (T-1,) NMSE if reusing previous slot
+    """
+    T = h_real.shape[0]
+    sig_pow = h_real.flatten(1).pow(2).mean(1, keepdim=True).sqrt().unsqueeze(-1).unsqueeze(-1)
+    h_ls = h_real + (sig_pow / (10 ** (snr_db / 20))) * torch.randn_like(h_real)
+
+    # Vectorized δ: ||h_ls(t) - h_ls(t-1)|| / ||h_ls(t-1)||
+    diff = h_ls[1:] - h_ls[:-1]  # (T-1, 2, n_ant, n_sc)
+    diff_norm = diff.flatten(1).norm(dim=1)  # (T-1,)
+    ref_norm = h_ls[:-1].flatten(1).norm(dim=1).clamp(min=1e-12)  # (T-1,)
+    deltas = (diff_norm / ref_norm).numpy()  # (T-1,)
+
+    # Vectorized NMSE(reuse): ||h(t) - h(t-1)||² / ||h(t)||²
+    true_diff = h_real[1:] - h_real[:-1]
+    nmse_reuse = (true_diff.flatten(1).pow(2).sum(1) /
+                  h_real[1:].flatten(1).pow(2).sum(1).clamp(min=1e-12)).numpy()
+
+    return h_ls, deltas, nmse_reuse
+
+
+def _vectorized_scheduling(deltas: np.ndarray, tau_low: float, tau_high: float,
+                           n_max: int = 50) -> dict:
+    """Vectorized scheduling decision for a single tau (no Python loop over T).
+
+    Returns dict with n_skip, n_delta, n_full, total, tiers.
+    """
+    T = len(deltas) + 1
+    tiers = np.full(T, 2, dtype=np.int32)  # default: full CE
+    tiers[0] = 2  # first slot always full
+
+    # Classify tiers based on delta thresholds
+    skip_mask = deltas <= tau_low        # T0
+    delta_mask = (deltas > tau_low) & (deltas <= tau_high)  # T1
+    full_mask = deltas > tau_high        # T2
+
+    tiers[1:][skip_mask] = 0
+    tiers[1:][delta_mask] = 1
+    tiers[1:][full_mask] = 2
+
+    # Safety: force full CE after n_max consecutive non-full slots
+    if n_max < T:
+        consecutive = 0
+        for t in range(1, T):
+            if tiers[t] != 2:
+                consecutive += 1
+                if consecutive >= n_max:
+                    tiers[t] = 2
+                    consecutive = 0
+            else:
+                consecutive = 0
+
+    return {
+        "n_skip": int((tiers == 0).sum()),
+        "n_delta": int((tiers == 1).sum()),
+        "n_full": int((tiers == 2).sum()),
+        "total": T,
+        "tiers": tiers,
+    }
+
+
+def _compute_nmse_from_tiers(h_real: torch.Tensor, h_ls: torch.Tensor,
+                              tiers: np.ndarray, alpha: float = 0.5,
+                              delta_mode: str = "ema") -> np.ndarray:
+    """Compute per-slot NMSE given scheduling decisions. Minimal Python loop."""
+    T = h_real.shape[0]
+    h_hat = torch.zeros_like(h_real)
+    h_hat[0] = h_ls[0]  # first slot: LS (since CE method is LS)
+
+    for t in range(1, T):
+        tier = tiers[t]
+        if tier == 2:  # full CE
+            h_hat[t] = h_ls[t]
+        elif tier == 0:  # skip
+            h_hat[t] = h_hat[t - 1]
+        else:  # delta (T1)
+            if delta_mode == "ema":
+                h_hat[t] = alpha * h_ls[t] + (1 - alpha) * h_hat[t - 1]
+            elif delta_mode == "ls_delta":
+                h_hat[t] = h_hat[t - 1] + alpha * (h_ls[t] - h_ls[t - 1])
+            else:  # skip mode
+                h_hat[t] = h_hat[t - 1]
+
+    return nmse_per_slot(h_hat, h_real).numpy()
+
+
 def run_s2(ue_data: dict, tau_values: list = None, snr_db: float = 20.0) -> dict:
-    """S2: Threshold sweep → Pareto front."""
+    """S2: Threshold sweep → Pareto front. Vectorized δ, fast tau sweep."""
     if tau_values is None:
         tau_values = np.linspace(0.01, 0.8, 30).tolist()
 
-    ce = LSEstimator()
     per_tau = {tau: {"nmse": [], "n_skip": 0, "n_delta": 0, "n_full": 0, "total": 0}
                for tau in tau_values}
 
     for u in tqdm(ue_data["ue_list"], desc="S2: UEs", unit="ue", position=0):
         h = u["h_real"]
+        h_ls, deltas, _ = _precompute_deltas(h, snr_db)
+
         for tau in tqdm(tau_values, desc=f"  S2 UE{u['uid']} τ", unit="τ", leave=False, position=1):
-            h_hat, stats = adaptive_ce_scheduling(h, ce, tau_low=tau, tau_high=2 * tau, snr_db=snr_db)
-            nm = nmse_per_slot(h_hat, h).numpy()
+            sched = _vectorized_scheduling(deltas, tau_low=tau, tau_high=2 * tau)
+            nm = _compute_nmse_from_tiers(h, h_ls, sched["tiers"])
             pt = per_tau[tau]
             pt["nmse"].extend(nm.tolist())
-            pt["n_skip"] += stats.n_skip
-            pt["n_delta"] += stats.n_delta
-            pt["n_full"] += stats.n_full
-            pt["total"] += stats.total
+            pt["n_skip"] += sched["n_skip"]
+            pt["n_delta"] += sched["n_delta"]
+            pt["n_full"] += sched["n_full"]
+            pt["total"] += sched["total"]
 
     sweep = []
     for tau in tau_values:
@@ -222,19 +312,19 @@ def run_s3(ue_data: dict, tau_values: list = None, snr_db: float = 20.0) -> dict
         tau_values = np.linspace(0.01, 0.8, 30).tolist()
 
     r_ray = ue_data["r_rayleigh"]
-    ce = LSEstimator()
     per_ue = []
 
     for u in tqdm(ue_data["ue_list"], desc="S3: UEs", unit="ue", position=0):
         h = u["h_real"]
         dist = u["dist"]
         zone = "NF" if dist < r_ray else ("Transition" if dist < 3 * r_ray else "FF")
+        h_ls, deltas, _ = _precompute_deltas(h, snr_db)
 
         sweep = {}
         for tau in tqdm(tau_values, desc=f"  S3 UE{u['uid']} τ", unit="τ", leave=False, position=1):
-            h_hat, stats = adaptive_ce_scheduling(h, ce, tau_low=tau, tau_high=2 * tau, snr_db=snr_db)
-            nm = nmse_per_slot(h_hat, h).numpy()
-            sweep[float(tau)] = {"nmse": float(np.mean(nm)), "skip_rate": stats.skip_rate}
+            sched = _vectorized_scheduling(deltas, tau_low=tau, tau_high=2 * tau)
+            nm = _compute_nmse_from_tiers(h, h_ls, sched["tiers"])
+            sweep[float(tau)] = {"nmse": float(np.mean(nm)), "skip_rate": sched["n_skip"] / sched["total"]}
 
         per_ue.append({"uid": u["uid"], "dist": dist, "speed": u["speed"], "zone": zone, "sweep": sweep})
 
@@ -267,7 +357,6 @@ def run_s4(ue_data: dict, tau_low: float = 0.2, snr_db: float = 20.0,
     if alpha_values is None:
         alpha_values = [0.3, 0.5, 0.7]
 
-    ce = LSEstimator()
     results = {}
 
     combos = []
@@ -278,20 +367,18 @@ def run_s4(ue_data: dict, tau_low: float = 0.2, snr_db: float = 20.0,
     for u in tqdm(ue_data["ue_list"], desc="S4: UEs", unit="ue", position=0):
         h = u["h_real"]
         spd_label = SPEED_LABELS.get(round(u["speed"], 1), f"v{u['speed']:.1f}")
+        h_ls, deltas, _ = _precompute_deltas(h, snr_db)
 
         for mode, alpha, key in tqdm(combos, desc=f"  S4 UE{u['uid']}", unit="mode", leave=False, position=1):
-                if key not in results:
-                    results[key] = {}
-                if spd_label not in results[key]:
-                    results[key][spd_label] = {"nmse": [], "skip_rates": []}
+            if key not in results:
+                results[key] = {}
+            if spd_label not in results[key]:
+                results[key][spd_label] = {"nmse": [], "skip_rates": []}
 
-                h_hat, stats = adaptive_ce_scheduling(
-                    h, ce, tau_low=tau_low, tau_high=2 * tau_low,
-                    alpha=alpha, snr_db=snr_db, delta_mode=mode,
-                )
-                nm = nmse_per_slot(h_hat, h).numpy()
-                results[key][spd_label]["nmse"].extend(nm.tolist())
-                results[key][spd_label]["skip_rates"].append(stats.skip_rate)
+            sched = _vectorized_scheduling(deltas, tau_low=tau_low, tau_high=2 * tau_low)
+            nm = _compute_nmse_from_tiers(h, h_ls, sched["tiers"], alpha=alpha, delta_mode=mode)
+            results[key][spd_label]["nmse"].extend(nm.tolist())
+            results[key][spd_label]["skip_rates"].append(sched["n_skip"] / sched["total"])
 
     agg = {}
     for key, sd in results.items():
@@ -311,7 +398,6 @@ def run_s5(ue_data: dict, snr_list: list = None, tau_list: list = None) -> dict:
     if tau_list is None:
         tau_list = [0.1, 0.2, 0.3, 0.5]
 
-    ce = LSEstimator()
     combo = {}
     for snr in snr_list:
         for tau in tau_list:
@@ -321,13 +407,32 @@ def run_s5(ue_data: dict, snr_list: list = None, tau_list: list = None) -> dict:
 
     for u in tqdm(ue_data["ue_list"], desc="S5: UEs", unit="ue", position=0):
         h = u["h_real"]
+        # Precompute deltas per SNR (LS noise depends on SNR)
+        delta_cache = {}
+        ls_cache = {}
+        for snr in snr_list:
+            h_ls, deltas, _ = _precompute_deltas(h, snr)
+            delta_cache[snr] = deltas
+            ls_cache[snr] = h_ls
+
         for snr, tau in tqdm(s5_combos, desc=f"  S5 UE{u['uid']} SNR×τ", unit="pt", leave=False, position=1):
             snr_lin = 10 ** (snr / 10)
-            h_hat, stats = adaptive_ce_scheduling(h, ce, tau_low=tau, tau_high=2 * tau, snr_db=snr)
+            sched = _vectorized_scheduling(delta_cache[snr], tau_low=tau, tau_high=2 * tau)
+            # Build h_hat from tiers for rate metrics
+            h_hat = torch.zeros_like(h)
+            h_hat[0] = ls_cache[snr][0]
+            for t in range(1, h.shape[0]):
+                if sched["tiers"][t] == 2:
+                    h_hat[t] = ls_cache[snr][t]
+                elif sched["tiers"][t] == 0:
+                    h_hat[t] = h_hat[t - 1]
+                else:
+                    h_hat[t] = 0.5 * ls_cache[snr][t] + 0.5 * h_hat[t - 1]
+
             rl = rate_loss_per_slot(h_hat, h, snr_lin)
             combo[(snr, tau)]["rate_loss"].extend(rl.numpy().tolist())
             combo[(snr, tau)]["rpr"].append(rate_preservation_ratio(h_hat, h, snr_lin)["rpr_oracle"])
-            combo[(snr, tau)]["smr"].append(skip_miss_rate(h_hat, h, stats.tiers, snr_lin, 0.05))
+            combo[(snr, tau)]["smr"].append(skip_miss_rate(h_hat, h, sched["tiers"].tolist(), snr_lin, 0.05))
 
     agg = {}
     for snr in snr_list:
