@@ -231,10 +231,13 @@ class TemporalChannelData:
         cfr_out = np.zeros((total, n_rx, n_tx, n_sc), dtype=np.complex64)
 
         # Chunk size: ~500 per GPU (einsum loop, ~1.5GB peak per chunk)
+        from tqdm.auto import tqdm as _tqdm
         chunk_per_gpu = 500
         chunk_total = chunk_per_gpu * len(devices)
+        n_chunks = (total + chunk_total - 1) // chunk_total
+        pbar = _tqdm(range(0, total, chunk_total), desc=f"CIR→CFR ({len(devices)} GPU)", unit="chunk", total=n_chunks)
 
-        for chunk_start in range(0, total, chunk_total):
+        for chunk_start in pbar:
             chunk_end = min(chunk_start + chunk_total, total)
             # Split across GPUs
             per_dev = (chunk_end - chunk_start + len(devices) - 1) // len(devices)
