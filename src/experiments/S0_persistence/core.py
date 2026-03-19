@@ -30,8 +30,13 @@ def load_data(preset: str, max_snapshots: int = 20000) -> TemporalChannelData:
     return data
 
 
-def compute_delta_profile(data: TemporalChannelData, bs_id: int) -> dict:
+def compute_delta_profile(data: TemporalChannelData, bs_id: int,
+                          max_snapshots: int = None, ue_per_speed: int = None) -> dict:
     """Compute δ_oracle(t) for all UEs served by a BS.
+
+    Args:
+        max_snapshots: limit snapshots per UE (None = all)
+        ue_per_speed: if set, only use N UEs per speed category (0, 1, 8.3 m/s)
 
     Returns dict with:
         per_ue: list of {uid, speed, dist, median_delta, mean_delta, p90_delta, nmse_reuse_db}
@@ -39,7 +44,25 @@ def compute_delta_profile(data: TemporalChannelData, bs_id: int) -> dict:
     """
     per_ue = []
 
-    for h_ue, uid, dist, speed in iter_ue_tensors(data, bs_id, "cpu", data.num_snapshots, max_ue=50, desc=f"S0 BS{bs_id}"):
+    T = max_snapshots or data.num_snapshots
+
+    # Filter UEs: pick N per speed category if requested
+    ue_filter = None
+    if ue_per_speed is not None and data.ue_bs_ids is not None and data.speeds is not None:
+        ue_ids_for_bs = [i for i, b in enumerate(data.ue_bs_ids) if b == bs_id]
+        selected = []
+        speed_counts = {}
+        for uid in ue_ids_for_bs:
+            spd = round(float(data.speeds[uid]), 1)
+            speed_counts.setdefault(spd, 0)
+            if speed_counts[spd] < ue_per_speed:
+                selected.append(uid)
+                speed_counts[spd] += 1
+        ue_filter = set(selected)
+
+    for h_ue, uid, dist, speed in iter_ue_tensors(data, bs_id, "cpu", T, max_ue=50, desc=f"S0 BS{bs_id}"):
+        if ue_filter is not None and uid not in ue_filter:
+            continue
         T = h_ue.shape[0]
         deltas = []
         nmse_reuse = []
@@ -84,11 +107,14 @@ def compute_delta_profile(data: TemporalChannelData, bs_id: int) -> dict:
     return {"per_ue": per_ue, "overall": overall}
 
 
-def run_all_bs(data: TemporalChannelData, preset: str, gpu: str = None) -> dict:
+def run_all_bs(data: TemporalChannelData, preset: str, gpu: str = None,
+               max_snapshots: int = None, ue_per_speed: int = None) -> dict:
     """Run delta profile across all BSs with UEs.
 
     Args:
         gpu: CUDA device string, e.g. "0" or "0,1". None = use all available.
+        max_snapshots: limit snapshots per UE
+        ue_per_speed: N UEs per speed category (e.g. 1 = 3 UEs total)
     """
     import os
     if gpu is not None:
@@ -111,7 +137,7 @@ def run_all_bs(data: TemporalChannelData, preset: str, gpu: str = None) -> dict:
 
     all_per_ue = []
     for bs_id in bs_with_ues:
-        profile = compute_delta_profile(data, bs_id)
+        profile = compute_delta_profile(data, bs_id, max_snapshots=max_snapshots, ue_per_speed=ue_per_speed)
         all_per_ue.extend(profile["per_ue"])
         ov = profile["overall"]
         print(f"  BS {bs_id}: {ov['n_ues']} UEs, median δ={ov['median_delta_all']:.4f}, "
