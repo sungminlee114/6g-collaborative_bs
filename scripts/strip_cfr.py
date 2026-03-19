@@ -150,11 +150,13 @@ def restore_cfr(data_dir: Path, dry_run: bool = False, preset_override: str = No
     devices = [torch.device(f"cuda:{i}") for i in range(n_gpus)] if n_gpus > 0 else [torch.device("cpu")]
     print(f"  Using {len(devices)} GPU(s)")
 
-    batch_size = 200
-    for batch_start in tqdm(range(0, len(to_restore), batch_size), desc="Restoring CFR", unit="batch"):
+    batch_size = 800
+    pbar = tqdm(total=len(to_restore), desc="Restoring CFR", unit="snap")
+    for batch_start in range(0, len(to_restore), batch_size):
         batch_dirs = to_restore[batch_start:batch_start + batch_size]
 
         # Load CIR with ProcessPool
+        pbar.set_postfix(stage="disk read")
         with ProcessPoolExecutor(max_workers=32) as pool:
             cirs = list(pool.map(_load_cir_for_restore, [str(d) for d in batch_dirs]))
 
@@ -173,6 +175,7 @@ def restore_cfr(data_dir: Path, dry_run: bool = False, preset_override: str = No
         B, n_ue, n_rx, n_tx, n_paths = all_a.shape
 
         # GPU bmm: flatten (B*n_ue) → bmm → reshape
+        pbar.set_postfix(stage="GPU bmm")
         flat_a = all_a.reshape(B * n_ue, n_rx, n_tx, n_paths)
         flat_tau = all_tau.reshape(B * n_ue, n_paths)
         total = B * n_ue
@@ -197,6 +200,7 @@ def restore_cfr(data_dir: Path, dry_run: bool = False, preset_override: str = No
         cfr_all = cfr_out.reshape(B, n_ue, n_rx, n_tx, n_sc)
 
         # Save back
+        pbar.set_postfix(stage="saving npz")
         for idx, snap_dir in enumerate(batch_dirs):
             npz_path = snap_dir / "channels.npz"
             d = np.load(npz_path)
@@ -204,6 +208,9 @@ def restore_cfr(data_dir: Path, dry_run: bool = False, preset_override: str = No
             arrays["cfr"] = cfr_all[idx]
             np.savez_compressed(npz_path, **arrays)
 
+        pbar.update(len(batch_dirs))
+
+    pbar.close()
     print("Done.")
 
 
