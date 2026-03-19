@@ -232,7 +232,7 @@ class TemporalChannelData:
 
         # Chunk size: ~500 per GPU (einsum loop, ~1.5GB peak per chunk)
         from tqdm.auto import tqdm as _tqdm
-        chunk_per_gpu = 500
+        chunk_per_gpu = 2000
         chunk_total = chunk_per_gpu * len(devices)
         n_chunks = (total + chunk_total - 1) // chunk_total
         pbar = _tqdm(range(0, total, chunk_total), desc=f"CIR→CFR ({len(devices)} GPU)", unit="chunk", total=n_chunks)
@@ -253,13 +253,12 @@ class TemporalChannelData:
                 a_chunk = torch.tensor(flat_a[dev_start:dev_end], dtype=torch.complex64, device=dev)
                 tau_chunk = torch.tensor(flat_tau[dev_start:dev_end], dtype=torch.float32, device=dev)
 
-                cfr_chunk = []
-                for i in range(a_chunk.shape[0]):
-                    exp_phase = torch.exp(-2j * torch.pi * tau_chunk[i, :, None] * freqs_t[None, :])
-                    cfr_chunk.append(torch.einsum('rtp,ps->rts', a_chunk[i], exp_phase))
-
-                cfr_out[dev_start:dev_end] = torch.stack(cfr_chunk).cpu().numpy()
-                del a_chunk, tau_chunk, cfr_chunk
+                # Vectorized bmm: no Python loop
+                exp_phase = torch.exp(-2j * torch.pi * tau_chunk[:, :, None] * freqs_t[None, None, :])
+                n_chunk = a_chunk.shape[0]
+                cfr_flat = torch.bmm(a_chunk.reshape(n_chunk, n_rx * n_tx, n_paths), exp_phase)
+                cfr_out[dev_start:dev_end] = cfr_flat.reshape(n_chunk, n_rx, n_tx, n_sc).cpu().numpy()
+                del a_chunk, tau_chunk, exp_phase, cfr_flat
 
         return cfr_out.reshape(T, N, n_rx, n_tx, n_sc)
 
