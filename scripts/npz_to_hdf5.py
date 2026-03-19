@@ -32,6 +32,14 @@ def _load_snap(args):
     return snap_idx, d["cir_a"], d["cir_tau"]
 
 
+def _get_n_paths(args):
+    """Get path count from one snapshot (module-level for pickling)."""
+    snap_dir_str, idx = args
+    path = os.path.join(snap_dir_str, f"snapshot_{idx:04d}", "channels.npz")
+    d = np.load(path)
+    return d["cir_a"].shape[-1]
+
+
 def convert_dir(data_dir: Path, delete_npz: bool = False):
     """Convert one temporal data directory to HDF5."""
     data_dir = Path(data_dir)
@@ -59,13 +67,6 @@ def convert_dir(data_dir: Path, delete_npz: bool = False):
     print("  Scanning path counts...")
     max_paths = 0
     snap_indices = [int(d.name.split("_")[1]) for d in snap_dirs]
-
-    # Quick scan with multiprocess
-    def _get_n_paths(args):
-        snap_dir_str, idx = args
-        path = os.path.join(snap_dir_str, f"snapshot_{idx:04d}", "channels.npz")
-        d = np.load(path)
-        return d["cir_a"].shape[-1]
 
     data_dir_str = str(data_dir)
     with ProcessPoolExecutor(max_workers=32) as pool:
