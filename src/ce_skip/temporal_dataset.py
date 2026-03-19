@@ -58,14 +58,21 @@ class TemporalChannelData:
         # Load metadata
         self._load_metadata()
 
-        # Discover snapshots
-        snap_dirs = sorted(self.data_dir.glob("snapshot_*"))
-        if max_snapshots is not None:
-            snap_dirs = snap_dirs[:max_snapshots]
-        self.num_snapshots = len(snap_dirs)
-        assert self.num_snapshots > 0, f"No snapshots found in {data_dir}"
+        # Detect HDF5 or snapshot dirs
+        self._h5_path = self.data_dir / "channels.h5"
+        self._h5_file = None
+        if self._h5_path.exists():
+            import h5py
+            self._h5_file = h5py.File(self._h5_path, "r")
+            total_snaps = self._h5_file["cir_a"].shape[0]
+            self.num_snapshots = min(total_snaps, max_snapshots) if max_snapshots else total_snaps
+        else:
+            snap_dirs = sorted(self.data_dir.glob("snapshot_*"))
+            if max_snapshots is not None:
+                snap_dirs = snap_dirs[:max_snapshots]
+            self.num_snapshots = len(snap_dirs)
+            assert self.num_snapshots > 0, f"No snapshots found in {data_dir}"
 
-        # Load all channel data: (T, N_UE, n_rx, n_tx, n_sc)
         self._cfr_cache: Dict[int, np.ndarray] = {}
 
     def _load_metadata(self):
@@ -130,16 +137,30 @@ class TemporalChannelData:
     def _batch_cir_to_cfr(self, snap_indices: List[int], ue_id: int = None):
         """Load CIR from multiple snapshots and batch-convert to CFR on GPU.
 
-        Much faster than per-snapshot conversion: one GPU kernel for all snapshots.
-        If ue_id is given, only extracts that UE (saves memory).
+        Supports HDF5 (instant slice) or npz (multiprocess read).
         """
         import torch
         n_sc, sc_spacing = self._get_subcarrier_params()
         if sc_spacing <= 0:
-            # Fallback to per-snapshot loading (CFR already stored)
             return None
 
-        # Read all CIR data from disk — multiprocess (npz decompression is CPU-bound)
+        # ── HDF5 fast path: direct array slice, no file-per-snapshot overhead ──
+        if self._h5_file is not None:
+            idx = np.array(snap_indices)
+            if ue_id is not None:
+                all_a = self._h5_file["cir_a"][idx, ue_id:ue_id+1]  # (T, 1, rx, tx, paths)
+                all_tau = self._h5_file["cir_tau"][idx, ue_id:ue_id+1]  # (T, 1, paths)
+            else:
+                all_a = self._h5_file["cir_a"][idx]  # (T, N_UE, rx, tx, paths)
+                all_tau = self._h5_file["cir_tau"][idx]  # (T, N_UE, paths)
+            # all_a/all_tau are already stacked numpy arrays — skip to GPU conversion
+            stacked_a = all_a
+            stacked_tau = all_tau
+            T, N, n_rx, n_tx, n_paths = stacked_a.shape
+            # Jump directly to GPU einsum (skip padding, already uniform shape)
+            return self._gpu_cir_to_cfr(stacked_a, stacked_tau, n_sc, sc_spacing)
+
+        # ── NPZ path: multiprocess read ──
         from concurrent.futures import ProcessPoolExecutor
 
         data_dir_str = str(self.data_dir)
@@ -166,13 +187,23 @@ class TemporalChannelData:
 
         stacked_a = np.stack(all_a, axis=0)
         stacked_tau = np.stack(all_tau, axis=0)
+        return self._gpu_cir_to_cfr(stacked_a, stacked_tau, n_sc, sc_spacing)
+
+    def _gpu_cir_to_cfr(self, stacked_a, stacked_tau, n_sc, sc_spacing):
+        """GPU batch CIR→CFR via einsum. Shared by HDF5 and NPZ paths.
+
+        Args:
+            stacked_a:   (T, N, n_rx, n_tx, n_paths) complex64
+            stacked_tau: (T, N, n_paths) float32
+        Returns:
+            cfr: (T, N, n_rx, n_tx, n_sc) complex64
+        """
+        import torch
         T, N, n_rx, n_tx, n_paths = stacked_a.shape
 
-        # Flatten T*N for GPU processing
         flat_a = stacked_a.reshape(T * N, n_rx, n_tx, n_paths)
         flat_tau = stacked_tau.reshape(T * N, n_paths)
 
-        # Subcarrier frequencies
         if n_sc % 2 == 0:
             start = -n_sc // 2
         else:
@@ -182,9 +213,6 @@ class TemporalChannelData:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         freqs_t = torch.tensor(freqs, dtype=torch.float32, device=device)
 
-        # GPU einsum loop: avoids huge (T*N, rx, tx, paths, sc) intermediate tensor.
-        # Per-sample: exp_phase (paths, sc) + einsum 'rtp,ps->rts' → (rx, tx, sc)
-        # Memory: O(n_paths * n_sc) per sample, not O(rx * tx * paths * sc)
         a_gpu = torch.tensor(flat_a, dtype=torch.complex64, device=device)
         tau_gpu = torch.tensor(flat_tau, dtype=torch.float32, device=device)
 
@@ -303,5 +331,8 @@ class TemporalChannelData:
         return cfr0.shape[0]
 
     def clear_cache(self):
-        """Free cached snapshot data."""
+        """Free cached snapshot data and close HDF5."""
         self._cfr_cache.clear()
+        if self._h5_file is not None:
+            self._h5_file.close()
+            self._h5_file = None
