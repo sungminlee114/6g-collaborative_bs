@@ -228,11 +228,11 @@ def generate_snapshot(scene, cfg, snapshot_id: int, seed: int, data_dir: Path,
 
     # Save CIR — to HDF5 if h5_file provided, else npz fallback
     if h5_file is not None:
-        import h5py
         n_paths = cir_a.shape[-1]
         max_paths = h5_file["cir_a"].shape[-1]
-        h5_file["cir_a"][snapshot_id, :, :, :, :n_paths] = cir_a
-        h5_file["cir_tau"][snapshot_id, :, :n_paths] = cir_tau
+        local_idx = snapshot_id - h5_file.attrs["snapshot_start"]
+        h5_file["cir_a"][local_idx, :, :, :, :n_paths] = cir_a
+        h5_file["cir_tau"][local_idx, :, :n_paths] = cir_tau
     else:
         snap_dir = data_dir / f"snapshot_{snapshot_id:04d}"
         snap_dir.mkdir(parents=True, exist_ok=True)

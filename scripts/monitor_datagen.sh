@@ -25,13 +25,19 @@ print(f'{snaps} {d.get(\"avg_snap_s\",0):.1f}s {d.get(\"eta_s\",0)/3600:.1f}h')
             snap_count=0; speed="-"; eta="-"
         fi
 
-        pct=$((snap_count * 100 / 80000))
+        # Auto-detect target from trajectory_info or progress
+        target=20000
+        for tj in "$dir/trajectory_info.json" "assets/data/shared_trajectories/trajectory_info.json"; do
+            [ -f "$tj" ] && target=$(python3 -c "import json; print(json.load(open('$tj')).get('num_snapshots', 20000))" 2>/dev/null) && break
+        done
+
+        pct=$((snap_count * 100 / target))
         filled=$((pct / 2))
         bar=$(printf '%0.s█' $(seq 1 $filled 2>/dev/null))
         empty=$(printf '%0.s░' $(seq 1 $((50 - filled)) 2>/dev/null))
 
-        printf "  %-20s %s%s %5d/80000 (%2d%%) %s/snap ETA %s\n" \
-            "$name" "$bar" "$empty" "$snap_count" "$pct" "$speed" "$eta"
+        printf "  %-20s %s%s %5d/%d (%2d%%) %s/snap ETA %s\n" \
+            "$name" "$bar" "$empty" "$snap_count" "$target" "$pct" "$speed" "$eta"
     done
 
     # CPU / RAM

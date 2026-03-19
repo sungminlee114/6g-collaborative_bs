@@ -247,37 +247,49 @@ def main():
         if shards:
             print(f"Merging {len(shards)} HDF5 shards...")
             import h5py
-            # Read first shard for shape info
-            with h5py.File(shards[0], "r") as f0:
-                _, n_ue, n_rx, n_tx, max_paths = f0["cir_a"].shape
 
-            h5_path = data_dir / "channels.h5"
-            with h5py.File(h5_path, "w") as out:
-                ds_a = out.create_dataset(
-                    "cir_a", shape=(args.num_snapshots, n_ue, n_rx, n_tx, max_paths),
-                    dtype="complex64", chunks=(min(100, args.num_snapshots), 1, n_rx, n_tx, max_paths),
-                    compression="gzip", compression_opts=1,
-                )
-                ds_tau = out.create_dataset(
-                    "cir_tau", shape=(args.num_snapshots, n_ue, max_paths),
-                    dtype="float32", chunks=(min(100, args.num_snapshots), 1, max_paths),
-                    compression="gzip", compression_opts=1,
-                )
-                out.attrs["n_snapshots"] = args.num_snapshots
-                out.attrs["n_ue"] = n_ue
+            # Find first valid shard for shape info
+            valid_shards = []
+            for s in shards:
+                try:
+                    with h5py.File(s, "r") as f:
+                        if "cir_a" in f and f["cir_a"].shape[0] > 0:
+                            valid_shards.append(s)
+                except:
+                    pass
+            if not valid_shards:
+                print("  No valid shards found, skipping merge")
+            else:
+                with h5py.File(valid_shards[0], "r") as f0:
+                    local_shape = f0["cir_a"].shape  # (n_local, n_ue, rx, tx, paths)
+                    n_ue = local_shape[1]
+                    n_rx, n_tx, max_paths = local_shape[2], local_shape[3], local_shape[4]
 
-                for shard_path in shards:
-                    with h5py.File(shard_path, "r") as sh:
-                        s_start = sh.attrs["snapshot_start"]
-                        s_end = sh.attrs["snapshot_end"]
-                        # Copy non-zero rows
-                        for t in range(s_start, s_end):
-                            if t < args.num_snapshots:
-                                a = sh["cir_a"][t]
-                                if np.any(a != 0):
-                                    n_p = min(a.shape[-1], max_paths)
-                                    ds_a[t, :, :, :, :n_p] = a[:, :, :, :n_p]
-                                    ds_tau[t, :, :n_p] = sh["cir_tau"][t, :, :n_p]
+                h5_path = data_dir / "channels.h5"
+                with h5py.File(h5_path, "w") as out:
+                    ds_a = out.create_dataset(
+                        "cir_a", shape=(args.num_snapshots, n_ue, n_rx, n_tx, max_paths),
+                        dtype="complex64",
+                    )
+                    ds_tau = out.create_dataset(
+                        "cir_tau", shape=(args.num_snapshots, n_ue, max_paths),
+                        dtype="float32",
+                    )
+                    out.attrs["n_snapshots"] = args.num_snapshots
+                    out.attrs["n_ue"] = n_ue
+
+                    for shard_path in valid_shards:
+                        with h5py.File(shard_path, "r") as sh:
+                            s_start = int(sh.attrs["snapshot_start"])
+                            s_end = int(sh.attrs["snapshot_end"])
+                            n_local = s_end - s_start
+                            n_p = min(sh["cir_a"].shape[-1], max_paths)
+                            # Copy local indices → global indices
+                            for local_t in range(n_local):
+                                global_t = s_start + local_t
+                                if global_t < args.num_snapshots:
+                                    ds_a[global_t, :, :, :, :n_p] = sh["cir_a"][local_t, :, :, :, :n_p]
+                                    ds_tau[global_t, :, :n_p] = sh["cir_tau"][local_t, :, :n_p]
 
             print(f"  Merged: {h5_path} ({h5_path.stat().st_size/1024**3:.1f} GB)")
             # Clean shards

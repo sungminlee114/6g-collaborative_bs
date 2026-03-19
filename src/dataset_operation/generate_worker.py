@@ -107,28 +107,26 @@ def run_worker(preset, snapshot_start, snapshot_end, num_ue, data_dir,
 
     scene = build_scene(cfg)
 
-    # Open per-worker HDF5 for direct writing (if temporal mode)
-    # Each worker writes its own shard; merged later by generate_parallel.
+    # Per-worker HDF5 shard for temporal mode (merged by generate_parallel)
     h5_file = None
     h5_shard_path = None
     if traj_data is not None:
         import h5py
         h5_shard_path = data_dir / f"_shard_{snapshot_start}_{snapshot_end}.h5"
-        n_snap = snapshot_end - snapshot_start
-        # Peek at max_paths from config (estimate, will pad if needed)
-        max_paths = 200  # generous default, actual usually ~126
+        n_snap_local = snapshot_end - snapshot_start
+        max_paths = 200
         h5_file = h5py.File(h5_shard_path, "w")
         h5_file.create_dataset(
-            "cir_a", shape=(snapshot_end, num_ue, cfg.num_rx_ant, cfg.num_tx_ant, max_paths),
+            "cir_a", shape=(n_snap_local, num_ue, cfg.num_rx_ant, cfg.num_tx_ant, max_paths),
             dtype="complex64",
         )
         h5_file.create_dataset(
-            "cir_tau", shape=(snapshot_end, num_ue, max_paths),
+            "cir_tau", shape=(n_snap_local, num_ue, max_paths),
             dtype="float32",
         )
         h5_file.attrs["snapshot_start"] = snapshot_start
         h5_file.attrs["snapshot_end"] = snapshot_end
-        print(f"  HDF5 shard: {h5_shard_path}")
+        print(f"  HDF5 shard: {h5_shard_path} (local shape: {n_snap_local}×{num_ue})")
 
     # Progress tracking
     gpu_id = os.environ.get("CUDA_VISIBLE_DEVICES", "?")
