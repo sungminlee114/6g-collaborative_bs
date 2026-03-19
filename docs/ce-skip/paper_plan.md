@@ -25,28 +25,46 @@
 
 한편 5G massive MIMO에서도 DL 기반 CE(CNN, Transformer, Diffusion)의 도입으로 CE inference의 연산 비용이 전통적 LS/MMSE 대비 수십~수백 배 증가하는 추세다.
 
-### 1.2 배경: CE가 소프트웨어로 전환되었다
+### 1.2 배경: CE의 물리적 위치와 아키텍처 제약
+
+O-RAN 7.2x functional split 기준, CE는 **O-DU의 L1 High (Upper PHY)** 에서 수행된다. O-RU(Radio Unit)는 Lower PHY(FFT/iFFT, CP 제거, beamforming weight 적용)만 담당하고, frequency-domain IQ sample을 eCPRI fronthaul을 통해 O-DU로 전송한다. O-DU가 이를 받아 DMRS 추출 → CE → equalization → demapping → LDPC decoding까지 처리한다.
+
+물리적으로 O-DU는 셀사이트 근처의 엣지 데이터센터(국사 또는 엣지 서버룸)에 위치한다:
+
+```
+철탑/옥상 → 안테나 + O-RU (RF 처리, FFT)
+  ↓ eCPRI fronthaul (광케이블, 수~20 km)
+근처 국사/엣지 → O-DU 서버 ← CE 수행 위치
+  ↓ midhaul
+중앙 DC → O-CU, 5GC
+```
+
+이 구조의 핵심 제약은 **fronthaul 왕복 지연**이다. 업링크에서 O-RU → O-DU로 IQ sample이 올라가고, O-DU에서 CE + decoding 후 HARQ ACK/NACK을 UE에 보내야 하는데, 5G NR의 HARQ 타이밍 budget은 SCS 30kHz 기준 수 ms로 매우 빡빡하다. 현실적으로 O-RU~O-DU 간 전파 지연을 100~250μs 이내로 제한해야 하며, 64T64R MIMO 기준 셀당 수십 Gbps의 fronthaul 대역폭이 필요하다. SCS가 올라갈수록(60/120kHz, mmWave) 슬롯 길이가 짧아져 타이밍이 더 빡빡해진다.
+
+이 fronthaul 지연 부담이 CE scheduling 최적화의 직접적 동기 중 하나다: **매 슬롯마다 full CE inference를 O-DU에서 수행하는 것은 연산 비용뿐 아니라, 이미 빡빡한 L1 처리 파이프라인의 latency budget을 더 압박한다.**
+
+### 1.3 배경: CE가 소프트웨어로 전환되었다
 
 전통적 기지국에서 CE는 ASIC 고정 파이프라인의 일부로, FFT 출력 후 자동 실행되는 하드웨어 블록이었다. Skip 분기가 파이프라인에 존재하지 않았으므로, "CE를 수행할지 말지"는 결정 가능한 변수가 아니었다.
 
-NVIDIA Aerial cuPHY는 CE를 포함한 모든 L1 기능을 GPU CUDA 커널로 구현한다 [NVIDIA, 2025]. NTT DOCOMO는 이를 상용 배포하여 50% 기지국 전력 절감을 보고했다. O-RAN dApp 아키텍처는 DU 내부에서 PHY 데이터에 직접 접근하며 sub-ms 제어 루프를 구현한다 [Lacava et al., Computer Networks 2025]. CE는 더 이상 ASIC의 고정 공정이 아니라 GPU에서 스케줄링 가능한 소프트웨어 태스크가 되었다.
+NVIDIA Aerial cuPHY는 CE를 포함한 모든 L1 기능을 GPU CUDA 커널로 구현한다 [NVIDIA, 2025]. NTT DOCOMO는 이를 상용 배포하여 50% 기지국 전력 절감을 보고했다. O-RAN dApp 아키텍처는 DU 내부에서 PHY 데이터에 직접 접근하며 sub-ms 제어 루프를 구현한다 [Lacava et al., Computer Networks 2025]. 기존 xApp은 Near-RT RIC에서 E2 인터페이스를 통해 집계된 KPI만 접근 가능했으나, dApp은 L1 레벨 IQ sample이나 channel estimate에 직접 접근할 수 있다. CE는 더 이상 ASIC의 고정 공정이 아니라 GPU에서 스케줄링 가능한 소프트웨어 태스크가 되었다.
 
-### 1.3 아무도 안 한 질문
+### 1.4 아무도 안 한 질문
 
 > 채널이 충분히 유사한 연속 슬롯에서, 매번 full CE inference를 수행해야 하는가?
 
-### 1.4 이 질문이 정의될 수 없었던 구조적 이유
+### 1.5 이 질문이 정의될 수 없었던 구조적 이유
 
 1. **하드웨어 고정**: ASIC 기반 수신기에서 CE는 FFT→DMRS추출→LS/MMSE가 하드웨어 파이프라인으로 연결되어 있으며, skip 분기가 물리적으로 존재하지 않았다.
 2. **표준의 암묵적 가정**: 3GPP TS 38.211은 CE 알고리즘을 규정하지 않지만, antenna port 정의에서 "the channel over which a PDSCH symbol on one antenna port is conveyed can be inferred from the channel over which a DM-RS symbol on the same antenna port is conveyed only if the two symbols are within the same slot"이라고 명시한다. Coherent demodulation의 전제로 per-slot CE를 암묵적으로 요구한다.
 3. **평가 프레임의 폐쇄성**: CE 논문의 성능 지표가 per-slot NMSE로 고정되어, "CE를 skip한 슬롯"의 평가 방법 자체가 프레임 안에 존재하지 않았다. 모든 pilot overhead 연구(compressed sensing, superimposed pilot, pilot selection 등)는 "한 번 CE를 수행할 때 파일럿을 줄이는" 문제만 다루며, "CE 수행 빈도를 줄이는" 문제를 다루지 않았다.
 4. **커뮤니티 분리**: "CE를 언제 할지"는 본질적으로 자원 스케줄링 문제이나, CE는 Signal Processing 커뮤니티가, 스케줄링은 Networking 커뮤니티가 각각 다룬다. 교차 영역 문제를 다룰 주체가 없었다.
 
-### 1.5 이제 가능한 이유
+### 1.6 이제 가능한 이유
 
 GPU-native RAN에서 CE는 CUDA 커널이다. 실행 여부를 런타임에 결정할 수 있다. 핵심 구분: **DMRS 수신(3GPP 의무)과 full CE inference(구현 재량)의 분리(decoupling)**. DMRS는 매 슬롯 수신되지만, 수신된 DMRS로부터 full channel reconstruction을 수행하는 것은 표준이 아닌 구현자의 결정이다. GPU에서 CE 커널의 실행 여부를 dApp이 제어할 수 있다.
 
-### 1.6 기존 연구와의 관계
+### 1.7 기존 연구와의 관계
 
 - **ICENet [IEEE 2025]**: CE inference의 depth (반복 횟수)를 적응적으로 조절. 하지만 매 슬롯 반드시 inference를 수행. 우리는 inference **frequency** (수행 여부)를 조절. 직교하는 차원.
 - **Temporal prediction (CsiNet-LSTM, CNN-GPT2)**: "다음 슬롯의 채널을 예측"하되 매 슬롯 prediction을 수행. 우리는 "예측이 필요 없을 만큼 채널이 안 변했으면 아예 skip". Prediction의 상위 레이어.

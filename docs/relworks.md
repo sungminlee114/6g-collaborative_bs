@@ -1,6 +1,6 @@
 # Related Works: 6G O-RAN + On-device AI for Collaborative Base Stations
 
-> 105편 논문 목록 및 요약 (2023–2026.03). CE-skip 관련 41편 cross-reference (Cluster L). 연구 갭 분석/연구 방향 제안은 `research_and_experiments.md` §9-12 참조.
+> 110편 논문 목록 및 요약 (2023–2026.03). CE-skip 관련 46편 cross-reference (Cluster L). 연구 갭 분석/연구 방향 제안은 `research_and_experiments.md` §9-12 참조.
 
 ---
 
@@ -26,11 +26,12 @@
 ## 1. 논문 군집 및 스토리라인
 
 ```
-Cluster A: O-RAN / AI-RAN 아키텍처 (11편)
+Cluster A: O-RAN / AI-RAN 아키텍처 (16편)
   ├─ A1: AI-RAN 융합 아키텍처 (Polese, Chatzistefanidis, Li-Toshiba)
   ├─ A2: O-RAN Native AI & 표준화 (Feng, Li-ChinaMobile, Basaran)
   ├─ A3: O-RAN 위의 FL/분산학습 (Abdisarabshali, Fang, Bensalem)
-  └─ A4: dApp/xApp 실시간 제어 (Lacava, Han)
+  ├─ A4: dApp/xApp 실시간 제어 (Lacava, Santhi-InterfO-RAN, Villa-ISAC, Navidan, Baena, Salmi)
+  └─ A5: E2E 지능화 (Han)
 
 Cluster B: Edge AI 추론 최적화 (8편)
   ├─ B1: On-device AI 서베이 (Wang-survey, Wang-cognitive)
@@ -75,7 +76,7 @@ Cluster K: Differentiable RT & Physics-Informed Optimization (6편)
 Cluster L: CE-Skip — Adaptive CE Inference Scheduling (41편 cross-ref)
   ├─ L1: CE Computational Cost & Motivation (10편)
   ├─ L2: Temporal Channel Persistence & Prediction (10편)
-  ├─ L3: GPU-native RAN & dApp Architecture (9편)
+  ├─ L3: GPU-native RAN & dApp Architecture (14편)
   ├─ L4: Adaptive/Event-Triggered Inference (4편)
   ├─ L5: Beamforming with Stale/Imperfect CSI (4편)
   └─ L6: Near-Field ELAA CE Methods (7편)
@@ -191,7 +192,59 @@ Cluster L: CE-Skip — Adaptive CE Inference Scheduling (41편 cross-ref)
 - **주요 결과**: StoMedian이 공격 시 FedMedian 수준 방어 + 공격 없을 때 FedBE 수준 수렴
 - **관련도**: ★★★★☆ — **SBS/MBS FL 아키텍처가 프로젝트의 협력 BS와 정확히 일치. 보안 관점 필수.**
 
-### A4: E2E 지능화
+### A4: dApp/xApp 실시간 제어
+
+#### [P106] InterfO-RAN: Interference Classification on GPU-Accelerated O-RAN Base Stations
+- **저자**: Santhi, Villa, Polese, Melodia (Northeastern University)
+- **연도**: 2025, arXiv:2507.23177
+- **핵심 기여**: NVIDIA Aerial 기반 GPU-accelerated gNB 위 최초 dApp 실증. CNN으로 IQ sample에서 실시간 UL 간섭 감지. 상용 RU + 실제 스마트폰 사설 5G 네트워크에서 700만 NR UL 슬롯 데이터 수집.
+- **방법론**: dApp이 NVIDIA Aerial의 L1 PHY processing과 같은 GPU에서 공존. CNN 기반 간섭 분류.
+- **주요 결과**: 91% 이상 분류 정확도, 650μs 이내 처리
+- **강점**: **dApp이 GPU-native RAN L1과 같은 GPU에서 공존 가능함을 최초 실증**. 대규모 실데이터(7M 슬롯).
+- **한계**: 간섭 분류만 시연 (CE 등 다른 PHY 태스크 미검증)
+- **관련도**: ★★★★★ — **CE-skip dApp의 실현 가능성을 직접 뒷받침. GPU 공존 + sub-ms 처리의 최신 실증.**
+
+#### [P107] GPU-Accelerated Edge Inference for Real-Time ISAC on NVIDIA ARC-OTA
+- **저자**: Villa, Belgiovine et al. (Northeastern University)
+- **연도**: 2025
+- **핵심 기여**: NVIDIA ARC(Aerial RAN CoLab) OTA 테스트베드에서 ISAC용 dApp 프레임워크 최초 제안. GPU-accelerated RAN에서 PHY/MAC 레벨 데이터를 dApp에 노출하는 구조 설계.
+- **방법론**: ARC-OTA 테스트베드, PHY/MAC data exposure API, real-time ISAC inference
+- **주요 결과**: GPU-native RAN에서 ISAC dApp의 실시간 동작 시연
+- **강점**: PHY/MAC 데이터 노출 구조 설계가 CE-skip의 LS estimate 접근과 동일한 패턴
+- **한계**: ISAC 특화, CE에 대한 직접 논의 없음
+- **관련도**: ★★★★☆ — **PHY 데이터를 dApp에 노출하는 인터페이스 설계가 CE-skip 아키텍처의 선행 사례**
+
+#### [P108] Toward Autonomous O-RAN: Multi-Scale Agentic AI
+- **저자**: Navidan et al.
+- **연도**: 2026, arXiv (2026.02)
+- **핵심 기여**: dApp을 multi-scale 제어 계층의 최하위(최고속) 레벨에 배치. CE, beam management, interference classification, modulation guidance를 PHY-layer에서 실시간 수행하는 프레임워크 제안.
+- **방법론**: Multi-scale agentic AI 프레임워크: dApp(RT) → xApp(near-RT) → rApp(non-RT) 계층 구조
+- **주요 결과**: dApp에서 CE를 실시간 수행하는 개념적 프레임워크 제시
+- **강점**: **CE를 dApp use case로 명시적으로 포함**. Multi-scale 제어 아키텍처.
+- **한계**: 아직 RT RIC 표준화가 안 되어 dApp 배치에 대한 가정이 불확실. 구현/실증 없음.
+- **관련도**: ★★★★★ — **CE-skip이 이 프레임워크의 구체적 구현이 될 수 있음. CE를 dApp use case로 명시한 최신 논문.**
+
+#### [P109] Toward Native ISAC Support in O-RAN for 6G
+- **저자**: Baena et al.
+- **연도**: 2026, arXiv (2026.03)
+- **핵심 기여**: 6G O-RAN에서 ISAC 네이티브 지원 아키텍처. dApp이 IQ sample과 PHY-layer state에 직접 접근하여 xApp보다 한 레벨 아래 제어 수행.
+- **방법론**: O-RAN 아키텍처 확장, dApp-PHY 인터페이스 설계
+- **주요 결과**: ISAC을 위한 dApp-PHY 직접 접근 구조 제안
+- **강점**: dApp의 IQ sample/PHY-layer state 직접 접근이 CE-skip 아키텍처 전제와 동일
+- **한계**: ISAC 특화, 구현 미완
+- **관련도**: ★★★★☆ — **dApp → PHY data 접근 구조가 CE-skip의 LS estimate/CE trigger와 동일한 인터페이스 패턴**
+
+#### [P110] AI-native O-RAN Architectures for 6G
+- **저자**: Salmi et al.
+- **연도**: 2025, TechRxiv
+- **핵심 기여**: RIS 제어를 dApp으로 수행하는 구조 제안. UE 신호 품질 저하 시 local dApp이 실시간으로 RIS 위상 조정.
+- **방법론**: dApp 기반 RIS 위상 제어, 실시간 UE QoS 모니터링
+- **주요 결과**: dApp 기반 실시간 RIS 제어 시나리오 제시
+- **강점**: dApp이 PHY-layer에서 실시간 적응형 제어를 수행하는 또 다른 use case
+- **한계**: 개념적 제안 수준, 실증 미완
+- **관련도**: ★★★☆☆ — dApp 활용의 다양성 보여주나, CE와는 간접적 관련
+
+### A5: E2E 지능화
 
 #### [P11] Toward E2E Intelligence in 6G: AI Agent-Based RAN-CN Framework
 - **저자**: Han et al. (Kyung Hee / ETRI / Ruhr Bochum)
@@ -526,6 +579,8 @@ Cluster L: CE-Skip — Adaptive CE Inference Scheduling (41편 cross-ref)
 | # | 논문 | 군집 | 관련도 | 연도 |
 |---|------|------|-------|------|
 | P02 | dApps (Lacava) | A1 | ★★★★★ | 2025 |
+| P106 | InterfO-RAN (Santhi) | A4 | ★★★★★ | 2025 |
+| P108 | Autonomous O-RAN Agentic AI (Navidan) | A4 | ★★★★★ | 2026 |
 | P05 | 6G Native-AI Edge (Feng) | A2 | ★★★★★ | 2025 |
 | P06 | AI-Native RAN Operator (Li-CM) | A2 | ★★★★★ | 2025 |
 | P14 | Edge LAM 6G (Wang-HKUST) | B2 | ★★★★★ | 2025 |
@@ -1311,7 +1366,7 @@ Cluster L: CE-Skip — Adaptive CE Inference Scheduling (41편)
   │    DL-CE가 비싸다 → skip scheduling 동기 부여
   ├─ L2: Temporal Channel Persistence & Prediction (10편)
   │    채널 시간 상관 → skip 가능성의 물리적 근거
-  ├─ L3: GPU-native RAN & dApp Architecture (9편)
+  ├─ L3: GPU-native RAN & dApp Architecture (14편)
   │    CE를 schedulable software로 → skip 실행 플랫폼
   ├─ L4: Adaptive/Event-Triggered Inference (4편)
   │    적응적 계산 → skip 결정 방법론
@@ -1454,6 +1509,26 @@ CE를 GPU 커널로 실행하는 software-defined BS 아키텍처. CE-skip의 mo
 #### [P04] MX-AI: Agentic Observability and Control Platform for Open and AI-RAN
 - **CE-skip 관련**: Multi-timescale control hierarchy: dApp RT(<1ms) → xApp(10ms-1s) → rApp(>1s). Per-slice CE policy 가능.
 - **CE-skip relevance**: ★★★☆☆
+
+#### [P106] InterfO-RAN: Interference Classification on GPU-Accelerated O-RAN Base Stations
+- **CE-skip 관련**: **dApp이 NVIDIA Aerial GPU L1과 같은 GPU에서 공존하며 650μs 이내 CNN 추론 실증**. CE-skip monitor/scheduler가 동일 방식으로 GPU에서 LS 비교 + skip 결정 가능함을 직접 뒷받침. 7M 실 NR 슬롯 데이터로 검증.
+- **CE-skip relevance**: ★★★★★
+
+#### [P107] GPU-Accelerated Edge Inference for Real-Time ISAC on NVIDIA ARC-OTA
+- **CE-skip 관련**: PHY/MAC 데이터를 dApp에 노출하는 인터페이스 설계. CE-skip이 필요로 하는 LS estimate 접근 경로의 선행 사례.
+- **CE-skip relevance**: ★★★★☆
+
+#### [P108] Toward Autonomous O-RAN: Multi-Scale Agentic AI
+- **CE-skip 관련**: **CE를 dApp use case로 명시적 포함**. dApp 레벨에서 CE, beam mgmt, interference classification 등 PHY 태스크 실시간 수행 제안. CE-skip이 이 프레임워크의 구체적 인스턴스.
+- **CE-skip relevance**: ★★★★★
+
+#### [P109] Toward Native ISAC Support in O-RAN for 6G
+- **CE-skip 관련**: dApp이 IQ sample/PHY-layer state에 직접 접근하는 구조. CE-skip의 LS estimate 접근과 동일한 인터페이스 패턴.
+- **CE-skip relevance**: ★★★★☆
+
+#### [P110] AI-native O-RAN Architectures for 6G (RIS dApp)
+- **CE-skip 관련**: dApp의 실시간 적응형 PHY 제어 use case (RIS). CE-skip과 직접 관련은 약하나, dApp 생태계의 다양성 증거.
+- **CE-skip relevance**: ★★☆☆☆
 
 ---
 
