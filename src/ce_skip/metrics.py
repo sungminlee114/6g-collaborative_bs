@@ -70,11 +70,32 @@ def rate_preservation_ratio(
     h_hat: torch.Tensor,
     h_true: torch.Tensor,
     snr_linear: float,
-) -> float:
-    """RPR = R_adaptive / R_fullCE (scalar, averaged over time)."""
+    h_fullce: torch.Tensor = None,
+) -> dict:
+    """Rate preservation ratios vs oracle and vs full-CE.
+
+    Args:
+        h_hat: estimated channel (from scheduling)
+        h_true: ground truth channel
+        snr_linear: linear SNR
+        h_fullce: full-CE estimate (if None, uses h_true as proxy)
+
+    Returns dict with:
+        rpr_oracle: R_adaptive / R_oracle (perfect CSI upper bound)
+        rpr_fullce: R_adaptive / R_fullCE (practical baseline)
+    """
     r_adaptive = achievable_rate(h_hat, h_true, snr_linear).mean()
     r_oracle = oracle_rate(h_true, snr_linear).mean()
-    return float(r_adaptive / r_oracle.clamp(min=1e-12))
+
+    result = {"rpr_oracle": float(r_adaptive / r_oracle.clamp(min=1e-12))}
+
+    if h_fullce is not None:
+        r_fullce = achievable_rate(h_fullce, h_true, snr_linear).mean()
+        result["rpr_fullce"] = float(r_adaptive / r_fullce.clamp(min=1e-12))
+    else:
+        result["rpr_fullce"] = result["rpr_oracle"]  # fallback
+
+    return result
 
 
 def rate_loss_per_slot(

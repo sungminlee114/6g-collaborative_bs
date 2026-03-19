@@ -64,17 +64,23 @@ def prepare_ce_methods(
     # LS
     methods["ls"] = LSEstimator()
 
-    # Genie-LMMSE
+    # Genie-LMMSE (oracle covariance from training data)
     lmmse = GenieLMMSE(device=device)
     if Path(data_dir).exists():
-        ds = ChannelEstimationDataset(data_dir, bs_ids=cfg.train_bs_ids, snr_range_db=(20, 20))
-        loader = DataLoader(ds, batch_size=256, shuffle=False)
+        # Limit snapshots to avoid OOM on large antenna arrays
+        n_ant = cfg.num_rx_ant * cfg.num_tx_ant
+        max_snap = 3 if n_ant > 256 else 10
+        ds = ChannelEstimationDataset(
+            data_dir, bs_ids=cfg.train_bs_ids, snapshot_ids=list(range(max_snap)),
+            snr_range_db=(20, 20),
+        )
+        loader = DataLoader(ds, batch_size=min(64, len(ds)), shuffle=False)
         h_samples = []
         for batch in loader:
             h_samples.append(batch["target"])
-            if len(h_samples) * 256 >= 2000:
+            if sum(s.shape[0] for s in h_samples) >= 500:
                 break
-        lmmse.fit(torch.cat(h_samples)[:2000].to(device))
+        lmmse.fit(torch.cat(h_samples)[:500].to(device))
     methods["lmmse"] = lmmse
 
     # DL-CE — uses SiteAwareEstimator (same as E0) with per-sample RMS normalization

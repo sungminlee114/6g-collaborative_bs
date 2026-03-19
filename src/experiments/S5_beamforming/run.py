@@ -68,7 +68,7 @@ def run_beamforming_analysis(
                 )
                 rl = rate_loss_per_slot(h_hat, h_ue, snr_linear)
                 combo_data[(snr_db, tau)]["rate_loss"].extend(rl.cpu().numpy().tolist())
-                combo_data[(snr_db, tau)]["rpr"].append(rate_preservation_ratio(h_hat, h_ue, snr_linear))
+                combo_data[(snr_db, tau)]["rpr"].append(rate_preservation_ratio(h_hat, h_ue, snr_linear)["rpr_oracle"])
                 combo_data[(snr_db, tau)]["smr"].append(skip_miss_rate(h_hat, h_ue, stats.tiers, snr_linear, 0.05))
 
     results = {}

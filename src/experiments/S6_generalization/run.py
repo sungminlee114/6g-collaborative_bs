@@ -79,7 +79,7 @@ def evaluate_tau(
         nm = nmse_per_slot(h_hat, h_tensor[ue_idx]).cpu().numpy()
         nmse_list.extend(nm.tolist())
         skip_rates.append(stats.skip_rate)
-        rpr = rate_preservation_ratio(h_hat, h_tensor[ue_idx], snr_linear)
+        rpr = rate_preservation_ratio(h_hat, h_tensor[ue_idx], snr_linear)["rpr_oracle"]
         rpr_list.append(rpr)
 
     return {
@@ -133,7 +133,7 @@ def run_generalization(preset: str, gpu: int = 0, max_snapshots: int = 200):
             nm = nmse_per_slot(h_hat, h_ue).cpu().numpy()
             nmse_list.extend(nm.tolist())
             sr_list.append(stats.skip_rate)
-            rpr_list.append(rate_preservation_ratio(h_hat, h_ue, snr_linear))
+            rpr_list.append(rate_preservation_ratio(h_hat, h_ue, snr_linear)["rpr_oracle"])
         if not nmse_list:
             return None
         return {

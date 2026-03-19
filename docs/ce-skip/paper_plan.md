@@ -9,7 +9,7 @@
 | 항목 | 결정 | 근거 |
 |------|------|------|
 | 도구 | Sionna RT only (pyAerial 안 씀) | NF 미지원, 인터페이스 비용 대비 이득 없음 |
-| Case | 5G FF (8×8, 3.5GHz) + 6G NF (32×32, 15/28GHz) | 일반성 + NF-specific finding 둘 다 확보 |
+| Case | 5G FF (8×8, 3.5GHz) + 6G ELAA (24×24, 15/28GHz) | CE 비용 스케일링 비교 (FF lightweight vs ELAA heavy) |
 | 데이터 | temporal trajectory 새로 생성 | independent drops로는 skip 정의 불가 |
 | CE 구현 | LS + Genie-LMMSE + DL-CE (3종) | CE-agnostic 프레임워크 증명, Polar-OMP 생략 |
 | 기존 데이터 | DL-CE 학습용으로 활용 | independent drops는 CE 정확도 학습에 적합 |
@@ -107,11 +107,11 @@ Skip 대상은 full CE inference이지, 파일럿 수신이 아니다.
 
 > Skip scheduling은 CE 알고리즘(LS, LMMSE, DL-CE)에 무관하게 일관된 computation-rate tradeoff를 제공한다. CE가 비쌀수록 skip의 절대적 이득이 크다.
 
-### H3: Distance-Dependent Threshold (NF-specific)
+### H3: CE Cost Amplifies Skip Benefit (reframed from NF-specific → computational)
 
-> NF 채널의 temporal persistence는 UE-BS 거리에 의존한다. 가까운 UE(NF 내)는 구형파 curvature로 인해 위상 변화가 빠르고, 먼 UE(FF)는 변화가 느리다. 따라서 최적 threshold τ*(d)는 거리의 증가 함수이다.
+> CE 알고리즘의 연산 비용이 클수록 skip의 절대적 이득이 크다. 6G ELAA에서 CE 비용이 가장 높으므로, scheduling framework의 가치가 극대화된다.
 
-이것이 NF에서만 나타나는 고유한 현상. FF case와 비교하여 차별화.
+이전 H3 (distance-dependent τ*)는 NF zone에 충분한 UE가 필요하나, 현실적 시나리오(dist_min=10m)에서 R_Rayleigh < 10m이면 NF UE가 없음. CE 비용 기반 argument는 NF 전파 효과 없이도 성립하며, 더 일반적.
 
 ### H4: Beamforming Robustness
 
@@ -129,9 +129,9 @@ Software:  Sionna RT 1.x, PyTorch 2.x
 Scene:     Munich UMi, 8 BS
 
 [Primary configs — 논문 본문 Figure/Table]
-  Config A: 15 GHz FR3, 1024 ant (32×32), 1024 SC, 400 MHz BW   (R_Rayleigh ≈ 20.5m)
-  Config B: 28 GHz FR2, 1024 ant (32×32), 4096 SC, 1.6 GHz BW   (R_Rayleigh ≈ 10.9m)
-  Config C: 3.5 GHz FR1, 64 ant (8×8), 256 SC, 100 MHz BW       (R_Rayleigh ≈ 0.5m, 전원 FF)
+  Config A: 15 GHz FR3, 512 ant (24×24), 1024 SC, 400 MHz BW   (R_Rayleigh ≈ 10.2m, ELAA)
+  Config B: 28 GHz FR2, 512 ant (24×24), 1024 SC, 400 MHz BW   (R_Rayleigh ≈ 5.5m,  ELAA)
+  Config C: 3.5 GHz FR1, 64 ant (8×8), 256 SC, 100 MHz BW      (R_Rayleigh ≈ 2.7m,  5G mMIMO FF baseline)
 
 [Extended configs — generality 검증, appendix 또는 추가 분석]
   18 ELAA presets: {s,m,l} × {1k,2k,4k} × {15g,28g}
@@ -243,24 +243,11 @@ for ce_method in [ls, lmmse, dl_ce]:
 
 핵심 Figure: X=Computation Ratio, Y=Rate Preservation Ratio. 3 CE × 3 config = 9 curves. Knee point가 recommended τ.
 
-### 4.5 Exp 4 — Distance-Dependent Threshold (H3, NF contribution)
+### 4.5 Exp 4 — Distance-Dependent Channel Variation Analysis
 
-```python
-# UE를 거리 구간으로 나눔
-zones = {
-    'NF':         (dist_min, R_rayleigh),
-    'Transition': (R_rayleigh, 3 * R_rayleigh),
-    'FF':         (3 * R_rayleigh, dist_max)
-}
+UE-BS 거리에 따라 channel variation(δ)이 다른지 분석. NF zone에 UE가 부족하여 NF-specific claim은 제한적이나, 거리 구간별 variation 차이 자체는 scheduling threshold 설계에 유용한 정보.
 
-for zone_name, (d_min, d_max) in zones.items():
-    ue_mask = (distances >= d_min) & (distances < d_max)
-    optimal_tau[zone_name] = sweep_tau(H_true[ue_mask])
-```
-
-기대: τ\*\_NF < τ\*\_Transition < τ\*\_FF
-
-NF vs FF 비교: Config A/B (NF 존재)에서는 τ가 거리 의존적, Config C (전원 FF)에서는 τ가 상수 → "distance-dependent threshold는 NF에서만 필요하다"
+> **Note (2026.03.19 reframe)**: 원래 H3는 "NF에서 τ*가 거리 의존적"이었으나, R_Rayleigh < dist_min(10m)으로 NF zone이 비어있어 검증 불가. "CE 비용이 클수록 skip 이득이 크다"(H3 reframed, S2에서 검증)로 대체.
 
 ### 4.6 Exp 5 — Delta Update Ablation
 
@@ -321,21 +308,21 @@ CR = Cost_adaptive / Cost_fullCE
 |-------|------|-----------|
 | 1 | System model diagram (dApp + GPU L1 + 3-tier) | — |
 | 2 | Temporal delta CDF (mobility별, config별) | H1 |
-| 3 | Delta vs distance scatter plot | H3 예비 |
-| 4 | Pareto front: CR vs RPR (3 CE × 3 config) | H2 핵심 |
-| 5 | Optimal τ\* vs distance (NF/Transition/FF) | H3 핵심 |
-| 6 | Pareto front 비교: Config A/B vs Config C | NF vs FF |
-| 7 | Delta update ablation (skip vs EMA vs LS-delta) | T1 tier |
-| 8 | Rate loss CDF | H4 |
-| 9 | Multi-BS generalization | Exp 7 |
+| 3 | Pareto front: CR vs NMSE (3 CE × 3 config) | H2 핵심 |
+| 4 | Component profiling: stacked bar (monitor/LS/EMA/fullCE) | S7 |
+| 5 | Delta update ablation (skip vs EMA vs LS-delta) | S4 |
+| 6 | RPR heatmap across (SNR, τ) | H4 |
+| 7 | Multi-BS generalization gap | S6 |
+| 8 | Effective throughput: per-UE loss vs system capacity gain | S7 |
 
 ### 5.4 핵심 Table 목록
 
 | Table # | 내용 |
 |---------|------|
-| 1 | CE 알고리즘별 A100 프로파일링 (time, memory, NMSE) |
-| 2 | Sweet spot 요약: 각 (config, CE, mobility)에서의 (SR, RPR, CR) |
-| 3 | Distance-dependent τ\* 값 |
+| 1 | CE 알고리즘별 A100 프로파일링 (time, memory, NMSE) — S7 |
+| 2 | Sweet spot 요약: 각 (config, CE)에서의 (SR, CR, NMSE, RPR) — S2+S5 |
+| 3 | System overhead breakdown (monitor/LS/EMA vs full CE) — S7 |
+| 4 | Multi-BS generalization gap — S6 |
 
 ---
 
@@ -344,12 +331,13 @@ CR = Cost_adaptive / Cost_fullCE
 | # | Contribution | 유형 | 검증 |
 |---|-------------|------|------|
 | C1 | CE inference scheduling 문제를 최초 정의. Pilot reception과 CE inference의 decoupling을 형식화 | Problem formulation | Intro + System model |
-| C2 | 3-Tier adaptive scheduling (Monitor/Delta/Full) 제안 | Algorithm | Exp 3, 5 |
-| C3 | CE-agnostic: 3종 CE에서 일관된 효과 실증 | Generality | Exp 3 (LS/LMMSE/DL-CE) |
-| C4 | NF 채널에서 temporal persistence가 거리 의존적임을 실증 | NF-specific finding | Exp 1, 4 |
-| C5 | Distance-dependent threshold τ\*(d) 설계 | NF-specific design | Exp 4 |
-| C6 | Throughput-computation Pareto front라는 CE 평가 프레임워크 제안 | Evaluation framework | Exp 3, 6 |
-| C7 | NF vs FF 비교: skip 이득이 NF에서 더 큰 이유 정량화 | Comparative analysis | Exp 3 (Config A/B vs C) |
+| C2 | 3-Tier adaptive scheduling (Monitor/Delta/Full) + EMA delta update 제안 | Algorithm | S2, S4 |
+| C3 | CE-agnostic: LS/Genie-LMMSE/DL-CE 3종에서 일관된 효과 실증 | Generality | S2 (Pareto front) |
+| C4 | CE 비용이 클수록 skip 이득이 크다 — ELAA에서 가치 극대화 | Computational analysis | S2 (CR: LS 0.57 vs DL-CE 0.10) |
+| C5 | Throughput-computation Pareto front + effective throughput metric 제안 | Evaluation framework | S2, S5, S7 |
+| C6 | Multi-BS generalization: train BS의 τ*가 unseen BS로 transfer | Practical deployment | S6 (test gap <2dB) |
+
+**Reframe (2026.03.19)**: NF는 contribution이 아닌 motivation으로 재위치. "6G ELAA에서 CE 비용 폭발 → scheduling 필요성" (intro context). Distance-dependent τ*는 현재 실험에서 유의미한 NF/FF 차이 미관측 (R_Rayleigh < dist_min). CE 비용 기반 argument (C4)로 대체.
 
 ---
 
@@ -399,4 +387,4 @@ Week 5:  논문 작성
 
 ## 9. One-Sentence Summary
 
-We decouple mandatory pilot reception from optional CE inference, and propose a 3-tier event-triggered scheduling framework that is CE-algorithm-agnostic; validated on both 5G far-field and 6G near-field ELAA channels, it achieves [X]% computation reduction with less than [Y]% rate loss, where the optimal trigger threshold is shown to be distance-dependent — a phenomenon unique to near-field propagation.
+We decouple mandatory pilot reception from optional CE inference, and propose a 3-tier event-triggered scheduling framework that is CE-algorithm-agnostic; validated across 5G mMIMO and 6G ELAA configurations with LS, LMMSE, and DL-based CE, it achieves up to 90% computation reduction with less than 3% throughput loss, where the benefit scales with CE complexity — making it most valuable for computationally expensive ELAA systems.
