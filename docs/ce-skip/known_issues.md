@@ -48,6 +48,19 @@ diffuse_reflection=False  # stochastic component 제거
 
 ---
 
+## HIGH: dt=10ms is 10x Too Large
+
+**발견일**: 2026-03-19
+**증상**: dt=10ms로 시뮬레이션, 하지만 3GPP NR 1 slot = 1ms (15kHz SCS) / 0.5ms (30kHz)
+**영향**: dt=10ms에서의 δ는 10-slot 간격의 변화. 실제 per-slot δ는 이보다 ~10배 작을 것 → skip 이득을 과소평가하고 있을 가능성
+**수정**: config별 적절한 dt 사용
+  - 5G 3.5GHz (SCS 15kHz): dt = 1ms
+  - 6G 15GHz (SCS 30kHz): dt = 0.5ms
+  - 6G 28GHz (SCS 120kHz): dt = 0.125ms
+**주의**: dt 축소 → 같은 duration에 10~80배 snapshot 필요 → 생성 시간 증가
+
+---
+
 ## LOW: NF Zone Unpopulated (S3)
 
 **증상**: R_Rayleigh < dist_min(10m) → NF zone에 UE 없음
