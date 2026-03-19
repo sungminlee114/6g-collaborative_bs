@@ -13,6 +13,22 @@ import torch
 from src.dataset_operation.utils import load_cfr_from_npz
 
 
+def _load_cir_from_snapshot(args):
+    """Load CIR from a single snapshot (module-level for ProcessPoolExecutor pickling)."""
+    data_dir, t, ue_id = args
+    import os
+    path = os.path.join(data_dir, f"snapshot_{t:04d}", "channels.npz")
+    data = np.load(path)
+    if "cfr" in data.files:
+        return None
+    a = data["cir_a"]
+    tau = data["cir_tau"]
+    if ue_id is not None:
+        a = a[ue_id:ue_id+1]
+        tau = tau[ue_id:ue_id+1]
+    return a, tau
+
+
 class TemporalChannelData:
     """Loads temporal channel data as contiguous time-series per (UE, BS).
 
@@ -123,32 +139,38 @@ class TemporalChannelData:
             # Fallback to per-snapshot loading (CFR already stored)
             return None
 
-        # Read all CIR data from disk (CPU, fast)
-        all_a, all_tau = [], []
-        for t in snap_indices:
-            path = self.data_dir / f"snapshot_{t:04d}" / "channels.npz"
-            data = np.load(path)
-            if "cfr" in data.files:
-                return None  # CFR already stored, use normal path
-            a = data["cir_a"]  # (N_UE, n_rx, n_tx, n_paths)
-            tau = data["cir_tau"]  # (N_UE, n_paths)
-            if ue_id is not None:
-                a = a[ue_id:ue_id+1]
-                tau = tau[ue_id:ue_id+1]
-            all_a.append(a)
-            all_tau.append(tau)
+        # Read all CIR data from disk — multiprocess (npz decompression is CPU-bound)
+        from concurrent.futures import ProcessPoolExecutor
 
-        # Stack: (T, N_UE, n_rx, n_tx, n_paths), (T, N_UE, n_paths)
+        data_dir_str = str(self.data_dir)
+        n_workers = min(32, len(snap_indices))
+        with ProcessPoolExecutor(max_workers=n_workers) as pool:
+            results = list(pool.map(
+                _load_cir_from_snapshot,
+                [(data_dir_str, t, ue_id) for t in snap_indices],
+            ))
+
+        if results[0] is None:
+            return None
+
+        all_a = [r[0] for r in results]
+        all_tau = [r[1] for r in results]
+
+        # Pad to max n_paths (varies slightly across snapshots)
+        max_paths = max(a.shape[-1] for a in all_a)
+        for i in range(len(all_a)):
+            if all_a[i].shape[-1] < max_paths:
+                pad_width = [(0, 0)] * (all_a[i].ndim - 1) + [(0, max_paths - all_a[i].shape[-1])]
+                all_a[i] = np.pad(all_a[i], pad_width)
+                all_tau[i] = np.pad(all_tau[i], [(0, 0), (0, max_paths - all_tau[i].shape[-1])])
+
         stacked_a = np.stack(all_a, axis=0)
         stacked_tau = np.stack(all_tau, axis=0)
         T, N, n_rx, n_tx, n_paths = stacked_a.shape
 
-        # Flatten T*N for batch GPU processing
+        # Flatten T*N for GPU processing
         flat_a = stacked_a.reshape(T * N, n_rx, n_tx, n_paths)
         flat_tau = stacked_tau.reshape(T * N, n_paths)
-
-        # Expand tau for broadcasting
-        tau_exp = flat_tau[:, np.newaxis, np.newaxis, :]  # (T*N, 1, 1, n_paths)
 
         # Subcarrier frequencies
         if n_sc % 2 == 0:
@@ -160,22 +182,19 @@ class TemporalChannelData:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         freqs_t = torch.tensor(freqs, dtype=torch.float32, device=device)
 
-        # Batch GPU: chunk to avoid OOM
-        free_vram = torch.cuda.mem_get_info(device)[0] if device.type == "cuda" else 8e9
-        per_sample_bytes = n_rx * n_tx * n_paths * n_sc * 8 * 3
-        chunk = max(1, int(free_vram * 0.4) // max(per_sample_bytes, 1))
+        # GPU einsum loop: avoids huge (T*N, rx, tx, paths, sc) intermediate tensor.
+        # Per-sample: exp_phase (paths, sc) + einsum 'rtp,ps->rts' → (rx, tx, sc)
+        # Memory: O(n_paths * n_sc) per sample, not O(rx * tx * paths * sc)
+        a_gpu = torch.tensor(flat_a, dtype=torch.complex64, device=device)
+        tau_gpu = torch.tensor(flat_tau, dtype=torch.float32, device=device)
 
-        cfr_chunks = []
-        for i in range(0, T * N, chunk):
-            j = min(i + chunk, T * N)
-            a_t = torch.tensor(flat_a[i:j], dtype=torch.complex64, device=device)
-            tau_t = torch.tensor(tau_exp[i:j], dtype=torch.float32, device=device)
-            phase = -2j * torch.pi * tau_t[..., None] * freqs_t
-            cfr_chunks.append(
-                torch.sum(a_t[..., None] * torch.exp(phase), dim=-2).cpu().numpy()
-            )
-            del a_t, tau_t, phase
-        cfr_flat = np.concatenate(cfr_chunks, axis=0)  # (T*N, n_rx, n_tx, n_sc)
+        cfr_list = []
+        for i in range(T * N):
+            exp_phase = torch.exp(-2j * torch.pi * tau_gpu[i, :, None] * freqs_t[None, :])
+            cfr_list.append(torch.einsum('rtp,ps->rts', a_gpu[i], exp_phase))
+
+        cfr_flat = torch.stack(cfr_list).cpu().numpy()
+        del a_gpu, tau_gpu
         return cfr_flat.reshape(T, N, n_rx, n_tx, n_sc)
 
     def get_ue_series(
