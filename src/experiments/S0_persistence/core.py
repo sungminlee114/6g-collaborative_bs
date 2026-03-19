@@ -60,14 +60,35 @@ def compute_delta_profile(data: TemporalChannelData, bs_id: int,
                 speed_counts[spd] += 1
         ue_filter = set(selected)
 
-    max_ue = len(ue_filter) if ue_filter else 50
-    for h_ue, uid, dist, speed in iter_ue_tensors(data, bs_id, "cpu", T, max_ue=max_ue, desc=f"S0 BS{bs_id}", ue_ids=ue_filter):
-        T = h_ue.shape[0]
+    # Load all selected UEs at once (batch CIR→CFR, uses all GPUs)
+    import torch
+    target_ues = sorted(ue_filter) if ue_filter else None
+    h_all, ue_ids_loaded = data.get_all_series(bs_id, snap_range=(0, T))
+    # h_all: (N_UE_bs, T, n_ant, n_sc) complex
+
+    if len(ue_ids_loaded) == 0:
+        return {"per_ue": [], "overall": {"n_ues": 0, "median_delta_all": float("nan"),
+                "mean_delta_all": float("nan"), "static_median_delta": float("nan"),
+                "static_n": 0, "frac_below_0.1": 0, "frac_below_0.3": 0}}
+
+    for i, uid in enumerate(ue_ids_loaded):
+        if target_ues is not None and uid not in target_ues:
+            continue
+
+        h_complex = h_all[i]  # (T, n_ant, n_sc) complex
+        h_real = torch.from_numpy(
+            np.stack([h_complex.real, h_complex.imag], axis=1).astype(np.float32)
+        )  # (T, 2, n_ant, n_sc)
+
+        dist = data.get_ue_distance(uid, bs_id, snap_idx=0)
+        speed = data.get_ue_speed(uid)
+
+        T_actual = h_real.shape[0]
         deltas = []
         nmse_reuse = []
-        for t in range(1, T):
-            h_t = h_ue[t]
-            h_prev = h_ue[t - 1]
+        for t in range(1, T_actual):
+            h_t = h_real[t]
+            h_prev = h_real[t - 1]
             ref_norm = h_prev.norm()
             if ref_norm > 1e-12:
                 delta = float((h_t - h_prev).norm() / ref_norm)
