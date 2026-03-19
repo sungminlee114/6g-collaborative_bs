@@ -179,6 +179,45 @@ def run_s0(ue_data: dict, snr_db: float = 20.0) -> dict:
     return {"per_ue": per_ue, "summary": summary}
 
 
+def run_s1(ue_data: dict, tau: float = 0.2, snr_db: float = 20.0) -> dict:
+    """S1: Single-τ scheduling — the core question.
+
+    Compares 3 strategies at one τ:
+      1. Always Full CE (every slot)
+      2. Always Skip (first slot only, reuse forever)
+      3. Adaptive (3-tier scheduling at given τ)
+
+    Returns per-UE results with NMSE and skip rate for each strategy.
+    """
+    per_ue = []
+    for u in tqdm(ue_data["ue_list"], desc=f"S1: scheduling (τ={tau})", unit="ue"):
+        h = u["h_real"]
+        h_ls, deltas, _ = _precompute_deltas(h, snr_db)
+        sched = _vectorized_scheduling(deltas, tau_low=tau, tau_high=2 * tau)
+
+        # Strategy 1: Always Full CE → h_hat = h_ls (every slot)
+        nmse_full = nmse_per_slot(h_ls, h).numpy()
+
+        # Strategy 2: Always Skip → h_hat = h_ls[0] (reuse first slot forever)
+        h_skip = h_ls[0:1].expand_as(h)
+        nmse_skip = nmse_per_slot(h_skip, h).numpy()
+
+        # Strategy 3: Adaptive scheduling
+        nmse_adaptive = _compute_nmse_from_tiers(h, h_ls, sched["tiers"])
+
+        per_ue.append({
+            "uid": u["uid"], "speed": u["speed"], "dist": u["dist"],
+            "nmse_full_db": float(10 * np.log10(max(np.mean(nmse_full), 1e-30))),
+            "nmse_skip_db": float(10 * np.log10(max(np.mean(nmse_skip), 1e-30))),
+            "nmse_adaptive_db": float(10 * np.log10(max(np.mean(nmse_adaptive), 1e-30))),
+            "skip_rate": sched["n_skip"] / sched["total"],
+            "full_rate": sched["n_full"] / sched["total"],
+            "delta_rate": sched["n_delta"] / sched["total"],
+        })
+
+    return {"per_ue": per_ue, "tau": tau, "snr_db": snr_db}
+
+
 def _precompute_deltas(h_real: torch.Tensor, snr_db: float = 20.0):
     """Precompute LS estimates and δ series for a UE (shared across all tau/mode sweeps).
 
