@@ -31,10 +31,12 @@ class TemporalChannelData:
     def __init__(
         self,
         data_dir: str | Path,
+        trajectory_dir: str | Path = None,
         max_snapshots: Optional[int] = None,
         bs_ids: Optional[List[int]] = None,
     ):
         self.data_dir = Path(data_dir)
+        self.trajectory_dir = Path(trajectory_dir) if trajectory_dir else self.data_dir
         self._bs_ids = bs_ids
 
         # Load metadata
@@ -51,7 +53,8 @@ class TemporalChannelData:
         self._cfr_cache: Dict[int, np.ndarray] = {}
 
     def _load_metadata(self):
-        """Load trajectory and BS metadata."""
+        """Load trajectory (from trajectory_dir) and BS metadata (from data_dir)."""
+        # BS info lives with channels
         bs_info_path = self.data_dir / "bs_info.json"
         if bs_info_path.exists():
             with open(bs_info_path) as f:
@@ -59,23 +62,22 @@ class TemporalChannelData:
         else:
             self.bs_info = {}
 
-        traj_info_path = self.data_dir / "trajectory_info.json"
+        # Trajectory info, UE meta, and positions live in trajectory_dir (shared)
+        traj_info_path = self.trajectory_dir / "trajectory_info.json"
         if traj_info_path.exists():
             with open(traj_info_path) as f:
                 self.traj_info = json.load(f)
         else:
             self.traj_info = {}
 
-        # Load UE metadata (speeds, positions)
-        ue_meta_path = self.data_dir / "ue_meta.json"
+        ue_meta_path = self.trajectory_dir / "ue_meta.json"
         if ue_meta_path.exists():
             with open(ue_meta_path) as f:
                 self.ue_meta = json.load(f)
         else:
             self.ue_meta = []
 
-        # Load trajectories if available
-        traj_path = self.data_dir / "trajectories.npz"
+        traj_path = self.trajectory_dir / "trajectories.npz"
         if traj_path.exists():
             traj = np.load(traj_path)
             self.positions = traj["positions"]   # (T, N_UE, 3)

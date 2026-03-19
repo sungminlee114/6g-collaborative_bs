@@ -15,6 +15,11 @@ PRIMARY_PRESETS = [
     "munich_5g_mimo_3g5",     # Config C: 8×8,  3.5 GHz, R_ray=2.7m  (5G FF baseline)
 ]
 
+# Shared trajectory directory — all presets use the same UE positions/trajectories
+# for fair cross-config comparison. Generated once with the most conservative preset
+# (28 GHz, smallest coverage) so all presets have valid channels.
+SHARED_TRAJECTORY_DIR = Path("assets/data/shared_trajectories")
+
 
 @dataclass
 class ExperimentConfig:
@@ -46,8 +51,13 @@ class ExperimentConfig:
 
     @property
     def temporal_dir(self) -> Path:
-        """Temporal trajectory data directory (convention: {data_dir}_temporal)."""
+        """Temporal channel data directory (per-preset, channels only)."""
         return Path(self.data_dir).parent / f"{Path(self.data_dir).name}_temporal"
+
+    @property
+    def trajectory_dir(self) -> Path:
+        """Shared trajectory directory (same UE paths across all presets)."""
+        return SHARED_TRAJECTORY_DIR
 
     # Delegate common SceneConfig properties
     @property
