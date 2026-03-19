@@ -195,25 +195,33 @@ def run_s1(ue_data: dict, tau: float = 0.2, snr_db: float = 20.0) -> dict:
         h_ls, deltas, _ = _precompute_deltas(h, snr_db)
         sched = _vectorized_scheduling(deltas, tau_low=tau, tau_high=2 * tau)
 
-        # Strategy 1: Always Full CE → h_hat = h_ls (every slot)
-        nmse_full = nmse_per_slot(h_ls, h).numpy()
+        # Vectorized NMSE for all 3 strategies
+        h_real_sq = h.flatten(1).pow(2).sum(1).clamp(min=1e-12)
 
-        # Strategy 2: Always Skip → h_hat = h_ls[0] (reuse first slot forever)
+        # Strategy 1: Always Full CE → h_hat = h_ls
+        nmse_full = float(10 * np.log10(max(
+            ((h_ls - h).flatten(1).pow(2).sum(1) / h_real_sq).mean().item(), 1e-30)))
+
+        # Strategy 2: Always Skip → h_hat = h_ls[0] repeated
         h_skip = h_ls[0:1].expand_as(h)
-        nmse_skip = nmse_per_slot(h_skip, h).numpy()
+        nmse_skip = float(10 * np.log10(max(
+            ((h_skip - h).flatten(1).pow(2).sum(1) / h_real_sq).mean().item(), 1e-30)))
 
-        # Strategy 3: Adaptive scheduling
-        nmse_adaptive = _compute_nmse_from_tiers(h, h_ls, sched["tiers"])
+        # Strategy 3: Adaptive — uses _compute_nmse_from_tiers (has sequential loop)
+        nm_adaptive = _compute_nmse_from_tiers(h, h_ls, sched["tiers"])
+        nmse_adaptive = float(10 * np.log10(max(np.mean(nm_adaptive), 1e-30)))
 
         per_ue.append({
             "uid": u["uid"], "speed": u["speed"], "dist": u["dist"],
-            "nmse_full_db": float(10 * np.log10(max(np.mean(nmse_full), 1e-30))),
-            "nmse_skip_db": float(10 * np.log10(max(np.mean(nmse_skip), 1e-30))),
-            "nmse_adaptive_db": float(10 * np.log10(max(np.mean(nmse_adaptive), 1e-30))),
+            "nmse_full_db": nmse_full,
+            "nmse_skip_db": nmse_skip,
+            "nmse_adaptive_db": nmse_adaptive,
             "skip_rate": sched["n_skip"] / sched["total"],
             "full_rate": sched["n_full"] / sched["total"],
             "delta_rate": sched["n_delta"] / sched["total"],
         })
+        tqdm.write(f"  UE{u['uid']}: Full={nmse_full:.1f}dB, Adaptive={nmse_adaptive:.1f}dB, "
+                   f"Skip={nmse_skip:.1f}dB | SR={sched['n_skip']/sched['total']:.0%}")
 
     return {"per_ue": per_ue, "tau": tau, "snr_db": snr_db}
 
