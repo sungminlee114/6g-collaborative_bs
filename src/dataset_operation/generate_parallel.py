@@ -260,10 +260,49 @@ def main():
             if not valid_shards:
                 print("  No valid shards found, skipping merge")
             else:
+                # Check coverage: every snapshot must be in exactly one valid shard
+                covered = set()
+                shard_ranges = {}
                 with h5py.File(valid_shards[0], "r") as f0:
-                    local_shape = f0["cir_a"].shape  # (n_local, n_ue, rx, tx, paths)
+                    local_shape = f0["cir_a"].shape
                     n_ue = local_shape[1]
                     n_rx, n_tx, max_paths = local_shape[2], local_shape[3], local_shape[4]
+
+                for s in valid_shards:
+                    with h5py.File(s, "r") as fs:
+                        s_start = int(fs.attrs["snapshot_start"])
+                        s_end = int(fs.attrs["snapshot_end"])
+                        n_local = fs["cir_a"].shape[0]
+                        # Verify shard has actual data (not all-zero)
+                        sample_idx = min(n_local - 1, 0)
+                        import numpy as _np
+                        has_data = _np.any(fs["cir_a"][sample_idx] != 0)
+                        if has_data:
+                            shard_ranges[s] = (s_start, s_end)
+                            for t in range(s_start, s_end):
+                                covered.add(t)
+                        else:
+                            print(f"  ⚠ Shard {s.name} has all-zero data, skipping")
+
+                expected = set(range(args.start_snapshot, args.num_snapshots))
+                missing = expected - covered
+                if missing:
+                    missing_ranges = []
+                    sorted_missing = sorted(missing)
+                    r_start = sorted_missing[0]
+                    for i in range(1, len(sorted_missing)):
+                        if sorted_missing[i] != sorted_missing[i-1] + 1:
+                            missing_ranges.append((r_start, sorted_missing[i-1] + 1))
+                            r_start = sorted_missing[i]
+                    missing_ranges.append((r_start, sorted_missing[-1] + 1))
+                    print(f"  ✗ {len(missing)} snapshots missing! Ranges:")
+                    for ms, me in missing_ranges:
+                        print(f"    [{ms}, {me}) = {me-ms} snapshots")
+                    print(f"  Re-run with same command to fill gaps (resume supported)")
+                    task_fail(task_id, f"Merge aborted: {len(missing)} snapshots missing")
+                    sys.exit(1)
+
+                print(f"  ✓ All {len(covered)} snapshots covered")
 
                 h5_path = data_dir / "channels.h5"
                 with h5py.File(h5_path, "w") as out:
