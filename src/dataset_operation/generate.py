@@ -187,6 +187,12 @@ def generate_snapshot(scene, cfg, snapshot_id: int, seed: int, data_dir: Path,
     )
     cir_a = np.squeeze(a)
     cir_tau = np.squeeze(tau)
+    # tau should be (N_UE, n_paths) regardless of synthetic_array.
+    # When synthetic_array=False, Sionna may return tau with antenna dims — collapse them.
+    if cir_tau.ndim > 2:
+        # Take tau from first antenna pair (delays are antenna-independent)
+        while cir_tau.ndim > 2:
+            cir_tau = cir_tau[:, 0] if cir_tau.shape[1] > 1 else cir_tau.squeeze(1)
 
     # CFR — compute on GPU via torch (drjit has 2^32 limit, numpy eats CPU RAM)
     # H(f) = sum_paths[ a * exp(-j*2*pi*f*tau) ]
