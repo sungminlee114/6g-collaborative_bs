@@ -199,7 +199,7 @@ def main():
         env = os.environ.copy()
         env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
 
-        log_file = f"/tmp/datagen_{args.preset}_gpu{gpu_id}.log"
+        log_file = f"/tmp/datagen_{args.preset}_w{i}_gpu{gpu_id}_{start}_{end}.log"
         print(f"  GPU {gpu_id}: snapshots [{start}, {end}) → {log_file}")
 
         log_fd = open(log_file, "w")
@@ -215,10 +215,22 @@ def main():
     failed = []
     for gpu_id, p, log_fd, start, end in procs:
         rc = p.wait()
+        log_file = log_fd.name
         log_fd.close()
         if rc != 0:
-            failed.append((gpu_id, rc, start, end))
+            failed.append((gpu_id, rc, start, end, log_file))
             print(f"  ✗ GPU {gpu_id} failed (rc={rc}), snapshots [{start}, {end})")
+            # Print last 20 lines of failed worker log
+            try:
+                with open(log_file) as lf:
+                    lines = lf.readlines()
+                    tail = lines[-20:] if len(lines) > 20 else lines
+                    print(f"    ── {log_file} (last {len(tail)} lines) ──")
+                    for line in tail:
+                        print(f"    {line.rstrip()}")
+                    print(f"    ── end ──")
+            except Exception:
+                pass
         else:
             print(f"  ✓ GPU {gpu_id} done, snapshots [{start}, {end})")
 
