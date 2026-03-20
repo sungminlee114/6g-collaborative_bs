@@ -378,7 +378,102 @@ CR = Cost_adaptive / Cost_fullCE
 
 ---
 
-## 8. Timeline
+## 8. Preliminary Experimental Findings (2026.03.20)
+
+> 아래는 munich_elaa_m_1k_15g (24×24, 15GHz) 기준 초기 실험 결과.
+> 9 UE (3 static + 3 ped + 3 veh), 4000 snapshots, dt=0.25ms, BS 1개.
+
+### 8.1 채널 변화의 두 가지 regime (S0)
+
+채널 변화 δ_oracle = ‖h(t) - h(t-1)‖ / ‖h(t-1)‖ 분석 결과, 채널 변화가 **continuous drift + discrete spike** 두 종류로 구분됨:
+
+**Continuous drift** (baseline δ):
+| Mobility | Median δ_oracle | LS noise floor (20dB) | LS로 감지? |
+|----------|----------------|----------------------|-----------|
+| Static   | 0.007          | 0.14                 | **불가** (δ << noise floor) |
+| Ped 1m/s | 0.000~0.043    | 0.14                 | **일부만** (UE에 따라 다름) |
+| Veh 8.3m/s | 0.26~0.32   | 0.14                 | **가능** (δ >> noise floor) |
+
+**Discrete spike** (path event):
+- 모든 UE에서 동시 발생 (t=143, 286, 429... 간격 ~143 slots = 35.75ms)
+- δ > 1.0 (baseline 대비 100x 이상)
+- 원인: vehicle UE 이동 → scene scatterer 변화 → PathSolver가 path set 재계산 → CFR interference pattern 급변
+- CIR energy는 10% 내외 변화이나, phase가 전 antenna에 걸쳐 무작위 재배열 (abs_mean phase diff ≈ π/2)
+- **물리적으로 정당**: 현실에서도 scatterer 이동에 의한 급격한 채널 변화 발생
+
+**핵심 insight**: CE scheduling은 drift와 spike를 **다른 메커니즘**으로 처리해야.
+- Drift → Doppler/coherence time 기반 예측 가능
+- Spike → 예측 불가, reactive monitoring 필요 (LS δ가 유효)
+
+### 8.2 LS Monitor의 Noise Floor 한계 (S0)
+
+SNR 20dB에서 LS δ의 noise floor ≈ √(2/SNR_linear) ≈ 0.14.
+- Static/ped UE의 oracle δ (0.00~0.04)가 이 아래 → **LS monitor로는 진짜 채널 변화를 감지 불가**
+- 하지만 spike (δ > 1.0)은 noise floor보다 훨씬 크므로 **LS monitor로 감지 가능**
+- 이건 LS monitor의 "noise-triggered refresh"가 우연히 channel staleness를 방지하는 아이러니한 효과
+
+### 8.3 Monitor 전략 비교 (S1)
+
+7가지 scheduling strategy를 τ=0.2에서 비교:
+
+| Strategy | Static NMSE | Ped NMSE | Veh NMSE | 평가 |
+|----------|------------|----------|----------|------|
+| Always Full CE | -20.7dB | -20.7dB | -20.7dB | baseline |
+| Always Skip | +57~+85dB | +46~+85dB | +69~+84dB | 실패 (spike 누적) |
+| **LS monitor** | **-20.6dB** | -3.4~-20.7dB | **-12~-14dB** | **best practical** |
+| Oracle monitor | -20.6dB | -3.4~-20.7dB | -7~-12dB | oracle도 veh에서 LS보다 나쁨 |
+| Doppler | +40~+67dB | +39~+77dB | +48~+62dB | **spike 감지 불가 → 실패** |
+| SNR-adaptive τ | -20.6dB | -3.4~-20.7dB | -3~-6dB | τ가 너무 높아짐 |
+| Smoothed LS (K=4) | +30~+56dB | +19~+57dB | +43~+56dB | **spike smoothing → 실패** |
+
+**핵심 결론**:
+1. Doppler-only, smoothed LS → spike 감지 불가로 catastrophic failure
+2. LS monitor → spike 감지 가능 (δ_spike >> noise floor), static/ped에서 noise-triggered refresh 효과
+3. Oracle monitor가 veh에서 LS보다 나쁜 이유: oracle이 더 많이 skip(40%) → drift 누적. LS의 noise trigger가 더 자주 refresh(SR=15~22%)
+4. **LS monitor가 practical best** — but UE4 (ped, δ=0.04)에서 -3.4dB로 실패 (noise floor 문제)
+
+### 8.4 Spike의 물리적 특성
+
+```
+UE0 (static), Spike at t=143:
+  t=142: ||h|| = 4.608e-02 (stable)
+  t=143: ||h|| = 3.916e-02 (15% drop, δ=1.31)  ← spike
+  t=144: ||h|| = 3.916e-02 (새 값으로 안정)
+
+  CIR: 115 paths → 115 paths (경로 수 불변)
+       energy 0.283 → 0.253 (10% 감소)
+  Phase diff: abs_mean = π/2 (전 antenna에 걸쳐 위상 무작위 재배열)
+  → MAGNITUDE dominated (UE0) 또는 PHASE dominated (UE1, UE3)
+```
+
+- Spike 간격 ≈ 143 slots (35.75ms) — vehicle UE가 0.30m 이동 (15파장)
+- Spike 이후 채널이 새 상태로 "정착" (1-shot transition, not gradual)
+- **이건 channel prediction으로 대응 불가 — reactive scheduling만 유효**
+
+### 8.5 방향성 수정
+
+**기존 (paper_plan 초기)**:
+- CE skip으로 X% 연산 절감
+- 3-tier (Skip/Delta/Full) scheduling
+
+**수정 (실험 결과 기반)**:
+- 채널 변화는 drift + spike 두 regime
+- LS monitor는 spike 감지에 유효하지만, drift 감지에는 noise-limited
+- **Hybrid scheduling**: Doppler로 drift 기반 skip interval 결정 + LS로 spike 감지
+- 또는: **"언제 CE를 해야 하는가?"** 로 reframing — CE skip이 아니라 CE timing optimization
+- Spike frequency/magnitude 분석이 새로운 contribution 후보
+
+### 8.6 남은 검증
+
+- [ ] 28GHz, 3.5GHz config에서 동일 분석 (spike 간격 변화?)
+- [ ] SNR 30dB에서 LS noise floor 감소 → ped UE 감지 개선?
+- [ ] Hybrid monitor (Doppler + LS spike trigger) 구현 + 비교
+- [ ] Spike frequency의 물리적 모델링 (scatterer density, velocity 의존성)
+- [ ] Beamforming rate impact (S5) — spike 고려한 RPR
+
+---
+
+## 9. Timeline
 
 ```
 Week 1:  generate.py 수정 + pilot data 생성 (20 UE, 200 snap, 4 mobility, 3 config)
