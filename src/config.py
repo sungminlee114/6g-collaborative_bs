@@ -156,15 +156,15 @@ class DatasetConfig:
 class ModelConfig:
     """Model architecture config."""
     # Encoder
-    encoder_channels: List[int] = field(default_factory=lambda: [64, 64, 64])
+    encoder_channels: List[int] = field(default_factory=lambda: [32, 32])
     kernel_size: int = 3
 
     # Site embedding
-    site_embed_dim: int = 64
+    site_embed_dim: int = 32
     site_integration: str = "film"  # "film", "concat", "add", "none"
 
     # Task head
-    task_head_channels: List[int] = field(default_factory=lambda: [64, 64])
+    task_head_channels: List[int] = field(default_factory=lambda: [32])
 
     # Input/output dims (derived from SceneConfig)
     n_rx_ant: int = 2
