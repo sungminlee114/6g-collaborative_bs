@@ -403,16 +403,23 @@ def _vectorized_scheduling(deltas: np.ndarray, tau_low: float, tau_high: float,
 
 def _compute_nmse_from_tiers(h_real: torch.Tensor, h_ls: torch.Tensor,
                               tiers: np.ndarray, alpha: float = 0.5,
-                              delta_mode: str = "ema") -> np.ndarray:
-    """Compute per-slot NMSE given scheduling decisions."""
+                              delta_mode: str = "ema",
+                              h_ce: torch.Tensor = None) -> np.ndarray:
+    """Compute per-slot NMSE given scheduling decisions.
+
+    Args:
+        h_ce: optional pre-computed CE output (e.g., DL-CE). If None, uses h_ls.
+    """
     T = h_real.shape[0]
     h_hat = torch.zeros_like(h_real)
-    h_hat[0] = h_ls[0]
+    if h_ce is None:
+        h_ce = h_ls
+    h_hat[0] = h_ce[0]
 
     for t in range(1, T):
         tier = tiers[t]
         if tier == 2:
-            h_hat[t] = h_ls[t]
+            h_hat[t] = h_ce[t]
         elif tier == 0:
             h_hat[t] = h_hat[t - 1]
         else:
@@ -424,6 +431,32 @@ def _compute_nmse_from_tiers(h_real: torch.Tensor, h_ls: torch.Tensor,
                 h_hat[t] = h_hat[t - 1]
 
     return nmse_per_slot(h_hat, h_real).numpy()
+
+
+def _batch_nmse_multi_tau(h_real: torch.Tensor, h_ls: torch.Tensor,
+                           deltas: np.ndarray, tau_values: list,
+                           alpha: float = 0.5, delta_mode: str = "ema",
+                           h_ce: torch.Tensor = None) -> list:
+    """Compute NMSE for multiple tau values using ThreadPool parallelism.
+
+    Each tau is independent (same h_ls, different scheduling).
+    Uses threads (not processes) since torch tensors share memory.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    def _one_tau(tau):
+        sched = _vectorized_scheduling(deltas, tau_low=tau, tau_high=2*tau)
+        nm = _compute_nmse_from_tiers(h_real, h_ls, sched["tiers"], alpha, delta_mode, h_ce)
+        return {
+            "tau": tau, "nmse_arr": nm,
+            "n_skip": sched["n_skip"], "n_delta": sched["n_delta"],
+            "n_full": sched["n_full"], "total": sched["total"],
+            "tiers": sched["tiers"],
+        }
+
+    with ThreadPoolExecutor(max_workers=min(len(tau_values), 32)) as pool:
+        results = list(pool.map(_one_tau, tau_values))
+    return results
 
 
 def _batch_scheduling_sweep(h_real: torch.Tensor, h_ls: torch.Tensor,
