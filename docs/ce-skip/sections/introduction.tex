@@ -1,0 +1,144 @@
+% ═══════════════════════════════════════════════════════════════════
+% Section I: Introduction
+% Paper: "When Not to Estimate: Event-Triggered CE Inference
+%         Scheduling for Software-Defined Base Stations"
+% ═══════════════════════════════════════════════════════════════════
+
+\section{Introduction}\label{sec:intro}
+
+% ── 1. CE 비용 폭발 (ELAA + DL-CE) ──────────────────────────────
+Channel estimation (CE) is the computational backbone of coherent reception in OFDM systems.
+In fifth-generation (5G) massive MIMO, a single slot-level CE---whether least-squares (LS), linear minimum mean-square error (LMMSE), or a learned neural estimator---is executed once per transmission time interval (TTI) and its cost is treated as a fixed overhead.
+This assumption is now breaking on two fronts.
+
+First, sixth-generation (6G) extremely large aperture arrays (ELAA) scale the antenna count from tens to hundreds or thousands of elements \cite{cui2022channel, bjornson2024towards}.
+At millimeter-wave frequencies the resulting channel matrices grow proportionally: a $24\!\times\!24$ uniform planar array (UPA) with 1024 subcarriers yields a $512\!\times\!1024$ complex channel tensor per user, per slot.
+When the array aperture exceeds the Rayleigh distance, spherical-wavefront propagation couples angle and range, expanding the estimation search space from one to two dimensions and further inflating computational cost \cite{cui2022channel}.
+
+Second, the adoption of deep-learning-based CE (DL-CE) introduces neural-network inference into the real-time physical-layer (PHY) pipeline.
+Iterative refinement architectures such as ReQuestNet require multiple forward passes per slot \cite{requestnet2025}, while transformer-based estimators scale quadratically with sequence length.
+On an NVIDIA A100 GPU, a lightweight residual network with 57K parameters requires 0.9\,ms per ELAA slot; a larger eight-block ResNet reaches 31\,ms---both orders of magnitude above the 0.01\,ms cost of LS \cite{pacenet2024}.
+As model complexity grows, CE inference increasingly competes with equalization, decoding, and hybrid automatic repeat request (HARQ) processing for the same millisecond-scale latency budget.
+
+% ── 2. CE의 물리적 위치와 latency budget ────────────────────────
+This budget is dictated by the physical architecture.
+Under the O-RAN 7.2x functional split, the radio unit (O-RU) performs lower-PHY functions---FFT, cyclic-prefix removal, beamforming weight application---and forwards frequency-domain IQ samples over an enhanced common public radio interface (eCPRI) fronthaul to the distributed unit (O-DU), where CE resides in L1-High (upper PHY) \cite{oran_wg4}.
+The round-trip fronthaul delay is constrained to 100--250\,$\mu$s so that HARQ acknowledgments meet the sub-carrier spacing (SCS)-dependent timing window: a few milliseconds at 30\,kHz SCS, and even tighter at 120\,kHz for millimeter-wave numerologies.
+Every microsecond consumed by CE inference directly compresses the remaining processing margin.
+
+% ── 3. CE가 소프트웨어로 전환되었다 ─────────────────────────────
+Until recently, none of this mattered for scheduling purposes.
+In hardware-defined base stations, CE was an application-specific integrated circuit (ASIC) pipeline stage---automatically triggered after every FFT output, with no conditional branch.
+The question ``should we run CE this slot?''\ was structurally impossible.
+
+This constraint has dissolved.
+GPU-native RAN platforms such as NVIDIA Aerial cuPHY implement the entire L1 stack as CUDA kernels whose execution can be programmatically controlled \cite{nvidia_aerial}.
+NTT DOCOMO has commercially deployed GPU-based base stations, reporting 50\% power reduction through software-defined PHY processing.
+Concurrently, the O-RAN data-plane application (dApp) architecture enables sub-millisecond control loops co-located with the DU, with measured round-trip latencies below 450\,$\mu$s \cite{lacava2025dapps}.
+Unlike near-real-time RIC applications (xApps) that operate on aggregated key performance indicators over 10\,ms--1\,s timescales, dApps access L1-level data---IQ samples, channel estimates, demodulation reference signal (DMRS) observations---and can issue per-slot control actions.
+
+CE is no longer a hardwired pipeline stage.
+It is a GPU kernel whose invocation is a schedulable software decision.
+
+% ── 4. The question nobody asked ─────────────────────────────────
+\subsection{The Unasked Question}
+
+This architectural shift exposes a question that prior work has neither posed nor could have posed:
+%
+\begin{quote}
+\emph{When the channel changes negligibly between consecutive slots, must every slot pay the full cost of CE inference?}
+\end{quote}
+%
+The answer is clearly no---yet no framework exists for making this decision.
+
+% ── 5. Why this question could not be defined ────────────────────
+Four structural factors explain why.
+%
+\begin{enumerate}[label=(\roman*)]
+\item \textbf{Hardware lock-in.}
+In ASIC receivers, CE was a fixed stage in the FFT$\,\to\,$DMRS extraction$\,\to\,$LS/MMSE pipeline; a skip branch did not physically exist.
+
+\item \textbf{Implicit standard assumption.}
+3GPP TS\,38.211 states that ``the channel over which a symbol on one antenna port is conveyed can be inferred from the channel over which a DM-RS symbol on the same antenna port is conveyed \emph{only if the two symbols are within the same slot}.''
+This per-slot coherent demodulation premise tacitly equates pilot reception with CE execution.
+
+\item \textbf{Closed evaluation frame.}
+CE research universally reports per-slot normalized mean-square error (NMSE).
+No metric or protocol exists for evaluating a slot in which CE was \emph{not performed}.
+Pilot-overhead reduction research---compressed sensing, superimposed pilots, pilot selection---optimizes how many pilots are used \emph{per CE invocation}, not \emph{how often} CE is invoked.
+
+\item \textbf{Community partition.}
+``When to estimate'' is inherently a scheduling problem, yet CE belongs to the signal-processing community while resource scheduling belongs to the networking community.
+The cross-domain question fell between established research boundaries.
+\end{enumerate}
+
+% ── 6. Why it is possible now ────────────────────────────────────
+\subsection{Why It Is Possible Now}
+
+The enabling insight is a \emph{decoupling} of two operations that ASIC architectures had fused:
+%
+\begin{itemize}
+\item \textbf{Pilot reception} (mandatory): extract DMRS symbols from received IQ samples and compute a lightweight LS estimate $\hat{\mathbf{h}}_{\mathrm{LS}}(t) = \mathbf{Y}_{\mathrm{pilot}}(t) \oslash \mathbf{X}_{\mathrm{pilot}}$. Cost: $\mathcal{O}(N_{\mathrm{pilot}})$ element-wise divisions. Negligible.
+
+\item \textbf{Full CE inference} (discretionary): feed $\hat{\mathbf{h}}_{\mathrm{LS}}(t)$ into LMMSE, a neural network, or any advanced estimator to reconstruct the full channel. Cost: $\mathcal{O}(N_{\mathrm{ant}}^2 N_{\mathrm{sc}})$ or higher. Substantial.
+\end{itemize}
+%
+Pilot reception remains mandatory per 3GPP; full CE inference is an \emph{implementation choice}.
+In a GPU-native O-DU, the scheduler can inspect the LS estimate, detect whether the channel has changed, and decide at runtime whether to launch the CE kernel or reuse the previous estimate.
+A dApp co-located with the DU can execute this decision within its sub-450\,$\mu$s control loop \cite{lacava2025dapps}.
+
+% ── 7. Relationship to prior work ───────────────────────────────
+\subsection{Relationship to Prior Work}
+
+The proposed framework is \emph{orthogonal} to three active research threads:
+%
+\begin{itemize}
+\item \textbf{Adaptive-depth CE.}
+ICENet \cite{icenet2025} adjusts the number of iterative refinement steps per slot, reducing per-invocation cost.
+Every slot still triggers inference.
+We control the \emph{frequency} of invocation, not its depth; the two mechanisms compose.
+
+\item \textbf{Temporal channel prediction.}
+Methods based on LSTM, Transformer, or diffusion models predict the next slot's channel from a history window \cite{continual_pred2025}.
+Each slot still requires a forward pass of the prediction network.
+We identify slots where \emph{no computation is needed}---neither estimation nor prediction---because the channel has not meaningfully changed.
+Skip scheduling operates as a meta-decision layer above prediction.
+
+\item \textbf{Event-triggered inference offloading.}
+Zhou \emph{et al.} \cite{zhou2025event} propose dual-threshold early-exit architectures for edge inference, where a device decides whether to offload computation to a server.
+We adopt the event-triggered paradigm but apply it \emph{within} the base station's PHY pipeline: the event is a channel-variation metric exceeding a threshold, and the triggered action is CE kernel launch.
+\end{itemize}
+
+% ── 8. Contributions ─────────────────────────────────────────────
+\subsection{Contributions}
+
+We make the following contributions:
+%
+\begin{enumerate}[label=\textbf{C\arabic*}.]
+\item \textbf{Problem formulation.}
+We formally define \emph{CE inference scheduling} as a decision problem separate from CE algorithm design, decoupling mandatory pilot reception from discretionary channel reconstruction (Section~\ref{sec:system}).
+
+\item \textbf{Three-tier adaptive scheduling.}
+We propose an event-triggered framework with three tiers---\emph{Skip} (reuse previous estimate), \emph{Delta} (exponential moving average correction from LS observations), and \emph{Full} (launch CE inference)---governed by a lightweight LS-based channel-variation monitor (Section~\ref{sec:method}).
+
+\item \textbf{CE-algorithm-agnostic validation.}
+We demonstrate consistent skip--quality tradeoffs across three CE methods of increasing complexity---LS, genie-aided LMMSE, and a DL-based estimator (PACENet)---showing that the framework is a universal wrapper, not tied to any specific estimator (Section~\ref{sec:results}).
+
+\item \textbf{Cost-scaling analysis.}
+Through A100 GPU profiling, we show that absolute computation savings scale with CE cost: at 98\% skip rate for static users, a 0.9\,ms DL-CE saves 0.88\,ms per slot while a 31\,ms ResNet saves 30.4\,ms, validating that the framework is most valuable where CE is most expensive---exactly the 6G ELAA regime (Section~\ref{sec:results}).
+
+\item \textbf{Evaluation framework.}
+We introduce skip-aware metrics---skip rate (SR), computation ratio (CR), and rate preservation ratio (RPR)---that extend the per-slot NMSE paradigm to account for slots where CE is not performed (Section~\ref{sec:metrics}).
+
+\item \textbf{Multi-site generalization.}
+We show that scheduling thresholds calibrated on a subset of base stations transfer to unseen sites with less than 2\,dB NMSE degradation, supporting practical deployment without per-site tuning (Section~\ref{sec:results}).
+\end{enumerate}
+
+% ── 9. Paper organization ────────────────────────────────────────
+The remainder of this paper is organized as follows.
+Section~\ref{sec:system} presents the system model and formalizes the CE scheduling problem.
+Section~\ref{sec:method} describes the three-tier scheduling algorithm and the LS-based monitor.
+Section~\ref{sec:metrics} defines the evaluation metrics.
+Section~\ref{sec:setup} details the experimental setup, including the Sionna-RT-based Munich urban scenario and the three CE implementations.
+Section~\ref{sec:results} presents experimental results across 5G massive MIMO and 6G ELAA configurations.
+Section~\ref{sec:conclusion} concludes with a discussion of limitations and future directions.
