@@ -1647,6 +1647,39 @@ HIGH/MEDIUM relevance 논문의 시뮬레이션 환경 비교. **Bold** = 본 �
 
 ---
 
+### L7: CSI Acquisition Overhead Reduction (Adjacent Domains)
+
+다른 도메인(Wi-Fi, fluid antenna)에서 CSI 획득 overhead를 줄이려는 시도. CE-skip과 표면적 유사성이 있으나, skip 대상/차원/동기가 근본적으로 다름.
+
+#### [P111] Opportunistic Channel Estimation for Implicit 802.11af MU-MIMO
+- **저자**: Guerra, Anand, Shepard, Knightly (Rice University)
+- **연도**: 2016, ITC
+- **핵심 기여**: 802.11af Wi-Fi MU-MIMO에서 explicit sounding을 생략하고 uplink data/ACK의 implicit CSI를 재사용. S-T interval (Sounding-Transmission interval) 분석으로 stale CSI의 beamforming 성능 저하 정량화.
+- **방법론**: UHF SDR (8x4 MIMO), indoor/outdoor 측정, ZF beamforming achievable rate vs S-T interval
+- **주요 결과**: Static STA는 1초까지 S-T interval 허용 (15% 이내 성능 저하), Mobile STA는 20ms에서 급격 저하. Fixed interval은 부적절하며 adaptive policy 필요.
+- **CE-skip 관련**: **개념적으로 가장 가까운 선행연구** — "channel이 안 변했으면 sounding skip" 원리 공유. 그러나 skip 대상이 MAC-layer sounding frame (airtime overhead)이지 PHY-layer CE inference (compute overhead)가 아님. Decision이 fixed S-T interval이지 per-slot event-triggered가 아님. 802.11af 프로토콜에 한정되며 cellular OFDM 적용 불가.
+- **CE-skip과의 핵심 차이**: (1) 절감 대상: airtime vs GPU compute, (2) pilot 구조: Wi-Fi는 sounding=CSI 획득의 유일 경로 vs 5G NR은 DMRS 항상 수신→LS 항상 가용, (3) decision: fixed interval vs event-triggered delta threshold, (4) tier: binary (sound/reuse) vs 3-tier (Skip/Delta/Full)
+- **CE-skip relevance**: ★★★☆☆ — cite 필수 (차별화 목적), 직접적 기술 overlap은 없음
+
+#### [P112] MUTE: Sounding Inhibition for MU-MIMO WLANs
+- **저자**: Bejarano, Magistretti, Gurewitz, Knightly (Rice University)
+- **연도**: 2014, ACM SECON
+- **핵심 기여**: MU-MIMO WLAN에서 per-user channel variation tracking으로 불필요한 explicit sounding을 억제. 73% sounding overhead 감소.
+- **CE-skip 관련**: "channel variation을 track해서 불필요한 측정을 skip" — CE-skip의 LS delta monitor와 표면적으로 유사한 구조. 그러나 MUTE가 track하는 것은 beamforming matrix의 유효성이고, skip하는 것은 MAC sounding frame 전송. CE-skip이 track하는 것은 LS estimate의 변화량이고, skip하는 것은 GPU CE kernel 실행.
+- **CE-skip relevance**: ★★★☆☆ — Guerra와 함께 cite하여 차별화
+
+#### [P113] Skip-Enabled LMMSE-based Channel Estimation for Large-Scale Fluid Antenna-Enabled Cellular Networks
+- **저자**: Skouroumounis, Krikidis (University of Cyprus)
+- **연도**: 2023, IEEE ICC
+- **핵심 기여**: Fluid antenna의 N개 port 중 일부만 LMMSE CE 수행 (spatial skip). 인접 port의 spatial correlation을 이용해 중간 port 추정 생략. Stochastic geometry 기반 outage 분석.
+- **방법론**: SeCE (Skip-enabled CE) — 매 ν+1번째 port만 LMMSE CE, 나머지는 이전 port의 추정값 재사용
+- **주요 결과**: N=40, ν=3에서 skip-less 대비 58.52% outage 개선
+- **CE-skip 관련**: 제목에 "Skip"과 "CE"가 동시 등장하여 표면적 유사성. 그러나 skip 차원이 완전히 다름 — **공간 도메인** (antenna port 간 skip) vs **시간 도메인** (slot 간 skip). Fixed pattern (매 ν+1 port) vs event-triggered (per-slot delta). Pilot symbol 절감 vs GPU compute 절감.
+- **CE-skip과의 핵심 차이**: (1) Skip 축: spatial (port) vs temporal (slot), (2) Decision: fixed deterministic pattern vs adaptive threshold, (3) 절감 대상: pilot overhead vs compute overhead, (4) System: fluid antenna (UE side) vs ELAA BS (gNB side)
+- **CE-skip relevance**: ★★☆☆☆ — 제목 유사성으로 cite 필수, 기술적 overlap은 없음
+
+---
+
 ### CE-Skip Gap Analysis
 
 114편 분석 결과, 아래의 조합을 수행한 논문은 **단 한 편도 없음** — 이것이 CE-skip paper의 contribution.
@@ -1673,4 +1706,4 @@ HIGH/MEDIUM relevance 논문의 시뮬레이션 환경 비교. **Bold** = 본 �
 
 ---
 
-*Updated: 2026-03-18 | 105 papers + Cluster L (41 CE-skip cross-references) analyzed*
+*Updated: 2026-03-23 | 108 papers + Cluster L (44 CE-skip cross-references, incl. L7 adjacent domains) analyzed*

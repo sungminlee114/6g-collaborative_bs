@@ -363,7 +363,8 @@ def _precompute_deltas(h_real: torch.Tensor, snr_db: float = 20.0):
 def _vectorized_scheduling(deltas: np.ndarray,
                            tau_low: float = None, tau_high: float = None,
                            tau_full: float = None, delta_min: float = None,
-                           alpha_mode: str = "step",
+                           alpha_mode: str = "ramp",
+                           alpha_fixed: float = None,
                            n_max: int = 50) -> dict:
     """Vectorized scheduling with continuous alpha support.
 
@@ -373,6 +374,9 @@ def _vectorized_scheduling(deltas: np.ndarray,
         automatically sets alpha_mode="step".
       - "ramp": continuous alpha = clip((delta - delta_min) / (tau_full - delta_min), 0, 1).
 
+    Args:
+        alpha_fixed: fixed alpha for step mode's mid-tier (default 0.5).
+
     Returns dict with: alphas, full_mask, tiers, n_skip, n_delta, n_full, total.
     """
     T = len(deltas) + 1
@@ -381,7 +385,7 @@ def _vectorized_scheduling(deltas: np.ndarray,
     if tau_low is not None and tau_full is None:
         delta_min = tau_low
         tau_full = tau_high if tau_high is not None else 2 * tau_low
-        # Keep caller's alpha_mode (default is already "step")
+        alpha_mode = "step"
 
     if delta_min is None or tau_full is None:
         raise ValueError("Must provide either (tau_low, tau_high) or (delta_min, tau_full)")
@@ -399,9 +403,10 @@ def _vectorized_scheduling(deltas: np.ndarray,
     if alpha_mode == "step":
         # alpha==0 where delta <= delta_min (skip)
         # alpha==1 where delta > tau_full (full)
-        # in-between gets 0.5 (legacy EMA default)
+        # in-between gets alpha_fixed (legacy EMA default 0.5)
+        _af = alpha_fixed if alpha_fixed is not None else 0.5
         mid_mask = (alphas_inner > 0) & (~full_inner)
-        alphas_inner[mid_mask] = 0.5
+        alphas_inner[mid_mask] = _af
 
     # Build full arrays (T,) — slot 0 is always full CE
     alphas = np.zeros(T, dtype=np.float64)

@@ -1,0 +1,12 @@
+% ═══════════════════════════════════════════════════════════════════
+% Section V: Conclusion
+% ═══════════════════════════════════════════════════════════════════
+
+\section{Conclusion}\label{Conclusion}
+
+We introduced CE inference scheduling, a per-slot decision framework that determines whether to execute, approximate, or skip channel estimation given that pilot observations are always available.
+The proposed three-tier scheme (Skip/Delta/Full) with an LS-based variation monitor is CE-algorithm-agnostic and requires no modification to the underlying estimator.
+Ray-traced evaluations across 5G massive MIMO and 6G ELAA configurations demonstrate up to 98\% skip rate for static users with less than 2\,dB NMSE degradation on unseen base stations.
+Computation savings scale with CE cost, confirming that the framework is most valuable in the ELAA regime where advanced estimators dominate the PHY latency budget.
+
+Future work includes integration with GPU-native O-RAN platforms for real-time validation, extension to multi-user scheduling where per-UE skip decisions interact, and combination with temporal channel prediction as an enhanced Delta tier.

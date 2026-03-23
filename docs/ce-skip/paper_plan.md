@@ -83,20 +83,17 @@ GPU-native RAN에서 CE는 CUDA 커널이다. 실행 여부를 런타임에 결�
 
 Skip 대상은 full CE inference이지, 파일럿 수신이 아니다.
 
-### 2.2 3-Tier Adaptive Scheduling
+### 2.2 Continuous-Alpha Two-Mode Scheduling
 
 ```
 매 슬롯 t:
-  (1) h_LS(t) ← Y_pilot(t) / X_pilot          [항상 수행, ~O(N)]
-
-  (2) δ(t) ← ‖h_LS(t) − h_LS(t−1)‖ / ‖h_LS(t−1)‖   [Monitor, ~O(N)]
-
-  (3) 분기:
-      δ(t) ≤ τ_low      → T0 Skip:   ĥ(t) ← ĥ(t−1)
-      τ_low < δ(t) ≤ τ_high → T1 Delta:  ĥ(t) ← ĥ(t−1) + α·(h_LS(t) − h_LS(t−1))
-      δ(t) > τ_high      → T2 Full:   ĥ(t) ← FullCE(h_LS(t))
-
-  (4) Safety: 누적 슬롯 > N_max이면 강제 T2
+  (1) h_LS(t) ← Y_pilot(t) / X_pilot          [항상 수행]
+  (2) δ(t) ← ‖h_LS(t) − h_LS(t−1)‖ / ‖h_LS(t−1)‖   [Monitor]
+  (3) α(t) = clamp((δ(t) - δ_min) / (τ_full - δ_min), 0, 1)
+  (4) 분기:
+      δ(t) ≤ τ_full   → Blend:  ĥ(t) ← (1-α(t))·ĥ(t−1) + α(t)·h_LS(t)
+      δ(t) > τ_full    → Full:   ĥ(t) ← FullCE(h_LS(t))
+  (5) Safety: 누적 슬롯 > N_max이면 강제 Full
 ```
 
 ### 2.3 CE-Agnostic Framework
@@ -324,7 +321,7 @@ CR = Cost_adaptive / Cost_fullCE
 
 | Fig # | 내용 | 검증 대상 |
 |-------|------|-----------|
-| 1 | System model diagram (dApp + GPU L1 + 3-tier) | — |
+| 1 | System model diagram (dApp + GPU L1 + 2-mode) | — |
 | 2 | Temporal delta CDF (mobility별, config별) | H1 |
 | 3 | Pareto front: CR vs NMSE (3 CE × 3 config) | H2 핵심 |
 | 4 | Component profiling: stacked bar (monitor/LS/EMA/fullCE) | S7 |
@@ -349,7 +346,7 @@ CR = Cost_adaptive / Cost_fullCE
 | # | Contribution | 유형 | 검증 |
 |---|-------------|------|------|
 | C1 | CE inference scheduling 문제를 최초 정의. Pilot reception과 CE inference의 decoupling을 형식화 | Problem formulation | Intro + System model |
-| C2 | 3-Tier adaptive scheduling (Monitor/Delta/Full) + EMA delta update 제안 | Algorithm | S2, S4 |
+| C2 | 2-Mode adaptive scheduling (Blend with continuous alpha / Full) 제안 | Algorithm | S2, S4 |
 | C3 | CE-agnostic: LS/Genie-LMMSE/DL-CE 3종에서 일관된 효과 실증 | Generality | S2 (Pareto front) |
 | C4 | CE 비용이 클수록 skip 이득이 크다 — ELAA에서 가치 극대화 | Computational analysis | S2 (CR: LS 0.57 vs DL-CE 0.10) |
 | C5 | Throughput-computation Pareto front + effective throughput metric 제안 | Evaluation framework | S2, S5, S7 |
@@ -454,7 +451,7 @@ UE0 (static), Spike at t=143:
 
 **기존 (paper_plan 초기)**:
 - CE skip으로 X% 연산 절감
-- 3-tier (Skip/Delta/Full) scheduling
+- 2-mode (Blend/Full) continuous-alpha scheduling
 
 **수정 (실험 결과 기반)**:
 - 채널 변화는 drift + spike 두 regime
@@ -500,4 +497,4 @@ Week 5:  논문 작성
 
 ## 9. One-Sentence Summary
 
-We decouple mandatory pilot reception from optional CE inference, and propose a 3-tier event-triggered scheduling framework that is CE-algorithm-agnostic; validated across 5G mMIMO and 6G ELAA configurations with LS, LMMSE, and DL-based CE, it achieves up to 90% computation reduction with less than 3% throughput loss, where the benefit scales with CE complexity — making it most valuable for computationally expensive ELAA systems.
+We decouple mandatory pilot reception from optional CE inference, and propose a two-mode continuous-alpha scheduling framework that is CE-algorithm-agnostic: in Blend mode, channel estimates are updated via EMA with a weight that varies continuously with observed channel variation; in Full mode, triggered when variation exceeds a threshold, the complete CE algorithm is launched. Validated across 5G mMIMO and 6G ELAA configurations with LS, LMMSE, and DL-based CE, it achieves up to 90% computation reduction with less than 3% throughput loss, where the benefit scales with CE complexity — making it most valuable for computationally expensive ELAA systems.

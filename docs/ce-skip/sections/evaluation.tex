@@ -1,0 +1,73 @@
+% ═══════════════════════════════════════════════════════════════════
+% Section IV: Simulation-based Evaluation
+% ═══════════════════════════════════════════════════════════════════
+
+\section{Simulation-based Evaluation}\label{Eval}
+
+% ── A. Setup ─────────────────────────────────────────────────────
+\subsection{Simulation Setup}
+
+\textbf{Ray-tracing environment.}
+Channels are generated using Sionna~RT~\cite{sionna2023} on a Munich urban scene with 8 base stations.
+Three configurations are evaluated.
+%
+\begin{itemize}
+\item \textbf{5G mMIMO} (Config~C). $8 \times 8$ UPA, 3.5\,GHz, 256 subcarriers, 100\,MHz BW.
+\item \textbf{6G ELAA 15\,GHz} (Config~A). $24 \times 24$ UPA, 15\,GHz, 1024 subcarriers, 400\,MHz BW.
+\item \textbf{6G ELAA 28\,GHz} (Config~B). $24 \times 24$ UPA, 28\,GHz, 1024 subcarriers, 400\,MHz BW.
+\end{itemize}
+
+\textbf{Temporal trajectories.}
+Each UE follows a linear trajectory over 1000 snapshots at $\Delta t = 0.25$\,ms (matching SCS 30\,kHz slot duration).
+Three mobility classes are tested.
+Static (0\,m/s), pedestrian (1\,m/s), and vehicular (8.3\,m/s / 30\,km/h).
+
+\textbf{CE methods.}
+LS (baseline), genie-aided LMMSE (oracle second-order statistics), and PACENet-Small (57K-parameter residual CNN, trained on independent channel snapshots).
+GPU profiling is performed on NVIDIA A100.
+
+\textbf{BS split.}
+Train BSs $\{0, 5\}$; validation BSs $\{2, 4\}$; test BSs $\{1, 3, 6, 7\}$.
+Scheduling thresholds are calibrated on train BSs and evaluated without retuning on test BSs.
+
+% ── B. Results ───────────────────────────────────────────────────
+\subsection{Channel Variation Analysis}
+
+Fig.~\ref{fig:delta_ts} shows the oracle channel variation $\delta_{\mathrm{oracle}}(t) = \|\mathbf{H}(t) - \mathbf{H}(t{-}1)\|_F / \|\mathbf{H}(t{-}1)\|_F$ across mobility classes.
+Static and pedestrian UEs exhibit $\delta \ll 0.01$ for the majority of slots, confirming that the channel persists across consecutive slots and CE skip is fundamentally feasible.
+Vehicular UEs show continuous drift ($\delta \approx 0.3$) with discrete spikes ($\delta > 1.0$) caused by scatterer-induced path-set reconfiguration.
+
+\subsection{Skip Rate vs.\ NMSE Tradeoff}
+
+Fig.~\ref{fig:sr_nmse} presents the skip rate--NMSE Pareto front obtained by sweeping the single threshold $\tau_{\mathrm{full}}$ that separates Blend mode from Full CE mode.
+The continuous-alpha formulation produces a smooth tradeoff curve, as the blending weight adapts gradually to channel variation rather than switching between discrete tiers.
+Three key observations emerge.
+\begin{enumerate}
+\item Setting $\tau_{\mathrm{full}}$ near the LS noise floor ($\approx\!\sqrt{2/\gamma}$) yields safe skip rates without NMSE penalty, as the threshold separates noise-dominated $\delta$ from genuine channel variation.
+\item The tradeoff curves are consistent across LS, LMMSE, and DL-CE, confirming CE-algorithm agnosticism. The NMSE offset between methods reflects their intrinsic accuracy, not the scheduler's behavior.
+\item Static UEs achieve up to 98\% skip rate with negligible NMSE degradation. Pedestrian UEs reach 50--62\%, while vehicular UEs are limited to 9--12\%.
+\end{enumerate}
+
+\subsection{Computation Savings}
+
+Table~\ref{tab:profiling} reports per-slot A100 inference times.
+The cost model has two cases. In Blend mode, cost equals the LS monitor overhead regardless of $\alpha(t)$. In Full mode, the full CE method $\mathcal{E}$ is launched at cost $c_{\mathcal{E}}$.
+At 98\% skip rate ($\alpha = 0$) for static UEs, DL-CE (PACENet, 0.9\,ms) saves 0.88\,ms per slot, while a larger ResNet-8 (31\,ms) would save 30.4\,ms.
+The absolute savings scale linearly with CE cost, validating that the framework is most valuable for computationally expensive estimators in the ELAA regime.
+
+% TODO: Table~\ref{tab:profiling} — CE method profiling (LS, LMMSE, PACENet, ResNet)
+
+\subsection{Multi-site Generalization}
+
+Fig.~\ref{fig:generalization} compares NMSE on train BSs $\{0, 5\}$ versus unseen test BSs $\{1, 3, 6, 7\}$ using the same threshold $\tau_{\mathrm{full}}$.
+The degradation is less than 2\,dB across all configurations and mobility classes, indicating that the LS-based variation monitor captures channel dynamics that generalize across sites without per-BS retuning.
+
+\subsection{Feature Comparison}
+
+Fig.~\ref{fig:features} compares six candidate scheduling features (oracle $\delta$, LS $\delta$, power delta, decorrelation metrics).
+LS $\delta$ achieves near-oracle Pareto performance with only DMRS observations, confirming it as the practical best trigger for the two-mode scheduling policy.
+
+\subsection{Path Diversity Effect}
+
+Fig.~\ref{fig:path_diversity} reveals that skip feasibility depends more on multipath richness than on speed alone.
+A LOS-dominant pedestrian UE (1 path, median $\delta = 3 \times 10^{-5}$) is always safe to skip, while a multipath-rich pedestrian UE (118 paths, median $\delta = 0.045$) requires frequent CE refreshes despite identical speed.

@@ -1,0 +1,90 @@
+% ═══════════════════════════════════════════════════════════════════
+% Section II: System Model and Problem Formulation
+% ═══════════════════════════════════════════════════════════════════
+
+\section{System Model and Problem Formulation}\label{Formulation}
+
+% ── A. Signal Model ──────────────────────────────────────────────
+\subsection{Signal Model}
+
+We consider uplink OFDM transmission from a single-antenna user equipment (UE) to a base station (BS) equipped with an $N_r$-element uniform planar array (UPA) over $K$ subcarriers.
+At slot $t$, the received frequency-domain signal at DMRS subcarriers is
+%
+\begin{equation}\label{eq:rx}
+  \mathbf{Y}(t) = \mathrm{diag}(\mathbf{x}_p)\,\mathbf{H}(t) + \mathbf{N}(t),
+\end{equation}
+%
+where $\mathbf{H}(t) \in \mathbb{C}^{K_p \times N_r}$ is the true channel at pilot positions, $\mathbf{x}_p$ is the known pilot sequence, and $\mathbf{N}(t)$ is i.i.d.\ $\mathcal{CN}(0, \sigma_n^2)$ noise.
+The per-slot LS estimate is obtained as
+%
+\begin{equation}\label{eq:ls}
+  \hat{\mathbf{H}}_{\mathrm{LS}}(t) = \mathrm{diag}(\mathbf{x}_p)^{-1}\,\mathbf{Y}(t),
+\end{equation}
+%
+at cost $\mathcal{O}(K_p N_r)$ element-wise divisions.
+
+A \emph{full CE method} $\mathcal{E}$ takes $\hat{\mathbf{H}}_{\mathrm{LS}}(t)$ and produces a refined estimate $\hat{\mathbf{H}}_{\mathcal{E}}(t)$ over the entire resource grid.
+Examples include LMMSE ($\mathcal{O}(N_r^3 K)$) and DL-CE (neural-network forward pass).
+The per-slot cost of $\mathcal{E}$ is denoted $c_{\mathcal{E}}$.
+
+% ── B. Pilot Reception ≠ CE Inference ────────────────────────────
+\subsection{Decoupling Pilot Reception from CE Inference}
+
+3GPP NR mandates DMRS transmission in every scheduled slot~\cite{3gpp_ts38211}.
+Consequently, $\hat{\mathbf{H}}_{\mathrm{LS}}(t)$ is always available regardless of whether the BS chooses to run $\mathcal{E}$.
+We formalize this as two separable operations.
+
+\begin{itemize}
+\item \textbf{Pilot reception} (mandatory, cost $c_{\mathrm{LS}} \ll c_{\mathcal{E}}$). Compute $\hat{\mathbf{H}}_{\mathrm{LS}}(t)$ from~\eqref{eq:ls}.
+\item \textbf{Full CE inference} (discretionary, cost $c_{\mathcal{E}}$). Compute $\hat{\mathbf{H}}_{\mathcal{E}}(t) = \mathcal{E}(\hat{\mathbf{H}}_{\mathrm{LS}}(t))$.
+\end{itemize}
+
+% ── C. CE Inference Scheduling Problem ───────────────────────────
+\subsection{Problem Formulation}
+
+At each slot $t$, the scheduler observes $\hat{\mathbf{H}}_{\mathrm{LS}}(t)$ and selects a mode $m(t) \in \{\text{Blend}, \text{Full}\}$ by comparing the channel variation metric $\delta(t)$ against a single threshold $\tau_{\mathrm{full}}$.
+The output estimate is
+%
+\begin{equation}\label{eq:action}
+\hat{\mathbf{H}}(t) =
+\begin{cases}
+  (1{-}\alpha(t))\,\hat{\mathbf{H}}(t{-}1) + \alpha(t)\,\hat{\mathbf{H}}_{\mathrm{LS}}(t), & \delta(t) \leq \tau_{\mathrm{full}},\\[3pt]
+  \mathcal{E}\bigl(\hat{\mathbf{H}}_{\mathrm{LS}}(t)\bigr), & \text{otherwise},
+\end{cases}
+\end{equation}
+%
+where the blending coefficient $\alpha(t)$ is a deterministic function of $\delta(t)$,
+%
+\begin{equation}\label{eq:alpha}
+  \alpha(t) = \mathrm{clamp}\!\left(
+    \frac{\delta(t) - \delta_{\min}}{\tau_{\mathrm{full}} - \delta_{\min}},\; 0,\; 1
+  \right),
+\end{equation}
+%
+and $\delta_{\min} = \sqrt{2/\gamma}$ is the LS noise floor at SNR $\gamma$.
+When $\delta(t) \leq \delta_{\min}$, the observed change is indistinguishable from noise and $\alpha(t) = 0$ reduces to pure reuse.
+As $\delta(t)$ approaches $\tau_{\mathrm{full}}$, $\alpha(t)$ approaches $1$, progressively incorporating the fresh LS observation.
+
+The scheduling objective is to minimize the average computation cost per slot while bounding quality degradation.
+%
+\begin{equation}\label{eq:objective}
+  \min_{m(1),\ldots,m(T)} \;\frac{1}{T}\sum_{t=1}^{T} c\bigl(m(t)\bigr)
+  \quad \text{s.t.} \quad
+  \mathrm{NMSE}_{\mathrm{avg}} \leq \mathrm{NMSE}_{\mathrm{full}} + \epsilon,
+\end{equation}
+%
+where $c(\text{Blend}) = c_{\mathrm{LS}}$, $c(\text{Full}) = c_{\mathrm{LS}} + c_{\mathcal{E}}$, and $\epsilon$ is the tolerable NMSE increase.
+The only tunable parameter is the threshold $\tau_{\mathrm{full}}$, which controls the Blend-to-Full transition point.
+
+% ── D. Channel Variation Monitor ─────────────────────────────────
+\subsection{Channel Variation Monitor}
+
+The scheduling decision is driven by the normalized LS delta
+%
+\begin{equation}\label{eq:delta}
+  \delta(t) = \frac{\bigl\|\hat{\mathbf{H}}_{\mathrm{LS}}(t) - \hat{\mathbf{H}}_{\mathrm{LS}}(t{-}1)\bigr\|_F}
+              {\bigl\|\hat{\mathbf{H}}_{\mathrm{LS}}(t{-}1)\bigr\|_F},
+\end{equation}
+%
+which measures the relative change in the LS-observable channel between consecutive slots at cost $\mathcal{O}(K_p N_r)$.
+At SNR $\gamma$, the noise floor of $\delta(t)$ is approximately $\sqrt{2/\gamma}$, below which physical channel variation cannot be distinguished from estimation noise.
