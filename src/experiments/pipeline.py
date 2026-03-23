@@ -364,7 +364,6 @@ def _vectorized_scheduling(deltas: np.ndarray,
                            tau_low: float = None, tau_high: float = None,
                            tau_full: float = None, delta_min: float = None,
                            alpha_mode: str = "ramp",
-                           alpha_fixed: float = None,
                            n_max: int = 50) -> dict:
     """Vectorized scheduling with continuous alpha support.
 
@@ -373,9 +372,6 @@ def _vectorized_scheduling(deltas: np.ndarray,
         When tau_low/tau_high are provided without tau_full/delta_min,
         automatically sets alpha_mode="step".
       - "ramp": continuous alpha = clip((delta - delta_min) / (tau_full - delta_min), 0, 1).
-
-    Args:
-        alpha_fixed: fixed alpha for step mode's mid-tier (default 0.5).
 
     Returns dict with: alphas, full_mask, tiers, n_skip, n_delta, n_full, total.
     """
@@ -403,10 +399,9 @@ def _vectorized_scheduling(deltas: np.ndarray,
     if alpha_mode == "step":
         # alpha==0 where delta <= delta_min (skip)
         # alpha==1 where delta > tau_full (full)
-        # in-between gets alpha_fixed (legacy EMA default 0.5)
-        _af = alpha_fixed if alpha_fixed is not None else 0.5
+        # in-between gets 0.5 (legacy EMA default)
         mid_mask = (alphas_inner > 0) & (~full_inner)
-        alphas_inner[mid_mask] = _af
+        alphas_inner[mid_mask] = 0.5
 
     # Build full arrays (T,) — slot 0 is always full CE
     alphas = np.zeros(T, dtype=np.float64)
@@ -431,10 +426,10 @@ def _vectorized_scheduling(deltas: np.ndarray,
                 consecutive = 0
 
     # Derive legacy tiers: alpha==0 → 0 (skip), 0<alpha<1 → 1 (delta), full → 2
+    # Order matters: set skip first, then full overrides (full_mask slots have alpha=1.0)
     tiers = np.ones(T, dtype=np.int32)  # default: delta (tier 1)
-    tiers[full_mask] = 2
     tiers[alphas < 1e-8] = 0
-    tiers[full_mask] = 2  # ensure full overrides
+    tiers[full_mask] = 2
 
     return {
         "alphas": alphas,
@@ -551,7 +546,6 @@ def _compute_nmse_from_tiers(h_real: torch.Tensor, h_ls: torch.Tensor,
     alphas = np.zeros(T, dtype=np.float64)
     full_mask = tiers == 2
     alphas[tiers == 1] = alpha  # delta tier → fixed alpha
-    alphas[full_mask] = 1.0     # placeholder for full slots
 
     return _compute_nmse_from_alphas(h_real, h_ls, alphas, full_mask,
                                       delta_mode=delta_mode, h_ce=h_ce)
@@ -640,8 +634,12 @@ def _batch_scheduling_sweep(h_real: torch.Tensor, h_ls: torch.Tensor,
     results = []
 
     for tau in tqdm(tau_values, desc="    τ sweep", unit="τ", leave=False):
-        sched = _vectorized_scheduling(deltas, tau_low=tau, tau_high=2 * tau,
-                                        n_max=n_max, alpha_mode=alpha_mode)
+        if alpha_mode == "ramp":
+            sched = _vectorized_scheduling(deltas, tau_full=2 * tau, delta_min=tau,
+                                            alpha_mode="ramp", n_max=n_max)
+        else:
+            sched = _vectorized_scheduling(deltas, tau_low=tau, tau_high=2 * tau,
+                                            n_max=n_max)
 
         nmse_arr = _compute_nmse_from_alphas(h_real, h_ls, sched["alphas"],
                                               sched["full_mask"], delta_mode=delta_mode)
