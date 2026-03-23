@@ -1,0 +1,86 @@
+% ═══════════════════════════════════════════════════════════════════
+% Section III: Proposed Scheduling Policy
+% ═══════════════════════════════════════════════════════════════════
+
+\section{Proposed Scheduling Policy}\label{Design}
+
+% ── A. Continuous-Alpha Decision Rule ──────────────────────────────
+\subsection{Continuous-Alpha Decision Rule}
+
+Algorithm~\ref{alg:scheduler} summarizes the proposed policy.
+At each slot, the monitor computes $\delta(t)$ from~\eqref{eq:delta} and maps it to a blending weight $\alpha(t)$ that interpolates continuously between full reuse and full LS reliance.
+
+\begin{algorithm}[t]
+\caption{Opportunistic CE Inference Scheduler}\label{alg:scheduler}
+\begin{algorithmic}[1]
+\Require LS estimates $\hat{\mathbf{H}}_{\text{LS}}(t)$, full-CE threshold $\tau_{\text{full}}$, noise floor $\delta_{\min}$, safety counter $N_{\max}$
+\State $n_{\text{skip}} \gets 0$
+\For{each slot $t = 1, 2, \ldots, T$}
+    \State Compute $\delta(t)$ via~\eqref{eq:delta}
+    \If{$n_{\text{skip}} \geq N_{\max}$ \textbf{or} $\delta(t) > \tau_{\text{full}}$} \Comment{Full CE}
+        \State $a(t) \gets \text{Full}$;\; $n_{\text{skip}} \gets 0$
+        \State $\hat{\mathbf{H}}(t) \gets \mathcal{E}\bigl(\hat{\mathbf{H}}_{\text{LS}}(t)\bigr)$
+    \Else \Comment{Blend}
+        \State $\alpha(t) \gets \mathrm{clamp}\!\Bigl(\frac{\delta(t) - \delta_{\min}}{\tau_{\text{full}} - \delta_{\min}},\; 0,\; 1\Bigr)$ \Comment{via~\eqref{eq:alpha}}
+        \State $\hat{\mathbf{H}}(t) \gets \bigl(1 - \alpha(t)\bigr)\,\hat{\mathbf{H}}(t{-}1) + \alpha(t)\,\hat{\mathbf{H}}_{\text{LS}}(t)$
+        \State $n_{\text{skip}} \gets n_{\text{skip}} + 1$
+    \EndIf
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+The blending weight is given by
+%
+\begin{equation}\label{eq:alpha}
+  \alpha(t) = \mathrm{clamp}\!\left(
+    \frac{\delta(t) - \delta_{\min}}{\tau_{\text{full}} - \delta_{\min}},\; 0,\; 1
+  \right),
+\end{equation}
+%
+where $\delta_{\min} = \sqrt{2/\gamma}$ is the LS noise floor at SNR $\gamma$.
+When $\delta(t) \leq \delta_{\min}$, the observed variation is indistinguishable from estimation noise, so $\alpha(t) = 0$ and the previous estimate is reused exactly.
+As $\delta(t)$ increases toward $\tau_{\text{full}}$, $\alpha(t)$ grows linearly toward one, giving progressively more weight to the fresh LS observation.
+
+The policy has two thresholds and one safety parameter.
+The threshold $\tau_{\text{full}}$ controls when the full CE method $\mathcal{E}$ is triggered.
+The noise floor $\delta_{\min}$ (typically set to $\sqrt{2/\gamma}$) determines the boundary below which $\alpha(t) = 0$.
+The safety counter $N_{\max}$ enforces a maximum number of consecutive blended slots, preventing unbounded staleness accumulation.
+
+% ── B. Operating Modes ─────────────────────────────────────────────
+\subsection{Operating Modes}
+
+The scheduler operates in two modes.
+
+\textbf{Blend} ($\delta \leq \tau_{\text{full}}$).
+The blending weight $\alpha(t)$ varies continuously from 0 (pure reuse) to 1 (full LS weight).
+When $\delta(t)$ falls below the noise floor $\delta_{\min}$, $\alpha(t) = 0$ and the estimate is reused at zero additional cost beyond the LS monitor.
+As $\delta(t)$ increases, more weight is given to the fresh LS observation, allowing the scheduler to track gradual channel drift without launching the full CE method.
+
+\textbf{Full CE} ($\delta > \tau_{\text{full}}$ or safety trigger).
+A large channel change is detected, or the safety counter expires. The full CE method $\mathcal{E}$ is launched to produce a fresh high-quality estimate.
+
+% ── C. CE-Algorithm Agnosticism ──────────────────────────────────
+\subsection{CE-Algorithm Agnosticism}
+
+The scheduler interfaces with the CE method $\mathcal{E}$ only through its output $\hat{\mathbf{H}}_{\mathcal{E}}(t)$.
+It does not inspect the internal structure of $\mathcal{E}$, making it applicable to any CE algorithm.
+We validate this property across three methods of increasing cost and accuracy.
+%
+\begin{itemize}
+\item \textbf{LS} (baseline). $\mathcal{E} = \mathrm{identity}$; $c_{\mathcal{E}} \approx 0$.
+\item \textbf{Genie-aided LMMSE}. Assumes perfect second-order statistics; $c_{\mathcal{E}} = \mathcal{O}(N_r^3 K)$.
+\item \textbf{DL-CE (PACENet)}. Residual CNN with 57K parameters; $c_{\mathcal{E}} \approx 0.9$\,ms on A100 for ELAA.
+\end{itemize}
+
+% ── D. Evaluation Metrics ────────────────────────────────────────
+\subsection{Skip-Aware Metrics}
+
+We define four metrics that extend per-slot NMSE to the scheduling setting.
+
+\textbf{Skip Rate (SR)} $= N_{\alpha=0} / T$, the fraction of slots where $\alpha(t) = 0$ (pure reuse).
+
+\textbf{Blend Rate (BR)} $= N_{0 < \alpha < 1} / T$, the fraction of slots where $0 < \alpha(t) < 1$ (partial blending).
+
+\textbf{Computation Ratio (CR)} $= \bar{c}_{\text{sched}} / c_{\mathcal{E}}$, the ratio of average per-slot cost under scheduling to the cost of always running $\mathcal{E}$.
+
+\textbf{NMSE} is computed over all slots (including blended and reused ones) against the ground-truth channel, capturing the quality degradation from reuse and continuous blending.
