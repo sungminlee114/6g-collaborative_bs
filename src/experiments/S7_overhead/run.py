@@ -4,7 +4,7 @@ Measures actual GPU wall-clock time for each component:
   - LS computation (Y/X)
   - Monitor (norm comparison)
   - Full CE (LS / LMMSE / DL-CE)
-  - EMA update (T1)
+  - Blend update (α-weighted)
 
 Then computes effective throughput: per-UE rate loss vs system capacity gain.
 
@@ -85,13 +85,13 @@ def run_overhead_analysis(preset: str, gpu: int = 0):
     results["components"]["monitor"] = {"time_ms": t_monitor, "desc": "δ = norm(diff)/norm(ref)"}
     print(f"  Monitor (δ compute):   {t_monitor:.4f} ms")
 
-    # 3. EMA update (T1)
-    alpha = 0.5
-    def op_ema():
+    # 3. Blend update (cost is independent of alpha value — single weighted sum)
+    alpha = 0.5  # placeholder; blend cost is the same for any alpha
+    def op_blend():
         return alpha * h_curr + (1 - alpha) * h_hat_prev
-    t_ema = profile_operation(op_ema)
-    results["components"]["ema_update"] = {"time_ms": t_ema, "desc": "α·h_LS + (1-α)·ĥ_prev"}
-    print(f"  EMA update (T1):       {t_ema:.4f} ms")
+    t_blend = profile_operation(op_blend)
+    results["components"]["blend_update"] = {"time_ms": t_blend, "desc": "α·h_LS + (1-α)·ĥ_prev"}
+    print(f"  Blend update:          {t_blend:.4f} ms")
 
     # 4. Full CE: LMMSE
     lmmse = GenieLMMSE(device=device)

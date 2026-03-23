@@ -40,7 +40,7 @@ To the best of our knowledge, this is the first work to formalize CE inference s
 We make two contributions.
 
 \begin{enumerate}
-\item We formalize \emph{CE inference scheduling} as a per-slot decision problem that decouples mandatory pilot reception from discretionary CE inference, and propose a two-mode adaptive scheduling scheme. In \emph{Blend} mode, the estimate is updated via exponential moving average whose weight varies continuously with observed channel variation. In \emph{Full} mode, triggered when variation exceeds a threshold, the complete CE algorithm is launched.
+\item We formalize \emph{CE inference scheduling} as a per-slot decision problem that decouples mandatory pilot reception from discretionary CE inference, and propose a two-mode adaptive scheduling scheme. In \emph{Blend} mode, the estimate is updated via exponential smoothing whose weight varies continuously with observed channel variation. In \emph{Full} mode, triggered when variation exceeds a threshold, the complete CE algorithm is launched.
 
 \item We demonstrate that the proposed scheme is CE-algorithm-agnostic: it yields consistent computation\,--\,accuracy tradeoffs across LS, genie-aided LMMSE, and DL-CE without method-specific tuning, and scheduling thresholds calibrated on a subset of base stations transfer to unseen sites with ${<}\,2$\,dB NMSE degradation.
 \end{enumerate}

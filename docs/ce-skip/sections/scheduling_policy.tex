@@ -13,15 +13,15 @@ At each slot, the monitor computes $\delta(t)$ from~\eqref{eq:delta} and maps it
 \begin{algorithm}[t]
 \caption{Opportunistic CE Inference Scheduler}\label{alg:scheduler}
 \begin{algorithmic}[1]
-\Require LS estimates $\hat{\mathbf{H}}_{\text{LS}}(t)$, full-CE threshold $\tau_{\text{full}}$, noise floor $\delta_{\min}$, safety counter $N_{\max}$
+\Require LS estimates $\hat{\mathbf{H}}_{\text{LS}}(t)$, full-CE threshold $\tau_{\mathrm{full}}$, noise floor $\delta_{\min}$, safety counter $N_{\max}$
 \State $n_{\text{skip}} \gets 0$
 \For{each slot $t = 1, 2, \ldots, T$}
     \State Compute $\delta(t)$ via~\eqref{eq:delta}
-    \If{$n_{\text{skip}} \geq N_{\max}$ \textbf{or} $\delta(t) > \tau_{\text{full}}$} \Comment{Full CE}
+    \If{$n_{\text{skip}} \geq N_{\max}$ \textbf{or} $\delta(t) > \tau_{\mathrm{full}}$} \Comment{Full CE}
         \State $a(t) \gets \text{Full}$;\; $n_{\text{skip}} \gets 0$
         \State $\hat{\mathbf{H}}(t) \gets \mathcal{E}\bigl(\hat{\mathbf{H}}_{\text{LS}}(t)\bigr)$
     \Else \Comment{Blend}
-        \State $\alpha(t) \gets \mathrm{clamp}\!\Bigl(\frac{\delta(t) - \delta_{\min}}{\tau_{\text{full}} - \delta_{\min}},\; 0,\; 1\Bigr)$ \Comment{via~\eqref{eq:alpha}}
+        \State $\alpha(t) \gets \mathrm{clamp}\!\Bigl(\frac{\delta(t) - \delta_{\min}}{\tau_{\mathrm{full}} - \delta_{\min}},\; 0,\; 1\Bigr)$ \Comment{via~\eqref{eq:alpha}}
         \State $\hat{\mathbf{H}}(t) \gets \bigl(1 - \alpha(t)\bigr)\,\hat{\mathbf{H}}(t{-}1) + \alpha(t)\,\hat{\mathbf{H}}_{\text{LS}}(t)$
         \State $n_{\text{skip}} \gets n_{\text{skip}} + 1$
     \EndIf
@@ -33,16 +33,16 @@ The blending weight is given by
 %
 \begin{equation}\label{eq:alpha}
   \alpha(t) = \mathrm{clamp}\!\left(
-    \frac{\delta(t) - \delta_{\min}}{\tau_{\text{full}} - \delta_{\min}},\; 0,\; 1
+    \frac{\delta(t) - \delta_{\min}}{\tau_{\mathrm{full}} - \delta_{\min}},\; 0,\; 1
   \right),
 \end{equation}
 %
 where $\delta_{\min} = \sqrt{2/\gamma}$ is the LS noise floor at SNR $\gamma$.
 When $\delta(t) \leq \delta_{\min}$, the observed variation is indistinguishable from estimation noise, so $\alpha(t) = 0$ and the previous estimate is reused exactly.
-As $\delta(t)$ increases toward $\tau_{\text{full}}$, $\alpha(t)$ grows linearly toward one, giving progressively more weight to the fresh LS observation.
+As $\delta(t)$ increases toward $\tau_{\mathrm{full}}$, $\alpha(t)$ grows linearly toward one, giving progressively more weight to the fresh LS observation.
 
 The policy has two thresholds and one safety parameter.
-The threshold $\tau_{\text{full}}$ controls when the full CE method $\mathcal{E}$ is triggered.
+The threshold $\tau_{\mathrm{full}}$ controls when the full CE method $\mathcal{E}$ is triggered.
 The noise floor $\delta_{\min}$ (typically set to $\sqrt{2/\gamma}$) determines the boundary below which $\alpha(t) = 0$.
 The safety counter $N_{\max}$ enforces a maximum number of consecutive blended slots, preventing unbounded staleness accumulation.
 
@@ -51,12 +51,12 @@ The safety counter $N_{\max}$ enforces a maximum number of consecutive blended s
 
 The scheduler operates in two modes.
 
-\textbf{Blend} ($\delta \leq \tau_{\text{full}}$).
+\textbf{Blend} ($\delta \leq \tau_{\mathrm{full}}$).
 The blending weight $\alpha(t)$ varies continuously from 0 (pure reuse) to 1 (full LS weight).
 When $\delta(t)$ falls below the noise floor $\delta_{\min}$, $\alpha(t) = 0$ and the estimate is reused at zero additional cost beyond the LS monitor.
 As $\delta(t)$ increases, more weight is given to the fresh LS observation, allowing the scheduler to track gradual channel drift without launching the full CE method.
 
-\textbf{Full CE} ($\delta > \tau_{\text{full}}$ or safety trigger).
+\textbf{Full CE} ($\delta > \tau_{\mathrm{full}}$ or safety trigger).
 A large channel change is detected, or the safety counter expires. The full CE method $\mathcal{E}$ is launched to produce a fresh high-quality estimate.
 
 % ── C. CE-Algorithm Agnosticism ──────────────────────────────────
