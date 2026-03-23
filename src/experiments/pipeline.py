@@ -360,63 +360,115 @@ def _precompute_deltas(h_real: torch.Tensor, snr_db: float = 20.0):
     return h_ls, deltas_ls, deltas_oracle, nmse_reuse
 
 
-def _vectorized_scheduling(deltas: np.ndarray, tau_low: float, tau_high: float,
+def _vectorized_scheduling(deltas: np.ndarray,
+                           tau_low: float = None, tau_high: float = None,
+                           tau_full: float = None, delta_min: float = None,
+                           alpha_mode: str = "step",
                            n_max: int = 50) -> dict:
-    """Vectorized scheduling decision for a single tau (no Python loop over T).
+    """Vectorized scheduling with continuous alpha support.
 
-    Returns dict with n_skip, n_delta, n_full, total, tiers.
+    Modes:
+      - "step" (legacy): discrete 3-tier from tau_low/tau_high.
+        When tau_low/tau_high are provided without tau_full/delta_min,
+        automatically sets alpha_mode="step".
+      - "ramp": continuous alpha = clip((delta - delta_min) / (tau_full - delta_min), 0, 1).
+
+    Returns dict with: alphas, full_mask, tiers, n_skip, n_delta, n_full, total.
     """
     T = len(deltas) + 1
-    tiers = np.full(T, 2, dtype=np.int32)  # default: full CE
-    tiers[0] = 2  # first slot always full
 
-    # Classify tiers based on delta thresholds
-    skip_mask = deltas <= tau_low        # T0
-    delta_mask = (deltas > tau_low) & (deltas <= tau_high)  # T1
-    full_mask = deltas > tau_high        # T2
+    # Legacy compat: tau_low/tau_high → map to delta_min/tau_full
+    if tau_low is not None and tau_full is None:
+        delta_min = tau_low
+        tau_full = tau_high if tau_high is not None else 2 * tau_low
+        # Keep caller's alpha_mode (default is already "step")
 
-    tiers[1:][skip_mask] = 0
-    tiers[1:][delta_mask] = 1
-    tiers[1:][full_mask] = 2
+    if delta_min is None or tau_full is None:
+        raise ValueError("Must provide either (tau_low, tau_high) or (delta_min, tau_full)")
 
-    # Safety: force full CE after n_max consecutive non-full slots
+    # -- Compute continuous alphas (T-1,) for slots 1..T-1 --
+    denom = tau_full - delta_min
+    if denom < 1e-12:
+        denom = 1e-12
+    alphas_inner = np.clip((deltas - delta_min) / denom, 0.0, 1.0)  # (T-1,)
+
+    # Full mask: delta exceeds tau_full
+    full_inner = deltas > tau_full  # (T-1,) bool
+
+    # For step mode, quantize alphas to {0, fixed_mid, 1}
+    if alpha_mode == "step":
+        # alpha==0 where delta <= delta_min (skip)
+        # alpha==1 where delta > tau_full (full)
+        # in-between gets 0.5 (legacy EMA default)
+        mid_mask = (alphas_inner > 0) & (~full_inner)
+        alphas_inner[mid_mask] = 0.5
+
+    # Build full arrays (T,) — slot 0 is always full CE
+    alphas = np.zeros(T, dtype=np.float64)
+    alphas[0] = 1.0  # placeholder (slot 0 = full)
+    alphas[1:] = alphas_inner
+
+    full_mask = np.zeros(T, dtype=bool)
+    full_mask[0] = True
+    full_mask[1:] = full_inner
+
+    # Safety: force full CE after n_max consecutive non-Full slots
     if n_max < T:
         consecutive = 0
         for t in range(1, T):
-            if tiers[t] != 2:
+            if not full_mask[t]:
                 consecutive += 1
                 if consecutive >= n_max:
-                    tiers[t] = 2
+                    full_mask[t] = True
+                    alphas[t] = 1.0
                     consecutive = 0
             else:
                 consecutive = 0
 
+    # Derive legacy tiers: alpha==0 → 0 (skip), 0<alpha<1 → 1 (delta), full → 2
+    tiers = np.ones(T, dtype=np.int32)  # default: delta (tier 1)
+    tiers[full_mask] = 2
+    tiers[alphas < 1e-8] = 0
+    tiers[full_mask] = 2  # ensure full overrides
+
     return {
+        "alphas": alphas,
+        "full_mask": full_mask,
+        "tiers": tiers,
         "n_skip": int((tiers == 0).sum()),
         "n_delta": int((tiers == 1).sum()),
         "n_full": int((tiers == 2).sum()),
         "total": T,
-        "tiers": tiers,
     }
 
 
-def _compute_nmse_from_tiers(h_real: torch.Tensor, h_ls: torch.Tensor,
-                              tiers: np.ndarray, alpha: float = 0.5,
-                              delta_mode: str = "ema",
-                              h_ce: torch.Tensor = None) -> np.ndarray:
-    """Compute per-slot NMSE given scheduling decisions.
+def _compute_nmse_from_alphas(h_real: torch.Tensor, h_ls: torch.Tensor,
+                               alphas: np.ndarray, full_mask: np.ndarray,
+                               delta_mode: str = "ema",
+                               h_ce: torch.Tensor = None) -> np.ndarray:
+    """Compute per-slot NMSE using continuous alpha scheduling.
 
-    Vectorized: processes contiguous skip-segments in bulk (numpy),
-    only loops over anchor/EMA boundaries.  ~10-50x faster than per-slot Python loop.
+    Per-slot update rule:
+      - Full (full_mask[t]=True): h_hat[t] = h_ce[t]
+      - alpha < 1e-8 (skip): h_hat[t] = h_hat[t-1]  (fast path for segments)
+      - Otherwise: h_hat[t] = alphas[t]*h_ls[t] + (1-alphas[t])*h_hat[t-1]
 
     Args:
-        h_ce: optional pre-computed CE output (e.g., DL-CE). If None, uses h_ls.
+        h_real: (T, 2, n_ant, n_sc) ground truth
+        h_ls: (T, 2, n_ant, n_sc) noisy LS estimates
+        alphas: (T,) continuous blending weight per slot
+        full_mask: (T,) bool — True means use h_ce directly
+        delta_mode: "ema" (default), ignored for continuous alpha
+        h_ce: optional DL-CE output; if None, uses h_ls
+
+    Returns:
+        nmse: (T,) per-slot NMSE
     """
     T = h_real.shape[0]
     if h_ce is None:
         h_ce = h_ls
 
-    # Work in numpy for fast element-wise ops (avoid torch per-element overhead)
+    # Work in numpy for fast element-wise ops
     h_real_np = h_real.reshape(T, -1).numpy() if h_real.is_contiguous() else h_real.reshape(T, -1).contiguous().numpy()
     h_ls_np = h_ls.reshape(T, -1).numpy() if h_ls.is_contiguous() else h_ls.reshape(T, -1).contiguous().numpy()
     h_ce_np = h_ce.reshape(T, -1).numpy() if h_ce.is_contiguous() else h_ce.reshape(T, -1).contiguous().numpy()
@@ -424,9 +476,8 @@ def _compute_nmse_from_tiers(h_real: torch.Tensor, h_ls: torch.Tensor,
     h_hat = np.empty_like(h_real_np)
     h_hat[0] = h_ce_np[0]
 
-    # Find anchor points (tier == 2) — these break dependency chains
-    anchors = np.where(tiers == 2)[0]
-    # Set all anchors at once (vectorized)
+    # Find full CE anchor points — these break dependency chains
+    anchors = np.where(full_mask)[0]
     h_hat[anchors] = h_ce_np[anchors]
 
     # Process segments between consecutive anchors
@@ -435,55 +486,85 @@ def _compute_nmse_from_tiers(h_real: torch.Tensor, h_ls: torch.Tensor,
 
     for start, end in zip(seg_starts, seg_ends):
         if start + 1 >= end:
-            continue  # no non-anchor slots in this segment
-
-        seg_tiers = tiers[start + 1 : end]
-
-        # Fast path: all-skip segment (very common at high skip rates)
-        if (seg_tiers == 0).all():
-            h_hat[start + 1 : end] = h_hat[start]  # vectorized broadcast
             continue
 
-        # Fast path: all-EMA segment
-        if delta_mode == "ema" and (seg_tiers == 1).all():
-            beta = 1.0 - alpha
-            anchor_val = h_hat[start]
-            for t in range(start + 1, end):
-                anchor_val = alpha * h_ls_np[t] + beta * anchor_val
-                h_hat[t] = anchor_val
+        seg_alphas = alphas[start + 1 : end]
+
+        # Fast path: all-skip segment (alpha < 1e-8)
+        if (seg_alphas < 1e-8).all():
+            h_hat[start + 1 : end] = h_hat[start]
             continue
 
-        # Mixed segment: fall back to per-slot (rare)
-        beta = 1.0 - alpha
+        # General path: per-slot blending with continuous alpha
+        val = h_hat[start]
         for t in range(start + 1, end):
-            tier = seg_tiers[t - start - 1]
-            if tier == 2:
-                h_hat[t] = h_ce_np[t]
-            elif tier == 0:
-                h_hat[t] = h_hat[t - 1]
+            a = alphas[t]
+            if a < 1e-8:
+                h_hat[t] = val
             else:
-                if delta_mode == "ema":
-                    h_hat[t] = alpha * h_ls_np[t] + beta * h_hat[t - 1]
-                elif delta_mode == "ls_delta":
-                    h_hat[t] = h_hat[t - 1] + alpha * (h_ls_np[t] - h_ls_np[t - 1])
-                else:
-                    h_hat[t] = h_hat[t - 1]
+                val = a * h_ls_np[t] + (1.0 - a) * val
+                h_hat[t] = val
 
-    # NMSE per slot (numpy, no torch overhead)
+    # NMSE per slot
     diff = h_hat - h_real_np
     nmse = (diff * diff).sum(axis=1) / np.maximum((h_real_np * h_real_np).sum(axis=1), 1e-12)
     return nmse
 
 
+def _compute_nmse_from_tiers(h_real: torch.Tensor, h_ls: torch.Tensor,
+                              tiers: np.ndarray, alpha: float = 0.5,
+                              delta_mode: str = "ema",
+                              h_ce: torch.Tensor = None) -> np.ndarray:
+    """Wrapper: convert discrete tiers + fixed alpha → continuous alphas, then delegate.
+
+    Tier mapping: 0 (skip) → alpha=0, 1 (delta) → alpha=fixed, 2 (full) → full_mask=True.
+    Supports delta_mode="ls_delta" by falling back to legacy per-slot loop.
+    """
+    T = h_real.shape[0]
+
+    # For ls_delta mode, we need the legacy per-slot loop (different update rule)
+    if delta_mode == "ls_delta":
+        if h_ce is None:
+            h_ce = h_ls
+        h_real_np = h_real.reshape(T, -1).numpy() if h_real.is_contiguous() else h_real.reshape(T, -1).contiguous().numpy()
+        h_ls_np = h_ls.reshape(T, -1).numpy() if h_ls.is_contiguous() else h_ls.reshape(T, -1).contiguous().numpy()
+        h_ce_np = h_ce.reshape(T, -1).numpy() if h_ce.is_contiguous() else h_ce.reshape(T, -1).contiguous().numpy()
+        h_hat = np.empty_like(h_real_np)
+        h_hat[0] = h_ce_np[0]
+        for t in range(1, T):
+            tier = tiers[t]
+            if tier == 2:
+                h_hat[t] = h_ce_np[t]
+            elif tier == 0:
+                h_hat[t] = h_hat[t - 1]
+            else:
+                h_hat[t] = h_hat[t - 1] + alpha * (h_ls_np[t] - h_ls_np[t - 1])
+        diff = h_hat - h_real_np
+        return (diff * diff).sum(axis=1) / np.maximum((h_real_np * h_real_np).sum(axis=1), 1e-12)
+
+    # Convert tiers → continuous alphas + full_mask
+    alphas = np.zeros(T, dtype=np.float64)
+    full_mask = tiers == 2
+    alphas[tiers == 1] = alpha  # delta tier → fixed alpha
+    alphas[full_mask] = 1.0     # placeholder for full slots
+
+    return _compute_nmse_from_alphas(h_real, h_ls, alphas, full_mask,
+                                      delta_mode=delta_mode, h_ce=h_ce)
+
+
 def _batch_nmse_multi_tau(h_real: torch.Tensor, h_ls: torch.Tensor,
                            deltas: np.ndarray, tau_values: list,
                            alpha: float = 0.5, delta_mode: str = "ema",
-                           h_ce: torch.Tensor = None) -> list:
+                           h_ce: torch.Tensor = None,
+                           alpha_mode: str = "step") -> list:
     """Compute NMSE for multiple tau values in parallel.
 
     Each tau is independent (same h_ls, different scheduling).
     Pre-converts tensors to numpy once, then uses ThreadPool on pure-numpy work
     (no GIL contention since numpy releases GIL for C-level ops).
+
+    Args:
+        alpha_mode: "step" (legacy 3-tier) or "ramp" (continuous alpha).
     """
     from concurrent.futures import ThreadPoolExecutor
 
@@ -494,38 +575,34 @@ def _batch_nmse_multi_tau(h_real: torch.Tensor, h_ls: torch.Tensor,
     _h_ce_np = _h_ls_np if h_ce is None else (h_ce.reshape(T, -1).numpy() if h_ce.is_contiguous() else h_ce.reshape(T, -1).contiguous().numpy())
 
     def _one_tau(tau):
-        sched = _vectorized_scheduling(deltas, tau_low=tau, tau_high=2*tau)
-        tiers = sched["tiers"]
+        sched = _vectorized_scheduling(deltas, tau_full=2*tau, delta_min=tau,
+                                        alpha_mode=alpha_mode)
+        alphas = sched["alphas"]
+        full_mask = sched["full_mask"]
 
         # Inline fast NMSE computation (pure numpy, GIL-free)
         h_hat = np.empty_like(_h_real_np)
         h_hat[0] = _h_ce_np[0]
-        anchors = np.where(tiers == 2)[0]
+        anchors = np.where(full_mask)[0]
         h_hat[anchors] = _h_ce_np[anchors]
         seg_starts = anchors
         seg_ends = np.append(anchors[1:], T)
-        beta = 1.0 - alpha
 
         for start, end in zip(seg_starts, seg_ends):
             if start + 1 >= end:
                 continue
-            seg_tiers = tiers[start + 1 : end]
-            if (seg_tiers == 0).all():
+            seg_alphas = alphas[start + 1 : end]
+            if (seg_alphas < 1e-8).all():
                 h_hat[start + 1 : end] = h_hat[start]
-            elif delta_mode == "ema" and (seg_tiers == 1).all():
-                val = h_hat[start]
-                for t in range(start + 1, end):
-                    val = alpha * _h_ls_np[t] + beta * val
+                continue
+            val = h_hat[start]
+            for t in range(start + 1, end):
+                a = alphas[t]
+                if a < 1e-8:
                     h_hat[t] = val
-            else:
-                for t in range(start + 1, end):
-                    tier = seg_tiers[t - start - 1]
-                    if tier == 0:
-                        h_hat[t] = h_hat[t - 1]
-                    elif tier == 1:
-                        h_hat[t] = alpha * _h_ls_np[t] + beta * h_hat[t - 1]
-                    else:
-                        h_hat[t] = _h_ce_np[t]
+                else:
+                    val = a * _h_ls_np[t] + (1.0 - a) * val
+                    h_hat[t] = val
 
         diff = h_hat - _h_real_np
         nmse = (diff * diff).sum(axis=1) / np.maximum((_h_real_np * _h_real_np).sum(axis=1), 1e-12)
@@ -534,7 +611,7 @@ def _batch_nmse_multi_tau(h_real: torch.Tensor, h_ls: torch.Tensor,
             "tau": tau, "nmse_arr": nmse,
             "n_skip": sched["n_skip"], "n_delta": sched["n_delta"],
             "n_full": sched["n_full"], "total": sched["total"],
-            "tiers": sched["tiers"],
+            "tiers": sched["tiers"], "alphas": sched["alphas"],
         }
 
     with ThreadPoolExecutor(max_workers=min(len(tau_values), 32)) as pool:
@@ -545,48 +622,28 @@ def _batch_nmse_multi_tau(h_real: torch.Tensor, h_ls: torch.Tensor,
 def _batch_scheduling_sweep(h_real: torch.Tensor, h_ls: torch.Tensor,
                              deltas: np.ndarray, tau_values: list,
                              alpha: float = 0.5, delta_mode: str = "ema",
-                             n_max: int = 50) -> list:
+                             n_max: int = 50, alpha_mode: str = "step") -> list:
     """Batch tau sweep: compute scheduling + NMSE for all taus in one pass.
 
-    Shares h_ls and deltas across taus. The sequential h_hat loop runs once per tau
-    but uses C-speed numpy for tier classification.
+    Shares h_ls and deltas across taus. Uses _compute_nmse_from_alphas internally.
 
-    Returns list of dicts: [{tau, nmse_arr, n_skip, n_delta, n_full, total, tiers}, ...]
+    Args:
+        alpha_mode: "step" (legacy 3-tier) or "ramp" (continuous alpha).
+
+    Returns list of dicts: [{tau, nmse_arr, n_skip, n_delta, n_full, total, tiers, alphas}, ...]
     """
-    T = h_real.shape[0]
     results = []
 
-    # Pre-flatten for NMSE computation
-    h_real_flat = h_real.flatten(1)
-    h_real_sq = h_real_flat.pow(2).sum(1)  # (T,)
-
     for tau in tqdm(tau_values, desc="    τ sweep", unit="τ", leave=False):
-        sched = _vectorized_scheduling(deltas, tau_low=tau, tau_high=2 * tau, n_max=n_max)
-        tiers = sched["tiers"]
+        sched = _vectorized_scheduling(deltas, tau_low=tau, tau_high=2 * tau,
+                                        n_max=n_max, alpha_mode=alpha_mode)
 
-        # Build h_hat — sequential but single pass
-        h_hat = torch.zeros_like(h_real)
-        h_hat[0] = h_ls[0]
-        for t in range(1, T):
-            tier = tiers[t]
-            if tier == 2:
-                h_hat[t] = h_ls[t]
-            elif tier == 0:
-                h_hat[t] = h_hat[t - 1]
-            else:
-                if delta_mode == "ema":
-                    h_hat[t] = alpha * h_ls[t] + (1 - alpha) * h_hat[t - 1]
-                elif delta_mode == "ls_delta":
-                    h_hat[t] = h_hat[t - 1] + alpha * (h_ls[t] - h_ls[t - 1])
-                else:
-                    h_hat[t] = h_hat[t - 1]
-
-        # Vectorized NMSE
-        diff_sq = (h_hat - h_real).flatten(1).pow(2).sum(1)
-        nmse_arr = (diff_sq / h_real_sq.clamp(min=1e-12)).numpy()
+        nmse_arr = _compute_nmse_from_alphas(h_real, h_ls, sched["alphas"],
+                                              sched["full_mask"], delta_mode=delta_mode)
 
         results.append({
-            "tau": tau, "nmse_arr": nmse_arr, "tiers": tiers,
+            "tau": tau, "nmse_arr": nmse_arr,
+            "tiers": sched["tiers"], "alphas": sched["alphas"],
             **{k: sched[k] for k in ["n_skip", "n_delta", "n_full", "total"]},
         })
 
