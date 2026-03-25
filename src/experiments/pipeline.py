@@ -564,61 +564,51 @@ def _batch_nmse_multi_tau(h_real: torch.Tensor, h_ls: torch.Tensor,
     T = h_real.shape[0]
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Move to GPU once, flattened: (T, D)
+    # Move to GPU once, flattened: (T, D). Only h_real + h_ls = ~21GB
     h_real_g = h_real.reshape(T, -1).to(device, non_blocking=True)
     h_ls_g = h_ls.reshape(T, -1).to(device, non_blocking=True)
     h_ce_g = h_ls_g if h_ce is None else h_ce.reshape(T, -1).to(device, non_blocking=True)
 
-    # Precompute denominator for NMSE on GPU
+    # Precompute denominator for NMSE on GPU (tiny: T floats)
     h_real_pow = (h_real_g * h_real_g).sum(dim=1).clamp(min=1e-12)  # (T,)
 
     results = []
     for tau in tau_values:
-        # Scheduling on CPU (trivial O(T), no tensor ops)
         sched = _vectorized_scheduling(deltas, tau_full=2*tau, delta_min=tau,
                                         alpha_mode=alpha_mode)
-        alphas_np = sched["alphas"]    # (T,) float
-        full_mask = sched["full_mask"]  # (T,) bool
+        alphas_np = sched["alphas"]
+        full_mask = sched["full_mask"]
 
-        # Build h_hat on GPU — sequential scan but tensor ops (fast)
-        h_hat = torch.empty_like(h_real_g)
-        h_hat[0] = h_ce_g[0]
+        # Build h_hat on GPU — reuse h_ls_g buffer via clone for anchors
+        # Use chunked NMSE to avoid allocating full h_hat (10.4GB)
         anchors = np.where(full_mask)[0]
-        if len(anchors) > 0:
-            h_hat[anchors] = h_ce_g[anchors]
-
-        alphas_t = torch.from_numpy(alphas_np).to(device)  # (T,)
         seg_starts = anchors
         seg_ends = np.append(anchors[1:], T)
 
-        for start, end in zip(seg_starts, seg_ends):
-            if start + 1 >= end:
-                continue
-            seg_a = alphas_t[start + 1 : end]
-            if (seg_a < 1e-8).all():
-                h_hat[start + 1 : end] = h_hat[start]
-                continue
-            val = h_hat[start]
-            for t in range(start + 1, end):
-                a = alphas_t[t]
+        # Compute NMSE per-slot without storing full h_hat
+        nmse = torch.zeros(T, device=device)
+        val = h_ce_g[0]
+        nmse[0] = ((val - h_real_g[0]).pow(2).sum() / h_real_pow[0])
+
+        anchor_set = set(anchors.tolist())
+        for t in range(1, T):
+            if t in anchor_set:
+                val = h_ce_g[t]
+            else:
+                a = alphas_np[t]
                 if a < 1e-8:
-                    h_hat[t] = val
+                    pass  # val stays the same (skip)
                 else:
                     val = a * h_ls_g[t] + (1.0 - a) * val
-                    h_hat[t] = val
-
-        # NMSE on GPU — fully vectorized
-        diff = h_hat - h_real_g
-        nmse = ((diff * diff).sum(dim=1) / h_real_pow).cpu().numpy()
+            nmse[t] = (val - h_real_g[t]).pow(2).sum() / h_real_pow[t]
 
         results.append({
-            "tau": tau, "nmse_arr": nmse,
+            "tau": tau, "nmse_arr": nmse.cpu().numpy(),
             "n_skip": sched["n_skip"], "n_delta": sched["n_delta"],
             "n_full": sched["n_full"], "total": sched["total"],
             "tiers": sched["tiers"], "alphas": alphas_np,
         })
 
-    # Free GPU
     del h_real_g, h_ls_g, h_ce_g, h_real_pow
     torch.cuda.empty_cache()
     return results
