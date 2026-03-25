@@ -107,6 +107,15 @@ def run_worker(preset, snapshot_start, snapshot_end, num_ue, data_dir,
 
     scene = build_scene(cfg)
 
+    # Pre-create reusable PathSolver and subcarrier frequencies (avoid per-snapshot overhead)
+    from sionna.rt import PathSolver, subcarrier_frequencies
+    import torch
+    p_solver = PathSolver()
+    frequencies = subcarrier_frequencies(cfg.num_subcarriers, cfg.subcarrier_spacing)
+    freqs_torch = torch.tensor(frequencies.numpy(), dtype=torch.float32, device="cuda")
+    n_sc = cfg.num_subcarriers
+    print(f"  PathSolver + frequencies pre-created (n_sc={n_sc})")
+
     # Per-worker HDF5 shard for temporal mode (merged by generate_parallel)
     h5_file = None
     h5_shard_path = None
@@ -114,7 +123,7 @@ def run_worker(preset, snapshot_start, snapshot_end, num_ue, data_dir,
         import h5py
         h5_shard_path = data_dir / f"_shard_{snapshot_start}_{snapshot_end}.h5"
         n_snap_local = snapshot_end - snapshot_start
-        max_paths = 200
+        max_paths = 300
         h5_file = h5py.File(h5_shard_path, "w")
         h5_file.create_dataset(
             "cir_a", shape=(n_snap_local, num_ue, cfg.num_rx_ant, cfg.num_tx_ant, max_paths),
@@ -124,9 +133,15 @@ def run_worker(preset, snapshot_start, snapshot_end, num_ue, data_dir,
             "cir_tau", shape=(n_snap_local, num_ue, max_paths),
             dtype="float32",
         )
+        # CFR dataset: pre-computed frequency-domain channel
+        h5_file.create_dataset(
+            "cfr", shape=(n_snap_local, num_ue, cfg.num_rx_ant, cfg.num_tx_ant, n_sc),
+            dtype="complex64",
+            chunks=(1, num_ue, cfg.num_rx_ant, cfg.num_tx_ant, n_sc),
+        )
         h5_file.attrs["snapshot_start"] = snapshot_start
         h5_file.attrs["snapshot_end"] = snapshot_end
-        print(f"  HDF5 shard: {h5_shard_path} (local shape: {n_snap_local}×{num_ue})")
+        print(f"  HDF5 shard: {h5_shard_path} (local shape: {n_snap_local}×{num_ue}, +CFR)")
 
     # Progress tracking
     gpu_id = os.environ.get("CUDA_VISIBLE_DEVICES", "?")
@@ -169,7 +184,8 @@ def run_worker(preset, snapshot_start, snapshot_end, num_ue, data_dir,
         if h5_file is not None:
             # In HDF5 mode, check if this snapshot has non-zero data in shard
             try:
-                if np.any(h5_file["cir_a"][snap_id] != 0):
+                local_idx = snap_id - snapshot_start
+                if np.any(h5_file["cir_a"][local_idx] != 0):
                     already_exists = True
             except (KeyError, IndexError):
                 pass
@@ -231,6 +247,7 @@ def run_worker(preset, snapshot_start, snapshot_end, num_ue, data_dir,
         snap_ue_infos = generate_snapshot(
             scene, cfg, snap_id, seed, data_dir,
             ue_infos=ue_infos, h5_file=h5_file,
+            p_solver=p_solver, freqs_torch=freqs_torch,
         )
 
         # Save per-snapshot metadata as JSON (merged later)
