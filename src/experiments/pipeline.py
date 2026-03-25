@@ -556,65 +556,71 @@ def _batch_nmse_multi_tau(h_real: torch.Tensor, h_ls: torch.Tensor,
                            alpha: float = 0.5, delta_mode: str = "ema",
                            h_ce: torch.Tensor = None,
                            alpha_mode: str = "step") -> list:
-    """Compute NMSE for multiple tau values in parallel.
+    """Compute NMSE for multiple tau values — GPU-accelerated.
 
-    Each tau is independent (same h_ls, different scheduling).
-    Pre-converts tensors to numpy once, then uses ThreadPool on pure-numpy work
-    (no GIL contention since numpy releases GIL for C-level ops).
-
-    Args:
-        alpha_mode: "step" (legacy 3-tier) or "ramp" (continuous alpha).
+    Moves h_real/h_ls to GPU once (~21GB for ELAA), computes scheduling on CPU
+    (trivial), then h_hat construction + NMSE on GPU. No RAM copies per tau.
     """
-    from concurrent.futures import ThreadPoolExecutor
-
-    # Pre-convert to numpy ONCE (avoid repeated conversion per tau)
     T = h_real.shape[0]
-    _h_real_np = h_real.reshape(T, -1).numpy() if h_real.is_contiguous() else h_real.reshape(T, -1).contiguous().numpy()
-    _h_ls_np = h_ls.reshape(T, -1).numpy() if h_ls.is_contiguous() else h_ls.reshape(T, -1).contiguous().numpy()
-    _h_ce_np = _h_ls_np if h_ce is None else (h_ce.reshape(T, -1).numpy() if h_ce.is_contiguous() else h_ce.reshape(T, -1).contiguous().numpy())
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    def _one_tau(tau):
+    # Move to GPU once, flattened: (T, D)
+    h_real_g = h_real.reshape(T, -1).to(device, non_blocking=True)
+    h_ls_g = h_ls.reshape(T, -1).to(device, non_blocking=True)
+    h_ce_g = h_ls_g if h_ce is None else h_ce.reshape(T, -1).to(device, non_blocking=True)
+
+    # Precompute denominator for NMSE on GPU
+    h_real_pow = (h_real_g * h_real_g).sum(dim=1).clamp(min=1e-12)  # (T,)
+
+    results = []
+    for tau in tau_values:
+        # Scheduling on CPU (trivial O(T), no tensor ops)
         sched = _vectorized_scheduling(deltas, tau_full=2*tau, delta_min=tau,
                                         alpha_mode=alpha_mode)
-        alphas = sched["alphas"]
-        full_mask = sched["full_mask"]
+        alphas_np = sched["alphas"]    # (T,) float
+        full_mask = sched["full_mask"]  # (T,) bool
 
-        # Inline fast NMSE computation (pure numpy, GIL-free)
-        h_hat = np.empty_like(_h_real_np)
-        h_hat[0] = _h_ce_np[0]
+        # Build h_hat on GPU — sequential scan but tensor ops (fast)
+        h_hat = torch.empty_like(h_real_g)
+        h_hat[0] = h_ce_g[0]
         anchors = np.where(full_mask)[0]
-        h_hat[anchors] = _h_ce_np[anchors]
+        if len(anchors) > 0:
+            h_hat[anchors] = h_ce_g[anchors]
+
+        alphas_t = torch.from_numpy(alphas_np).to(device)  # (T,)
         seg_starts = anchors
         seg_ends = np.append(anchors[1:], T)
 
         for start, end in zip(seg_starts, seg_ends):
             if start + 1 >= end:
                 continue
-            seg_alphas = alphas[start + 1 : end]
-            if (seg_alphas < 1e-8).all():
+            seg_a = alphas_t[start + 1 : end]
+            if (seg_a < 1e-8).all():
                 h_hat[start + 1 : end] = h_hat[start]
                 continue
             val = h_hat[start]
             for t in range(start + 1, end):
-                a = alphas[t]
+                a = alphas_t[t]
                 if a < 1e-8:
                     h_hat[t] = val
                 else:
-                    val = a * _h_ls_np[t] + (1.0 - a) * val
+                    val = a * h_ls_g[t] + (1.0 - a) * val
                     h_hat[t] = val
 
-        diff = h_hat - _h_real_np
-        nmse = (diff * diff).sum(axis=1) / np.maximum((_h_real_np * _h_real_np).sum(axis=1), 1e-12)
+        # NMSE on GPU — fully vectorized
+        diff = h_hat - h_real_g
+        nmse = ((diff * diff).sum(dim=1) / h_real_pow).cpu().numpy()
 
-        return {
+        results.append({
             "tau": tau, "nmse_arr": nmse,
             "n_skip": sched["n_skip"], "n_delta": sched["n_delta"],
             "n_full": sched["n_full"], "total": sched["total"],
-            "tiers": sched["tiers"], "alphas": sched["alphas"],
-        }
+            "tiers": sched["tiers"], "alphas": alphas_np,
+        })
 
-    with ThreadPoolExecutor(max_workers=min(len(tau_values), 32)) as pool:
-        results = list(pool.map(_one_tau, tau_values))
+    # Free GPU
+    del h_real_g, h_ls_g, h_ce_g, h_real_pow
+    torch.cuda.empty_cache()
     return results
 
 
