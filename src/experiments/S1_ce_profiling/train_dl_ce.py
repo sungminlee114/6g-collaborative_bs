@@ -16,6 +16,7 @@ import argparse
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import torch
 from torch.utils.data import DataLoader, Dataset
 
@@ -89,16 +90,21 @@ def train_one(preset: str, gpu: int = 0, epochs: int = 100, batch_size: int = 32
     n_ant = cfg.num_rx_ant * cfg.num_tx_ant
     print(f"  Data: {cfg.data_dir} ({n_ant} ant × {cfg.num_subcarriers} sc, BS{target_bs})")
 
-    # Single-BS model: train/val split by snapshot, same BS
-    n_snap_total = len(list(Path(cfg.data_dir).glob("snapshot_*")))
-    n_train = max(1, int(n_snap_total * 0.7))
+    # Single-BS model: 1 snapshot, split by ue_id (80/20)
+    meta = pd.read_parquet(Path(cfg.data_dir) / "metadata.parquet")
+    bs_ues = sorted(meta[meta["bs_id"] == target_bs]["ue_id"].unique())
+    n_train_ue = max(1, int(len(bs_ues) * 0.8))
+    train_ues = bs_ues[:n_train_ue]
+    val_ues = bs_ues[n_train_ue:]
+    print(f"  BS{target_bs}: {len(bs_ues)} UEs → train {len(train_ues)}, val {len(val_ues)}")
+
     train_ds = NormalizedCEDataset(ChannelEstimationDataset(
-        cfg.data_dir, bs_ids=[target_bs],
-        snapshot_ids=list(range(n_train)), snr_range_db=(0.0, 30.0),
+        cfg.data_dir, bs_ids=[target_bs], ue_ids=train_ues,
+        snr_range_db=(0.0, 30.0),
     ))
     val_ds = NormalizedCEDataset(ChannelEstimationDataset(
-        cfg.data_dir, bs_ids=[target_bs],
-        snapshot_ids=list(range(n_train, n_snap_total)), snr_range_db=(0.0, 30.0),
+        cfg.data_dir, bs_ids=[target_bs], ue_ids=val_ues,
+        snr_range_db=(0.0, 30.0),
     ))
     print(f"  Train: {len(train_ds)} samples, Val: {len(val_ds)} samples")
 
@@ -127,7 +133,7 @@ def train_one(preset: str, gpu: int = 0, epochs: int = 100, batch_size: int = 32
         warmup_epochs=5, use_cosine=True, verbose=True,
     )
 
-    best_val_db = result["best_val"]
+    best_val_db = 10 * np.log10(max(result["best_val"], 1e-30))
     print(f"  Best val NMSE: {best_val_db:.1f} dB (epoch {result['best_epoch']})")
 
     # Save checkpoint

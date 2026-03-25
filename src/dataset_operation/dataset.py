@@ -37,6 +37,7 @@ class ChannelEstimationDataset(Dataset):
         data_dir: str,
         bs_ids: Optional[List[int]] = None,
         snapshot_ids: Optional[List[int]] = None,
+        ue_ids: Optional[List[int]] = None,
         snr_range_db: Tuple[float, float] = (0.0, 30.0),
         fixed_snr_db: Optional[float] = None,
         transform=None,
@@ -56,6 +57,10 @@ class ChannelEstimationDataset(Dataset):
         # Filter by snapshot
         if snapshot_ids is not None:
             meta = meta[meta["snapshot_id"].isin(snapshot_ids)]
+
+        # Filter by UE
+        if ue_ids is not None:
+            meta = meta[meta["ue_id"].isin(ue_ids)]
 
         # Pre-load all channels into memory for speed
         self._cache = {}

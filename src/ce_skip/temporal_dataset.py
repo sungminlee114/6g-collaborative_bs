@@ -155,21 +155,23 @@ class TemporalChannelData:
         if sc_spacing <= 0:
             return None
 
-        # ── HDF5 fast path: direct array slice, no file-per-snapshot overhead ──
+        # ── HDF5 fast path ──
         if self._h5_file is not None:
             idx = np.array(snap_indices)
+            # If CFR is pre-computed in h5, load directly (skip CIR→CFR GPU conversion)
+            if "cfr" in self._h5_file:
+                if ue_id is not None:
+                    return self._h5_file["cfr"][idx, ue_id:ue_id+1]  # (T, 1, rx, tx, sc)
+                else:
+                    return self._h5_file["cfr"][idx]  # (T, N_UE, rx, tx, sc)
+            # Fallback: CIR→CFR on GPU
             if ue_id is not None:
-                all_a = self._h5_file["cir_a"][idx, ue_id:ue_id+1]  # (T, 1, rx, tx, paths)
-                all_tau = self._h5_file["cir_tau"][idx, ue_id:ue_id+1]  # (T, 1, paths)
+                all_a = self._h5_file["cir_a"][idx, ue_id:ue_id+1]
+                all_tau = self._h5_file["cir_tau"][idx, ue_id:ue_id+1]
             else:
-                all_a = self._h5_file["cir_a"][idx]  # (T, N_UE, rx, tx, paths)
-                all_tau = self._h5_file["cir_tau"][idx]  # (T, N_UE, paths)
-            # all_a/all_tau are already stacked numpy arrays — skip to GPU conversion
-            stacked_a = all_a
-            stacked_tau = all_tau
-            T, N, n_rx, n_tx, n_paths = stacked_a.shape
-            # Jump directly to GPU einsum (skip padding, already uniform shape)
-            return self._gpu_cir_to_cfr(stacked_a, stacked_tau, n_sc, sc_spacing)
+                all_a = self._h5_file["cir_a"][idx]
+                all_tau = self._h5_file["cir_tau"][idx]
+            return self._gpu_cir_to_cfr(all_a, all_tau, n_sc, sc_spacing)
 
         # ── NPZ path: multiprocess read ──
         from concurrent.futures import ProcessPoolExecutor
