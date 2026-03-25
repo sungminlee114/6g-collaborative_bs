@@ -7,6 +7,14 @@
 \section{Introduction}\label{sec:intro}
 
 % ── 문단 1: CE default → cost 폭발 ───────────────────────────────
+% NOTE (2026-03-25): "per-slot CE" 전제는 NR 표준 맥락에서만 정확.
+% PACENet은 per-pilot-block, Channelformer는 per-frame CE. 학술 DL-CE 일반에는 해당 안 됨.
+% 더 정확한 framing: "CE at every pilot observation interval" (per-slot이든 per-frame이든).
+% 현재 문장은 NR DMRS 기반이므로 per-slot이 맞지만, 리뷰어가 DL-CE 논문을 근거로
+% "per-slot이 default 아니다"라고 공격 가능. 필요시 아래 대안으로 교체:
+%   "CE is conventionally executed at every pilot observation interval,
+%    whether per-slot in NR or per-frame in other systems."
+% 참고: docs/ce-skip/ce_execution_granularity.md
 \IEEEPARstart{P}{er-slot} channel estimation (CE) has been an unquestioned default in OFDM systems.
 3GPP NR maps the pilot signals, i.e., demodulation reference signals (DMRS), to every scheduled slot, and the channel learned from DMRS is assumed valid only within that slot~\cite{3gpp_ts38211}.
 Receivers therefore conventionally refresh CE on a per-slot basis~\cite{edfors1998ofdm}.
@@ -16,7 +24,8 @@ However, sixth-generation extremely large aperture arrays (6G ELAA) scale antenn
 % ── 문단 2: prior work (per-invocation만) ────────────────────────
 Existing approaches tackle this growing overhead in various ways.
 Early-exit networks reduce per-inference cost by terminating iterative refinement early~\cite{icenet2025}, model compression shrinks estimator complexity~\cite{channelformer2023}, and temporal prediction replaces CE with learned channel forecasting~\cite{continual_pred2025}.
-Yet all of these still require a forward pass at every slot.
+% NOTE: "every slot"은 NR 기준. DL-CE 논문들은 per-frame/per-block이므로 "every observation"이 더 정확.
+Yet all of these still require a forward pass at every observation interval.
 Pilot overhead reduction minimizes cost within a single CE invocation~\cite{channelformer2023}, and pilot skipping exploits coherence time to omit pilot transmission for slow users~\cite{abboud2017channel}. Neither addresses whether to \emph{execute} the CE algorithm on already-received pilots.
 
 

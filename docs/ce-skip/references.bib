@@ -1,0 +1,110 @@
+% ═══════════════════════════════════════════════════════════════════
+% CE-Skip Paper — References
+% ═══════════════════════════════════════════════════════════════════
+
+% ── Section I: Introduction ───────────────────────────────────────
+
+% XL-MIMO CE survey: polar-domain sparse representation for near-field.
+% Published: IEEE TCOM, vol.70, no.4, Apr 2022. DOI confirmed via IEEE Xplore.
+@article{cui2022channel,
+  author   = {Cui, Mingyao and Dai, Linglong},
+  title    = {Channel Estimation for Extremely Large-Scale {MIMO}: Far-Field or Near-Field?},
+  journal  = {IEEE Trans. Commun.},
+  volume   = {70},
+  number   = {4},
+  pages    = {2663--2677},
+  month    = apr,
+  year     = {2022},
+  doi      = {10.1109/TCOMM.2022.3146400},
+}
+
+% 6G MIMO vision paper (Chae co-author). arXiv에 "Submitted to Proc. IEEE"로 명시.
+% 2026-03 기준 정식 출판 확인 불가 → arXiv preprint으로 안전 처리.
+% 출판 확정 시 journal/volume/pages 업데이트 필요.
+@article{bjornson2024towards,
+  author   = {Bj\"{o}rnson, Emil and Chae, Chan-Byoung and Heath, Robert W., Jr.
+              and Marzetta, Thomas L. and Mezghani, Amine and Sanguinetti, Luca
+              and Rusek, Fredrik and Castellanos, Miguel R. and Jun, Dongsoo
+              and Demir, \"{O}zlem Tugfe},
+  title    = {Towards {6G} {MIMO}: Massive Spatial Multiplexing, Dense Arrays,
+              and Interplay Between Electromagnetics and Processing},
+  journal  = {arXiv preprint arXiv:2401.02844},
+  year     = {2024},
+  note     = {Submitted to Proc. IEEE},
+}
+
+% Qualcomm. Foundational CE model (57K params). Intro에서 ELAA slot당 0.9ms 수치 출처.
+% arXiv에 "Accepted at IEEE GLOBECOM 2025"로 명시.
+@inproceedings{requestnet2025,
+  author    = {Pratik, Kumar and Sadeghi, Pouriya and Cesa, Gabriele
+               and Barghi, Sanaz and Soriaga, Joseph B. and Yu, Yuanning
+               and Bhattacharjee, Supratik and Behboodi, Arash},
+  title     = {{ReQuestNet}: A Foundational Learning Model for Channel Estimation},
+  booktitle = {Proc. IEEE Global Commun. Conf. (GLOBECOM)},
+  year      = {2025},
+  note      = {arXiv:2508.08790},
+}
+
+% NVIDIA Research. Neural receiver <1ms on A100 via TensorRT.
+% Intro에서 LS 0.01ms 대비 DL-CE 비용 비교 근거.
+% 로컬 PDF: docs/papers/NVIDIA_env_specific_BS_2409.02912.pdf
+@article{nvidia_nrx,
+  author   = {Wiesmayr, Reinhard and Cammerer, Sebastian
+              and A\"{\i}t Aoudia, Fay\c{c}al and Hoydis, Jakob
+              and Zakrzewski, Jakub and Keller, Alexander},
+  title    = {Design of a Standard-Compliant Real-Time Neural Receiver for {5G} {NR}},
+  journal  = {arXiv preprint arXiv:2409.02912},
+  year     = {2024},
+}
+
+% NVIDIA AI Aerial platform — GPU-native BS 상용화 근거.
+% NTT DOCOMO 상용 배포 사례 포함. 로컬 PDF 없음 → 필요시 다운로드.
+@article{nvidia_aerial,
+  author   = {Cohen-Arazi, Kobi and Roe, Michael and Hu, Zhen
+              and Chavan, Rohan and Ptasznik, Anna and Lin, Joanna
+              and Morais, Joao and Boccuzzi, Joseph and Balercia, Tommaso},
+  title    = {{NVIDIA} {AI} Aerial: {AI}-Native Wireless Communications},
+  journal  = {arXiv preprint arXiv:2510.01533},
+  year     = {2025},
+}
+
+% O-RAN dApp architecture, sub-450μs real-time control loop 근거.
+% Published: Elsevier Computer Networks (open access). DOI confirmed.
+% 로컬 PDF: docs/papers/dApps_Realtime_AI_Open_RAN_2501.16502.pdf
+@article{lacava2025dapps,
+  author   = {Lacava, Andrea and Bonati, Leonardo and Mohamadi, Niloofar
+              and Gangula, Rajeev and Kaltenberger, Florian and Johari, Pedram
+              and D'Oro, Salvatore and Cuomo, Francesca and Polese, Michele
+              and Melodia, Tommaso},
+  title    = {{dApps}: Enabling Real-Time {AI}-Based {Open RAN} Control},
+  journal  = {Computer Networks},
+  volume   = {269},
+  pages    = {111342},
+  year     = {2025},
+  doi      = {10.1016/j.comnet.2025.111342},
+}
+
+% ICENet: implicit-layer DL CE, adaptive iteration depth (평균 2.2 iterations).
+% Intro에서 "adaptive-depth networks adjust refinement iterations" 근거.
+% 로컬 PDF 없음 → 필요시 다운로드.
+@article{icenet2025,
+  author   = {Qiao, Zhen and Xue, Jiang and Zhang, Junkai and Liu, Guanzhang
+              and Ma, Xiaoqin and Li, Runhua and Khan, Faheem A.
+              and Thompson, John S. and Xu, Zongben},
+  title    = {Adaptive Implicit-Based Deep Learning Channel Estimation for {6G} Communications},
+  journal  = {arXiv preprint arXiv:2505.17421},
+  year     = {2025},
+}
+
+% Continual learning for channel prediction (temporal forecasting).
+% Intro에서 "temporal predictors forecast the next channel state" 근거.
+% arXiv에 "Accepted at ICML Workshop on ML4Wireless"로 명시.
+% 로컬 PDF: docs/papers/Continual_Learning_Channel_Prediction_2506.22471.pdf
+@inproceedings{continual_pred2025,
+  author    = {Mohsin, Muhammad Ahmed and Umer, Muhammad and Bilal, Ahsan
+               and Jamshed, Muhammad Ali and Cioffi, John M.},
+  title     = {Continual Learning for Wireless Channel Prediction},
+  booktitle = {ICML Workshop on ML4Wireless},
+  year      = {2025},
+  note      = {arXiv:2506.22471},
+}
