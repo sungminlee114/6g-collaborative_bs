@@ -125,19 +125,24 @@ def compute_radio_map(scene, cfg):
 
 
 def generate_snapshot(scene, cfg, snapshot_id: int, seed: int, data_dir: Path,
-                      ue_infos=None, radio_map=None, h5_file=None):
-    """Generate one snapshot: place UEs, compute paths, extract CIR/CFR, save.
+                      ue_infos=None, radio_map=None, h5_file=None,
+                      p_solver=None, freqs_torch=None):
+    """Generate one snapshot: place UEs, compute paths, extract CIR + CFR, save.
 
     Args:
         ue_infos: Pre-defined UE positions (temporal mode). If None, samples new
                   positions from radio_map (independent mode).
         radio_map: Pre-computed radio map. If None and ue_infos is None, computes one.
+        h5_file: HDF5 file handle — writes CIR + CFR (if 'cfr' dataset exists).
+        p_solver: Reusable PathSolver instance (avoids re-creation per snapshot).
+        freqs_torch: Pre-computed subcarrier frequencies on GPU (torch.Tensor).
 
     Returns:
         ue_infos: list of UE info dicts with positions and metadata.
     """
-    from sionna.rt import Receiver, PathSolver, RadioMapSolver, subcarrier_frequencies
+    from sionna.rt import Receiver, PathSolver, subcarrier_frequencies
     import drjit as dr
+    import torch
 
     np.random.seed(seed)
 
@@ -148,11 +153,43 @@ def generate_snapshot(scene, cfg, snapshot_id: int, seed: int, data_dir: Path,
 
     # Get UE positions
     if ue_infos is None:
-        # Independent mode: sample new positions each snapshot
         if radio_map is None:
             radio_map = compute_radio_map(scene, cfg)
-        ue_infos, counts = sample_ue_positions(radio_map, cfg.num_ue, cfg)
-        print(f"  Snapshot {snapshot_id}: UEs per BS = {counts}")
+        # Oversample then filter (ray_test + SINR)
+        oversample = cfg.num_ue * 4
+        ue_infos_raw, _ = sample_ue_positions(radio_map, oversample, cfg)
+
+        # Ray_test: shoot upward, hit roof = inside building
+        import mitsuba as mi
+        mi_scene = scene.mi_scene
+        cand_pos = np.array([[info["x"], info["y"], info["z"]] for info in ue_infos_raw])
+        n_cand = len(cand_pos)
+        origins = mi.Point3f(cand_pos[:, 0], cand_pos[:, 1], np.full(n_cand, 1.5))
+        directions = mi.Vector3f(np.zeros(n_cand), np.zeros(n_cand), np.ones(n_cand))
+        hit = np.array(mi_scene.ray_test(mi.Ray3f(o=origins, d=directions)))
+        ue_infos_raw = [info for info, h in zip(ue_infos_raw, hit) if not h]
+
+        # SINR filter
+        sinr_min_db = 5.0
+        sinr_lin = np.array(radio_map.sinr).max(axis=0)
+        sinr_db_map = 10 * np.log10(np.maximum(sinr_lin, 1e-10))
+        cc = np.array(radio_map.cell_centers)
+        x_c, y_c = cc[0, :, 0], cc[:, 0, 1]
+        ue_infos_filtered = []
+        for info in ue_infos_raw:
+            xi = np.argmin(np.abs(x_c - info["x"]))
+            yi = np.argmin(np.abs(y_c - info["y"]))
+            if sinr_db_map[yi, xi] >= sinr_min_db:
+                ue_infos_filtered.append(info)
+
+        # Truncate to requested num_ue
+        ue_infos = ue_infos_filtered[:cfg.num_ue]
+        bs_counts = {}
+        for info in ue_infos:
+            bs_counts[info["bs_id"]] = bs_counts.get(info["bs_id"], 0) + 1
+        counts = [bs_counts.get(i, 0) for i in range(cfg.num_bs)]
+        print(f"  Snapshot {snapshot_id}: UEs per BS = {counts} "
+              f"(filtered {len(ue_infos)}/{n_cand})")
     else:
         bs_counts = {}
         for info in ue_infos:
@@ -167,8 +204,9 @@ def generate_snapshot(scene, cfg, snapshot_id: int, seed: int, data_dir: Path,
             orientation=[0, 0, 0],
         ))
 
-    # Compute paths
-    p_solver = PathSolver()
+    # Reuse PathSolver if provided, else create once
+    if p_solver is None:
+        p_solver = PathSolver()
     paths = p_solver(
         scene=scene, max_depth=cfg.max_depth,
         max_num_paths_per_src=cfg.max_num_paths_per_src,
@@ -187,65 +225,58 @@ def generate_snapshot(scene, cfg, snapshot_id: int, seed: int, data_dir: Path,
     )
     cir_a = np.squeeze(a)
     cir_tau = np.squeeze(tau)
-    # tau should be (N_UE, n_paths) regardless of synthetic_array.
-    # When synthetic_array=False, Sionna may return tau with antenna dims — collapse them.
     if cir_tau.ndim > 2:
-        # Take tau from first antenna pair (delays are antenna-independent)
         while cir_tau.ndim > 2:
             cir_tau = cir_tau[:, 0] if cir_tau.shape[1] > 1 else cir_tau.squeeze(1)
 
-    # CFR — compute on GPU via torch (drjit has 2^32 limit, numpy eats CPU RAM)
+    # CFR — GPU-accelerated CIR→CFR via batched matmul
     # H(f) = sum_paths[ a * exp(-j*2*pi*f*tau) ]
-    import torch
-    frequencies = subcarrier_frequencies(cfg.num_subcarriers, cfg.subcarrier_spacing)
-    freqs_t = torch.tensor(frequencies.numpy(), dtype=torch.float32, device="cuda")
+    if freqs_torch is None:
+        frequencies = subcarrier_frequencies(cfg.num_subcarriers, cfg.subcarrier_spacing)
+        freqs_torch = torch.tensor(frequencies.numpy(), dtype=torch.float32, device="cuda")
 
-    tau_for_cfr = cir_tau
-    while tau_for_cfr.ndim < cir_a.ndim:
-        tau_for_cfr = np.expand_dims(tau_for_cfr, axis=1)
-
-    # Keep CIR data on CPU, process chunks on GPU to avoid OOM
-    # (Sionna RT already occupies significant VRAM)
     n_ue = cir_a.shape[0]
+    n_sc = len(freqs_torch)
 
-    # Estimate per-UE memory: phase tensor is (n_rx, n_tx, n_paths, n_sc) complex64 = 8 bytes
-    per_ue_elems = int(np.prod(cir_a.shape[1:])) * len(freqs_t)
-    per_ue_bytes = per_ue_elems * 8 * 3  # phase + a_expanded + exp result
-
-    # Use actual free VRAM with safety margin
+    # Batched bmm: reshape to (n_ue, n_rx*n_tx, n_paths) @ (n_ue, n_paths, n_sc)
+    n_rx, n_tx, n_paths = cir_a.shape[1], cir_a.shape[2], cir_a.shape[3]
     free_vram = torch.cuda.mem_get_info()[0]
-    budget = int(free_vram * 0.5)  # use only 50% of free VRAM
-    chunk = max(1, budget // max(per_ue_bytes, 1))
-    chunk = min(chunk, n_ue)
+    # Per-UE peak: a(rx*tx, paths) + exp_phase(paths, sc) + result(rx*tx, sc) in complex64
+    per_ue_bytes = (n_rx * n_tx * n_paths + n_paths * n_sc + n_rx * n_tx * n_sc) * 8
+    chunk = max(1, min(n_ue, int(free_vram * 0.5) // max(per_ue_bytes, 1)))
 
     cfr_chunks = []
     for i in range(0, n_ue, chunk):
         j = min(i + chunk, n_ue)
         a_t = torch.tensor(cir_a[i:j], dtype=torch.complex64, device="cuda")
-        tau_t = torch.tensor(tau_for_cfr[i:j], dtype=torch.float32, device="cuda")
-        phase = -2j * torch.pi * tau_t[..., None] * freqs_t
-        cfr_chunks.append(
-            torch.sum(a_t[..., None] * torch.exp(phase), dim=-2).cpu().numpy()
-        )
-        del a_t, tau_t, phase
+        tau_t = torch.tensor(cir_tau[i:j], dtype=torch.float32, device="cuda")
+        # exp_phase: (batch, n_paths, n_sc)
+        exp_phase = torch.exp(-2j * np.pi * tau_t[:, :, None] * freqs_torch[None, None, :])
+        # bmm: (batch, rx*tx, paths) @ (batch, paths, sc) → (batch, rx*tx, sc)
+        cfr_batch = torch.bmm(
+            a_t.reshape(j - i, n_rx * n_tx, n_paths),
+            exp_phase,
+        ).reshape(j - i, n_rx, n_tx, n_sc)
+        cfr_chunks.append(cfr_batch.cpu().numpy())
+        del a_t, tau_t, exp_phase, cfr_batch
     cfr = np.concatenate(cfr_chunks, axis=0) if len(cfr_chunks) > 1 else cfr_chunks[0]
-
     torch.cuda.empty_cache()
 
-    # Save CIR — to HDF5 if h5_file provided, else npz fallback
+    # Save CIR + CFR
     if h5_file is not None:
-        n_paths = cir_a.shape[-1]
+        n_p = cir_a.shape[-1]
         max_paths = h5_file["cir_a"].shape[-1]
         local_idx = snapshot_id - h5_file.attrs["snapshot_start"]
-        h5_file["cir_a"][local_idx, :, :, :, :n_paths] = cir_a
-        h5_file["cir_tau"][local_idx, :, :n_paths] = cir_tau
+        h5_file["cir_a"][local_idx, :, :, :, :n_p] = cir_a
+        h5_file["cir_tau"][local_idx, :, :n_p] = cir_tau
+        if "cfr" in h5_file:
+            h5_file["cfr"][local_idx] = cfr
     else:
         snap_dir = data_dir / f"snapshot_{snapshot_id:04d}"
         snap_dir.mkdir(parents=True, exist_ok=True)
         np.savez_compressed(
             snap_dir / "channels.npz",
-            cir_a=cir_a,
-            cir_tau=cir_tau,
+            cir_a=cir_a, cir_tau=cir_tau, cfr=cfr,
         )
 
     # Clean up GPU memory
