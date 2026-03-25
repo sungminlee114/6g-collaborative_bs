@@ -27,6 +27,12 @@ class SceneConfig:
     num_subcarriers: int = 0
     guard_band_ratio: float = 0.0
     temperature: float = 0.0
+    numerology_mu: int = -1  # 3GPP NR numerology index (0-6)
+
+    # DMRS config (3GPP TS 38.211)
+    dmrs_type: int = 2           # 1=comb-2 (50%), 2=comb-3 (33%)
+    dmrs_additional_position: int = 1  # 0→1 DMRS sym, 1→2, 2→3, 3→4
+    dmrs_max_length: int = 1     # 1=single symbol, 2=double symbol
 
     # Antenna config
     tx_rows: int = 0
@@ -68,7 +74,8 @@ class SceneConfig:
                 setattr(self, fname, float(val))
         for fname in ("num_subcarriers", "num_bs", "num_ue", "max_depth",
                        "max_num_paths_per_src", "samples_per_src",
-                       "tx_rows", "tx_cols", "rx_rows", "rx_cols"):
+                       "tx_rows", "tx_cols", "rx_rows", "rx_cols",
+                       "numerology_mu"):
             val = getattr(self, fname, None)
             if isinstance(val, str):
                 setattr(self, fname, int(val))
@@ -118,7 +125,93 @@ class SceneConfig:
 
     @property
     def subcarrier_spacing(self) -> float:
+        """Channel sampling spacing (Hz) = effective_bw / num_subcarriers.
+        Used by Sionna subcarrier_frequencies() for channel generation."""
         return self.effective_bandwidth / self.num_subcarriers
+
+    @property
+    def scs(self) -> float:
+        """3GPP NR subcarrier spacing (Hz) = 2^mu * 15 kHz."""
+        assert self.numerology_mu >= 0, "numerology_mu not set"
+        return (2 ** self.numerology_mu) * 15e3
+
+    @property
+    def slot_duration_s(self) -> float:
+        """Slot duration in seconds = 1ms / 2^mu."""
+        assert self.numerology_mu >= 0, "numerology_mu not set"
+        return 1e-3 / (2 ** self.numerology_mu)
+
+    @property
+    def symbols_per_slot(self) -> int:
+        return 14
+
+    @property
+    def slots_per_subframe(self) -> int:
+        assert self.numerology_mu >= 0, "numerology_mu not set"
+        return 2 ** self.numerology_mu
+
+    @property
+    def dmrs_symbols_per_slot(self) -> int:
+        """Number of DMRS OFDM symbols per slot."""
+        return 1 + self.dmrs_additional_position  # base 1 + additional
+
+    @property
+    def pilot_sc_per_dmrs_symbol(self) -> int:
+        """Pilot subcarriers per DMRS OFDM symbol."""
+        if self.dmrs_type == 1:
+            return self.num_subcarriers // 2  # comb-2
+        return self.num_subcarriers * 2 // 6  # comb-3 (Type 2)
+
+    @property
+    def total_pilot_res(self) -> int:
+        """Total pilot REs per slot."""
+        return self.pilot_sc_per_dmrs_symbol * self.dmrs_symbols_per_slot
+
+    @property
+    def total_res_per_slot(self) -> int:
+        """Total REs per slot."""
+        return self.num_subcarriers * self.symbols_per_slot
+
+    @property
+    def pilot_density(self) -> float:
+        """Fraction of REs that are pilots."""
+        return self.total_pilot_res / self.total_res_per_slot
+
+    def pilot_mask(self, as_2d: bool = False):
+        """Boolean mask for pilot RE positions.
+
+        If as_2d=False: (num_subcarriers,) — pilot subcarrier mask within a DMRS symbol.
+        If as_2d=True: (symbols_per_slot, num_subcarriers) — full slot grid.
+        """
+        import numpy as np
+        # Frequency mask within DMRS symbol
+        freq_mask = np.zeros(self.num_subcarriers, dtype=bool)
+        if self.dmrs_type == 1:
+            freq_mask[::2] = True  # comb-2
+        else:
+            # Type 2: positions 0,1 out of every 6
+            for i in range(0, self.num_subcarriers, 6):
+                freq_mask[i] = True
+                if i + 1 < self.num_subcarriers:
+                    freq_mask[i + 1] = True
+
+        if not as_2d:
+            return freq_mask
+
+        # 2D: (14 symbols, num_sc)
+        grid = np.zeros((self.symbols_per_slot, self.num_subcarriers), dtype=bool)
+        # DMRS symbol positions (simplified: start at symbol 2)
+        dmrs_positions = [2]
+        if self.dmrs_additional_position >= 1:
+            dmrs_positions.append(7)
+        if self.dmrs_additional_position >= 2:
+            dmrs_positions.append(11)
+        if self.dmrs_additional_position >= 3:
+            dmrs_positions.append(13 if self.symbols_per_slot == 14 else 12)
+        for sym in dmrs_positions:
+            if sym < self.symbols_per_slot:
+                grid[sym] = freq_mask
+        return grid
 
 
 @dataclass

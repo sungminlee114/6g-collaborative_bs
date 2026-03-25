@@ -1,9 +1,10 @@
 scene_name: munich
 deployment: elaa_s
 frequency: 15000000000.0
-bandwidth: 400000000.0
-num_subcarriers: 1024
+bandwidth: 200000000.0
+num_subcarriers: 1584
 guard_band_ratio: 0.1
+numerology_mu: 3
 temperature: 293.0
 tx_rows: 16
 tx_cols: 16

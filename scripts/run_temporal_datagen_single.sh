@@ -18,7 +18,7 @@ set -e
 TRAJ_DIR="assets/data/shared_trajectories"
 TRAJ="$TRAJ_DIR/trajectories.npz"
 N_SNAP=400
-N_UE=25
+N_UE=15
 VELOCITIES="0,1,2,5,8.3"
 
 generate_trajectories() {

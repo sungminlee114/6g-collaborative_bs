@@ -637,7 +637,7 @@ Cluster L: CE-Skip — Adaptive CE Inference Scheduling (41편 cross-ref)
 | P65 | Universal AE CSI | N_BS × N_UE | - | - | K SC | Autoencoder CSI FB | - | - | 1 |
 | P66 | VQ-VAE CSI | Massive MIMO | - | - | - | VQ-VAE CSI FB | - | - | 1 |
 | P68 | DL CSI FB WiFi Temporal | (8,2,2) | 2.4/5.0 | 20 | 256/64 | DeepMIMO | 0.4-2.8 m/s | Indoor | 1 |
-| P78 | PACE-Net (PSA CE) | 64 TX × 16 RX | - | - | - | Kronecker (exp. corr.) | Static | Synthetic | 1 |
+| P78 | PACE-Net (PSA CE) | 64 TX × 16 RX | - | - | N/A (flat, no OFDM) | Kronecker (exp. corr.) | Static | Synthetic | 1 |
 | P79 | Channelformer | SISO | 2.1 | 1.08 | 72 (6 RB) | 3GPP EPA/EVA/ETU | 0-100 km/h | 3GPP TS36.101 | 1 |
 | P82 | NVIDIA NRX | 2TX×4RX dual-pol | 2.14 | 47.5 | 132 PRBs | 3GPP UMi | 0-8 m/s | **Munich (Sionna RT)** | Site-specific |
 | P83 | Transfer/Meta CE | (2,16) | **3.5** | - | 512 | 3GPP CDL-B/E | 60-120 km/h | Synthetic | 1 |
@@ -742,7 +742,7 @@ Cluster L: CE-Skip — Adaptive CE Inference Scheduling (41편 cross-ref)
    | P19 (Multi-task PHY LLM) | 16×8 | 128 | Multi-task, QuaDRiGa |
    | P60 (WirelessGPT) | 4×4 | 16 | FM pre-train, Sionna RT |
    | P59 (WiFo) | 1×4 ~ 4×8 | 4~32 | Variable, QuaDRiGa |
-   | P78 (PACE-Net) | 64 TX × 16 RX | 64×16 | DL-CE, Kronecker synthetic |
+   | P78 (PACE-Net) | 64 TX × 16 RX | 64×16 | DL-CE, Kronecker synthetic, **flat fading (no OFDM)** |
    | P53 (Sensing-Aided BM TL) | UPA (크기 미상) | - | 28 GHz RT |
    | P103 (Site-Specific RIS) | 2×2 / 4×8 / 4×16 | 4~64 | Sionna RT calibrated |
    | P94 (Deep Unrolling) | 256×8 | 2048 | ELAA (UPA mode), synthetic NF |
@@ -1059,7 +1059,7 @@ Cluster L: CE-Skip — Adaptive CE Inference Scheduling (41편 cross-ref)
 - **연도**: 2025, Entropy (MDPI) 27(3):220
 - **PDF**: `papers/PACE_Net_DL_Channel_Estimation_Massive_MIMO.pdf`
 - **핵심 기여**: Polarized Self-Attention (PSA) 기반 채널 추정 네트워크. Channel attention (SE 방식) + Spatial attention 직교 결합. 채널 추정을 image denoising으로 변환.
-- **방법론**: ResNet backbone + PSA 모듈. Kronecker 채널 모델, 64×16 massive MIMO.
+- **방법론**: ResNet backbone + PSA 모듈. Kronecker 채널 모델, 64×16 massive MIMO. **Flat fading (no OFDM, no subcarriers)**. H ∈ ℂ^(Nr×Nt), T=16은 시간축 orthogonal pilot sequence 수.
 - **주요 결과**: MMSE 대비 우수한 NMSE, 계산복잡도 대폭 감소 (MMSE의 행렬 역산 제거)
 - **관련도**: ★★★★☆ — **PACE-Net의 직접적 참조. SE block이 채널 특성에 따라 feature를 adaptive하게 re-weight한다는 핵심 메커니즘 출처.**
 
@@ -1411,7 +1411,7 @@ CE가 비싸다는 것을 보여주는 논문들. DL-CE inference cost가 LS 대
 - **CE-skip relevance**: ★★★☆☆
 
 #### [P78] PACE-Net: Channel Estimation via Polarized Self-Attention
-- **CE-skip 관련**: PSA module의 O(DK^2 NtNr) complexity — DL-CE가 antenna 수에 선형 scaling하므로 ELAA에서 skip 이득 증가.
+- **CE-skip 관련**: PSA module의 O(DK^2 NtNr) complexity — DL-CE가 antenna 수에 선형 scaling하므로 ELAA에서 skip 이득 증가. **주의: flat fading (no OFDM), Kronecker 채널 모델. 우리 OFDM frequency-selective 셋팅과 직접 비교 불가.**
 - **CE-skip relevance**: ★★★☆☆
 
 #### [P69] ContraWiMAE: Multi-Task Foundation Model for Wireless Channel

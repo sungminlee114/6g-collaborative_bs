@@ -53,7 +53,7 @@ CE가 비싸다는 것을 보여주는 논문들. DL-CE inference cost가 LS 대
 - **CE-skip relevance**: ★★★☆☆
 
 #### [P78] PACE-Net: Channel Estimation via Polarized Self-Attention
-- **CE-skip 관련**: PSA module의 O(DK^2 NtNr) complexity — DL-CE가 antenna 수에 선형 scaling하므로 ELAA에서 skip 이득 증가.
+- **CE-skip 관련**: PSA module의 O(DK^2 NtNr) complexity — DL-CE가 antenna 수에 선형 scaling하므로 ELAA에서 skip 이득 증가. **주의: flat fading (no OFDM), Kronecker 모델. OFDM frequency-selective 셋팅과 직접 비교 불가.**
 - **CE-skip relevance**: ★★★☆☆
 
 #### [P69] ContraWiMAE: Multi-Task Foundation Model for Wireless Channel

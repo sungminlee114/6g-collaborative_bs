@@ -124,7 +124,7 @@ CE-skip motivation: DL-CE is the most expensive CE method (~2ms inference), maki
 
 | Paper | Architecture | Params | Inference Time | Channel Model | Antennas | Best NMSE | Temporal |
 |-------|-------------|--------|---------------|---------------|----------|-----------|---------|
-| PACE-Net | CNN+PSA (4 layers) | ~few K (est.) | Not reported | Kronecker/Rayleigh | 16x16 | -21 dB @20dB SNR | Static |
+| PACE-Net | CNN+PSA (4 layers) | ~few K (est.) | Not reported | Kronecker/Rayleigh, **flat (no OFDM)** | 16x16 | -21 dB @20dB SNR | Static |
 | Channelformer | Transformer+ResCNN | 32K (online), 118K (offline) | **20.5 ms** (online), 31 ms (offline) | 3GPP EPA/EVA/ETU | SISO | MSE ~1e-5 @30dB | Time-varying, Doppler 0-194Hz |
 | Transfer vs Meta | Generic DnNN | Framework-agnostic | Not reported | 3GPP CDL-B | MIMO | Comparable to ideal labels | Time-varying, 60-120 km/h |
 | Domain Adapt | CNN (8-layer) / Pix2Pix GAN | ~100K+ (est.) | Not reported | DeepMIMO + MATLAB RT | MISO | Significant gain at low SNR | Quasi-static (block fading) |

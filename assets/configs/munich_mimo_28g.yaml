@@ -1,9 +1,10 @@
 scene_name: munich
 deployment: mimo_28g
 frequency: 28000000000.0
-bandwidth: 100000000.0
-num_subcarriers: 256
+bandwidth: 200000000.0
+num_subcarriers: 1584
 guard_band_ratio: 0.1
+numerology_mu: 3
 temperature: 293.0
 tx_rows: 8
 tx_cols: 8

@@ -396,10 +396,10 @@ src/
 | 항목 | PACE-Net (Yang et al., Entropy 2025) | 우리 |
 |------|--------------------------------------|------|
 | 채널 모델 | Kronecker (통계적, i.i.d.) | Sionna RT (레이트레이싱) |
-| OFDM | 없음 (flat channel) | 1024 subcarrier |
-| BS 안테나 | 16 Tx | 4 Tx (더 작음) |
+| OFDM | 없음 (flat channel, H ∈ ℂ^(Nr×Nt), T=16 시간축 pilot) | 1024 frequency-domain samples |
+| BS 안테나 | 64 Tx (논문 Fig.1: Nt=64) | 64~512 Tx |
 | UE 안테나 | 16 Rx (**비현실적**) | 2 Rx (현실적) |
-| MIMO 구조 | 16×16 symmetric (학술용) | 2×4 (현실적) |
+| MIMO 구조 | 64×16 (학술용) | 2×512 (현실적) |
 | 네트워크 채널 | C=256 (antenna 수와 일치) | C=64 (VRAM 제약) |
 | Multi-cell | 없음 | 있음 (FL) |
 | Feature map 크기 | (B, 256, 16, 16) 작음 | (B, 64, 8, 1024) 큼 |

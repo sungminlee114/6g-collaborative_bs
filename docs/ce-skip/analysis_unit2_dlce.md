@@ -9,8 +9,8 @@
 ### PACE-Net: DL Channel Estimation for Massive MIMO (2024)
 
 - **CE-skip relevance**: MEDIUM -- PSA (Polarized Self-Attention) module shows how DL-CE complexity scales; O(DK^2 NtNr) per forward pass provides concrete baseline for skip scheduling cost-benefit analysis
-- **Dataset config**: 16x16 Tx/Rx antennas, 15 GHz, Rayleigh/Kronecker channel model, 1000m distance, 16 pilot symbols, SNR range [-5, 25] dB
-- **CE methods**: LS (O(Nt^2 Nr^2)), MMSE (O(Nt^3 Nr^3)), PACE-Net (O(DK^2 NtNr) where D=4 attention heads, DK^2=24). PACE-Net uses Polarized Self-Attention for spatial-channel feature extraction
+- **Dataset config**: 16x16 Tx/Rx antennas, 15 GHz, Rayleigh/Kronecker channel model, 1000m distance, T=16 time-domain orthogonal pilot sequences (NOT frequency-domain subcarriers — PACENet is narrowband flat fading, no OFDM), SNR range [-5, 25] dB
+- **CE methods**: LS (O(Nt^2 Nr^2)), MMSE (O(Nt^3 Nr^3)), PACE-Net (O(DK^2 NtNr) where D=4 attention heads, DK^2=24). PACE-Net uses Polarized Self-Attention for spatial-channel feature extraction. Input: H ∈ ℂ^(Nr × Nt) flat channel matrix
 - **Temporal aspects**: None. Static channel snapshots only, no mobility or time-varying modeling
 - **Key finding for CE-skip**: DL-CE complexity scales linearly with antenna count (NtNr), making skip scheduling increasingly valuable for ELAA. The PSA mechanism could serve as a representative DL-CE architecture when benchmarking inference cost
 
@@ -92,7 +92,7 @@
 
 | Paper | CE-skip Relevance | Freq (GHz) | Antennas | Subcarriers | DL-CE Params | Inference Cost | Temporal |
 |-------|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| PACE-Net | MEDIUM | 15 | 16x16 | 16 pilots | ~moderate | O(DK^2 NtNr) | None |
+| PACE-Net | MEDIUM | 15 | 16x16 | N/A (flat, no OFDM) | ~moderate | O(DK^2 NtNr) | None |
 | Channelformer | HIGH | 2.1 | SISO | 72 | 32K-117K | Low | r_t=0.94-0.97 |
 | Transfer vs Meta CE | HIGH | 3.5 | (2,16) | 512 | ~moderate | Moderate | Fine-tune/infer cycle |
 | Domain Adapt CE | LOW | 3.4 | 1 BS | 612 | CNN/GAN | Moderate | Quasi-static |

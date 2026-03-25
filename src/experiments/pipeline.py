@@ -245,7 +245,7 @@ def run_s1(ue_data: dict, tau: float = 0.2, snr_db: float = 20.0) -> dict:
     """
     cfg = ExperimentConfig.from_preset(ue_data["preset"])
     frequency = cfg.frequency
-    dt_s = 0.00025  # TODO: get from trajectory_info
+    dt_s = cfg.slot_duration_s
 
     # SNR-adaptive τ
     tau_snr = _snr_adaptive_tau(tau, snr_db)

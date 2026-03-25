@@ -45,7 +45,7 @@
 
 | Paper | ID | Antenna Config | Type |
 |-------|-----|---------------|------|
-| PACE-Net | - | UPA (32 ports) | UPA |
+| PACE-Net | - | 16×16 Tx/Rx (flat, no OFDM) | N/A (narrowband) |
 | Channelformer | - | 32/64 (varies) | Mixed |
 | Transfer vs Meta CE | - | Varies | Mixed |
 | NVIDIA env-specific | - | 32T (practical) | UPA-like |

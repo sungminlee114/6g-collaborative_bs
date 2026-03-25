@@ -97,3 +97,15 @@ class ExperimentConfig:
     @property
     def deployment(self) -> str:
         return self.scene.deployment
+
+    @property
+    def numerology_mu(self) -> int:
+        return self.scene.numerology_mu
+
+    @property
+    def scs(self) -> float:
+        return self.scene.scs
+
+    @property
+    def slot_duration_s(self) -> float:
+        return self.scene.slot_duration_s

@@ -4,6 +4,7 @@ frequency: 3500000000.0
 bandwidth: 100000000.0
 num_subcarriers: 256
 guard_band_ratio: 0.1
+numerology_mu: 1
 temperature: 293.0
 tx_rows: 16
 tx_cols: 16

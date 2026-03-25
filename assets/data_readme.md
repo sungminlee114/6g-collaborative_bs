@@ -3,25 +3,46 @@
 Sionna RT ray-tracing channel datasets for 6G O-RAN collaborative BS research.
 Scene: Munich city center, 8 BS sites, 100 UE/snapshot.
 
+## OFDM Numerology (3GPP TS 38.211)
+
+Each config specifies `numerology_mu` which determines the 3GPP NR subcarrier spacing and slot timing.
+
+| Parameter | Formula | 15/28 GHz (μ=3) | 3.5 GHz (μ=1) |
+|-----------|---------|-----------------|----------------|
+| SCS | 2^μ × 15 kHz | 120 kHz | 30 kHz |
+| Slot duration | 1 ms / 2^μ | 0.125 ms | 0.5 ms |
+| Symbols/slot | (fixed) | 14 | 14 |
+| Slots/subframe | 2^μ | 8 | 2 |
+| Slots/frame | 10 × 2^μ | 80 | 20 |
+| Frame | (fixed) | 10 ms | 10 ms |
+
+Two distinct spacings coexist in each config.
+
+| Spacing | Value | Purpose |
+|---------|-------|---------|
+| **SCS** (`cfg.scs`) | 120 kHz (μ=3) | 3GPP system numerology. Determines slot duration. |
+| **Pilot spacing** (`cfg.subcarrier_spacing`) | ~352 kHz | Channel frequency sampling = effective_bw / N_sc. Used by Sionna `subcarrier_frequencies()`. |
+
+`num_subcarriers` (1024 or 256) is the number of frequency-domain pilot samples across the bandwidth, not the total OFDM subcarriers in the system (which would be BW/SCS ≈ 3333 for 400 MHz @ 120 kHz). This is standard practice in CE simulation. The channel matrix H ∈ ℂ^(N_sc × N_tx × N_rx) uses N_sc = `num_subcarriers`.
+
 ## 3×3 Factorial Design
 
-3 antenna scales × 3 frequencies, consistent SC spacing (~390.6 kHz).
+3 antenna scales × 3 frequencies.
 
 ### Config Matrix
 
-| Config | Array (UPA) | Nt | Freq | BW | SC | SC spacing | Synthetic | Power |
-|--------|------------|----:|-----:|----:|-----:|-----------:|:---------:|------:|
-| `5g_mimo_3g5` | 8×8 | 64 | 3.5 GHz | 100 MHz | 256 | 390.6 kHz | No | 46 dBm |
-| `mimo_15g` | 8×8 | 64 | 15 GHz | 400 MHz | 1024 | 390.6 kHz | Yes | 40 dBm |
-| `mimo_28g` | 8×8 | 64 | 28 GHz | 100 MHz | 256 | 390.6 kHz | Yes | 40 dBm |
-| `elaa_s_1k_15g` | 16×16 | 256 | 15 GHz | 400 MHz | 1024 | 390.6 kHz | Yes | 40 dBm |
-| `elaa_s_1k_28g` | 16×16 | 256 | 28 GHz | 400 MHz | 1024 | 390.6 kHz | Yes | 40 dBm |
-| `elaa_m_1k_15g` | 32×16 | 512 | 15 GHz | 400 MHz | 1024 | 390.6 kHz | Yes | 40 dBm |
-| `elaa_m_1k_28g` | 32×16 | 512 | 28 GHz | 400 MHz | 1024 | 390.6 kHz | Yes | 40 dBm |
+| Config | Array (UPA) | Nt | Freq | Band | μ | SCS | Slot | BW | N_sc | Power |
+|--------|------------|----:|-----:|------|--:|----:|-----:|----:|-----:|------:|
+| `5g_mimo_3g5` | 8×8 | 64 | 3.5 GHz | FR1 | 1 | 30 kHz | 0.5 ms | 100 MHz | 256 | 46 dBm |
+| `mimo_15g` | 8×8 | 64 | 15 GHz | FR3 | 3 | 120 kHz | 0.125 ms | 400 MHz | 1024 | 40 dBm |
+| `mimo_28g` | 8×8 | 64 | 28 GHz | FR2 | 3 | 120 kHz | 0.125 ms | 100 MHz | 256 | 40 dBm |
+| `elaa_s_*_15g` | 16×16 | 256 | 15 GHz | FR3 | 3 | 120 kHz | 0.125 ms | 400 MHz | 1024 | 40 dBm |
+| `elaa_s_*_28g` | 16×16 | 256 | 28 GHz | FR2 | 3 | 120 kHz | 0.125 ms | 400 MHz | 1024 | 40 dBm |
+| `elaa_m_*_15g` | 32×16 | 512 | 15 GHz | FR3 | 3 | 120 kHz | 0.125 ms | 400 MHz | 1024 | 40 dBm |
+| `elaa_m_*_28g` | 32×16 | 512 | 28 GHz | FR2 | 3 | 120 kHz | 0.125 ms | 400 MHz | 1024 | 40 dBm |
 
 - **Nr = 2** (cross-polarized UE antenna, 3GPP default)
 - **Synthetic array**: physical single-antenna BS, Sionna constructs virtual UPA in post-processing
-- **SC spacing**: Fixed at ~390.6 kHz across all configs (FR1: 100M/256, FR2/FR3: 400M/1024)
 
 ### Comparison Axes
 
@@ -39,10 +60,11 @@ Scene: Munich city center, 8 BS sites, 100 UE/snapshot.
 - Random UE drops per snapshot (i.i.d.)
 - For cross-sectional channel estimation experiments
 
-### Temporal (1000 snapshots)
-- **Gauss-Markov mobility model** (α=0.75) with building collision avoidance
-- dt = 10 ms, total = 10 seconds simulated time
-- UE speeds: 0 m/s (static), 1 m/s (pedestrian), 8.3 m/s (30 km/h vehicle)
+### Temporal (configurable snapshots)
+- **Gauss-Markov mobility model** (α=0.95) with building collision avoidance
+- dt = slot duration from config (μ=3 → 0.125 ms, μ=1 → 0.5 ms)
+- `generate_trajectories.py` reads `numerology_mu` from preset config automatically (no `--dt_ms`)
+- UE speeds: 0, 1, 2, 5, 8.3 m/s
 - Pre-computed trajectories via `generate_trajectories.py`
 - Full Sionna RT re-trace per snapshot (PathSolver, not apply_doppler)
 - For temporal channel prediction / CE-skip experiments
