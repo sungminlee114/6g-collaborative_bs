@@ -69,10 +69,10 @@ class BaseConfig:
     font_sans_serif: List[str] = field(
         default_factory=lambda: ["Helvetica", "Nimbus Sans", "Arial", "DejaVu Sans"]
     )
-    mathtext_fontset: str = "custom"
-    mathtext_rm: str = "Helvetica"
-    mathtext_it: str = "Helvetica:italic"
-    mathtext_bf: str = "Helvetica:bold"
+    mathtext_fontset: str = "dejavusans"
+    mathtext_rm: str = "DejaVu Sans"
+    mathtext_it: str = "DejaVu Sans:italic"
+    mathtext_bf: str = "DejaVu Sans:bold"
     font_size_title: float = 16
     font_size_axis_label: float = 14
     font_size_tick: float = 12
