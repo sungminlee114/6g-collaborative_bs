@@ -71,7 +71,7 @@ def compute_or_load_radio_map(traj_dir, info):
 
 
 def plot_trajectories(traj_dir="assets/data/shared_trajectories",
-                      output="assets/plots/trajectory_25ue.png"):
+                      output="assets/plots/trajectory_15ue.png"):
     traj_dir = Path(traj_dir)
     traj = np.load(traj_dir / "trajectories.npz")
     positions = traj["positions"]  # (T, N_UE, 3)
@@ -254,6 +254,6 @@ def plot_trajectories(traj_dir="assets/data/shared_trajectories",
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--traj_dir", default="assets/data/shared_trajectories")
-    parser.add_argument("--output", default="assets/plots/trajectory_25ue.png")
+    parser.add_argument("--output", default="assets/plots/trajectory_15ue.png")
     args = parser.parse_args()
     plot_trajectories(args.traj_dir, args.output)
