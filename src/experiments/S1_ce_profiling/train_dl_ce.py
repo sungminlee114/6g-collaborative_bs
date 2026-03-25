@@ -28,15 +28,16 @@ from src.dataset_operation.dataset import ChannelEstimationDataset
 from src.dataset_operation.utils import nmse
 
 PRIMARY_PRESETS = [
-    "munich_elaa_s_1k_15g",
-    "munich_mimo_15g",
+    "munich_elaa_m_1k_28g",
+    "munich_elaa_m_1k_15g",
+    "munich_5g_mimo_3g5",
 ]
 
 CKPT_DIR = Path("assets/checkpoints/ce_skip")
 
 
-def ckpt_path_for(cfg: ExperimentConfig) -> Path:
-    return CKPT_DIR / f"dl_ce_{cfg.deployment}_{cfg.num_subcarriers}_{int(cfg.frequency/1e9)}g.pt"
+def ckpt_path_for(cfg: ExperimentConfig, target_bs: int = 1) -> Path:
+    return CKPT_DIR / f"dl_ce_{cfg.deployment}_{cfg.num_subcarriers}_{int(cfg.frequency/1e9)}g_bs{target_bs}.pt"
 
 
 class NormalizedCEDataset(Dataset):
@@ -74,8 +75,9 @@ class NormalizedCEDataset(Dataset):
         }
 
 
-def train_one(preset: str, gpu: int = 0, epochs: int = 100, batch_size: int = 32):
-    """Train DL-CE for a single preset using existing infrastructure."""
+def train_one(preset: str, gpu: int = 0, epochs: int = 100, batch_size: int = 32,
+              target_bs: int = 1):
+    """Train DL-CE for a single BS using existing infrastructure."""
     device = f"cuda:{gpu}"
     torch.cuda.set_device(device)
     cfg = ExperimentConfig.from_preset(preset)
@@ -85,17 +87,18 @@ def train_one(preset: str, gpu: int = 0, epochs: int = 100, batch_size: int = 32
         return None
 
     n_ant = cfg.num_rx_ant * cfg.num_tx_ant
-    print(f"  Data: {cfg.data_dir} ({n_ant} ant × {cfg.num_subcarriers} sc)")
+    print(f"  Data: {cfg.data_dir} ({n_ant} ant × {cfg.num_subcarriers} sc, BS{target_bs})")
 
-    # Limit snapshots for memory
-    max_snap = 5 if n_ant > 256 else 30
+    # Single-BS model: train/val split by snapshot, same BS
+    n_snap_total = len(list(Path(cfg.data_dir).glob("snapshot_*")))
+    n_train = max(1, int(n_snap_total * 0.7))
     train_ds = NormalizedCEDataset(ChannelEstimationDataset(
-        cfg.data_dir, bs_ids=cfg.train_bs_ids,
-        snapshot_ids=list(range(max_snap)), snr_range_db=(0.0, 30.0),
+        cfg.data_dir, bs_ids=[target_bs],
+        snapshot_ids=list(range(n_train)), snr_range_db=(0.0, 30.0),
     ))
     val_ds = NormalizedCEDataset(ChannelEstimationDataset(
-        cfg.data_dir, bs_ids=cfg.val_bs_ids,
-        snapshot_ids=list(range(max_snap, min(max_snap + 3, 100))), snr_range_db=(0.0, 30.0),
+        cfg.data_dir, bs_ids=[target_bs],
+        snapshot_ids=list(range(n_train, n_snap_total)), snr_range_db=(0.0, 30.0),
     ))
     print(f"  Train: {len(train_ds)} samples, Val: {len(val_ds)} samples")
 
@@ -129,9 +132,11 @@ def train_one(preset: str, gpu: int = 0, epochs: int = 100, batch_size: int = 32
 
     # Save checkpoint
     CKPT_DIR.mkdir(parents=True, exist_ok=True)
-    path = ckpt_path_for(cfg)
-    save_checkpoint(model, f"ce_skip/dl_ce_{cfg.deployment}_{cfg.num_subcarriers}_{int(cfg.frequency/1e9)}g",
-                    meta={"best_val_db": best_val_db, "normalization": "per_sample_rms"})
+    ckpt_name = f"dl_ce_{cfg.deployment}_{cfg.num_subcarriers}_{int(cfg.frequency/1e9)}g_bs{target_bs}"
+    save_checkpoint(model, f"ce_skip/{ckpt_name}",
+                    meta={"best_val_db": best_val_db, "normalization": "per_sample_rms",
+                          "target_bs": target_bs})
+    path = ckpt_path_for(cfg, target_bs)
     print(f"  Saved: {path}")
 
     return {"best_val_nmse_db": best_val_db, "n_params": n_params, "path": str(path)}
