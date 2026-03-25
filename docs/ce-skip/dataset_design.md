@@ -1,139 +1,145 @@
-# CE-Skip Dataset Design: 7-Config Matrix
+# CE-Skip Dataset Design: 3GPP Standard Compliance
 
-## Design Philosophy
+## OFDM System Parameters
 
-**3-row × 3-col design** (with FR1+ELAA excluded): Antenna scale × Frequency band, consistent SC spacing (~390 kHz) across all configs.
+| Parameter | Value | 3GPP Reference |
+|-----------|-------|---------------|
+| Numerology (μ) | 3 | TS 38.211 Table 4.2-1 |
+| SCS | 120 kHz (= 2^3 × 15 kHz) | TS 38.211 Table 4.2-1 |
+| Slot duration | 0.125 ms (= 1ms / 2^3) | TS 38.211 Section 4.3.2, Table 4.3.2-1 |
+| Symbols/slot | 14 (Normal CP) | TS 38.211 Table 4.3.2-1 |
+| Bandwidth | 200 MHz | TS 38.101-2 Table 5.3.2-1 |
+| N_RB | 132 | TS 38.101-2 Table 5.3.2-1 |
+| N_sc | 1584 (= 132 × 12) | - |
+| Carrier freq | 15 GHz (FR3) / 28 GHz (FR2) | - |
 
-FR1 (3.5 GHz) is represented only at MIMO scale (8×8). ELAA scaling experiments use FR3/FR2 where near-field effects are meaningful. See [exclusion rationale](#why-no-fr1--elaa).
+### BW 선택 근거
+- 200 MHz는 FR2 μ=3에서 3GPP 표준 지원 BW (TS 38.101-2 Table 5.3.2-1)
+- 6G FR3에서 200-400 MHz가 industry consensus (Samsung, Nokia, Ericsson)
+- 400 MHz도 가능하지만 N_sc=3168로 데이터 2배, 200 MHz가 practical
 
----
+### μ=3 선택 근거
+- 28 GHz (FR2): μ=3 (120 kHz)이 표준 data channel SCS
+- 15 GHz (FR3): 미규격이나, FR2에 가까운 upper mid-band → mmWave급 SCS 적용
+- 두 config를 동일 numerology로 통일하여 순수 주파수 효과만 비교
 
-## Configuration Matrix (7 configs)
+## DMRS Pilot Configuration
 
-|  | **3.5 GHz (FR1)** | **15 GHz (FR3)** | **28 GHz (FR2)** |
-|---|---|---|---|
-| **8×8 (64 ant)** | `5g_mimo_3g5` | `mimo_15g` | `mimo_28g` |
-| **16×16 (256 ant)** | — | `elaa_s_1k_15g` | `elaa_s_1k_28g` |
-| **32×16 (512 ant)** | — | `elaa_m_1k_15g` | `elaa_m_1k_28g` |
+### 표준 근거
 
-### SC Spacing Consistency
+**Uplink CE를 위한 PUSCH DMRS** (TS 38.211 Section 6.4.1.1).
+PDSCH DMRS는 Section 7.4.1.1이나, BS에서의 uplink CE이므로 PUSCH 기준.
 
-All configs use **~390.6 kHz** subcarrier spacing:
-- FR1 (3.5 GHz): BW = 100 MHz, SC = 256 → 390.6 kHz/SC
-- FR2/FR3 (15/28 GHz): BW = 400 MHz, SC = 1024 → 390.6 kHz/SC
+| RRC Parameter | Value | Effect | Standard Reference |
+|---------------|-------|--------|-------------------|
+| `dmrs-Type` | type2 | Configuration Type 2 (paired REs, 3 CDM groups) | TS 38.211 Table 6.4.1.1.3-2 |
+| `dmrs-TypeA-Position` | pos2 | First DMRS at symbol l0=2 | TS 38.331 |
+| `dmrs-AdditionalPosition` | pos1 | 1 additional DMRS symbol | TS 38.211 Table 6.4.1.1.3-3 |
+| `maxLength` | len1 | Single-symbol DMRS | TS 38.211 |
 
-### Common Parameters (all 7 configs)
+### Type 2 주파수 패턴 (Table 6.4.1.1.3-2)
+
+```
+k = 6n + k' + Δ
+
+CDM group 0 (Δ=0): k' ∈ {0,1} → SC positions {0, 1, 6, 7, 12, 13, ...}
+CDM group 1 (Δ=2): k' ∈ {0,1} → SC positions {2, 3, 8, 9, 14, 15, ...}
+CDM group 2 (Δ=4): k' ∈ {0,1} → SC positions {4, 5, 10, 11, 16, 17, ...}
+```
+
+각 CDM group은 12 SC 중 4개 사용 (33%). 단일 CDM group (rank-1 UE) 기준 2/6 = 33%.
+
+주의: 3GPP 표준은 "comb-3"이라는 용어를 사용하지 않음. 공식 명칭은 "DMRS configuration type 2".
+
+### 시간축 DMRS 위치 (Table 6.4.1.1.3-3)
+
+Mapping type A, l0=2, ld=14 (full slot), single-symbol DMRS:
+
+| additionalPosition | DMRS symbol indices |
+|---|---|
+| pos0 | {2} |
+| **pos1** | **{2, 11}** |
+| pos2 | {2, 8, 11} |
+| pos3 | {2, 5, 8, 11} |
+
+**우리 설정: pos1 → symbols {2, 11}**
+
+### Pilot 밀도 계산
+
+```
+Per DMRS symbol: 1584 × 2/6 = 528 pilot subcarriers
+DMRS symbols per slot: 2
+Total pilot REs: 528 × 2 = 1,056
+Total REs per slot: 1,584 × 14 = 22,176
+Pilot density: 1,056 / 22,176 = 4.76%
+```
+
+## Config Matrix (CE-skip paper)
+
+| Config | Array (UPA) | Nt | Freq | Band | μ | SCS | Slot | BW | N_sc | N_RB |
+|--------|------------|----:|-----:|------|--:|----:|-----:|----:|-----:|-----:|
+| `elaa_m_*_15g` | 32×16 | 512 | 15 GHz | FR3 | 3 | 120 kHz | 0.125 ms | 200 MHz | 1584 | 132 |
+| `elaa_m_*_28g` | 32×16 | 512 | 28 GHz | FR2 | 3 | 120 kHz | 0.125 ms | 200 MHz | 1584 | 132 |
+
+- **Nr = 2** (cross-polarized UE antenna)
+- **Synthetic array**: physical single-antenna BS, Sionna constructs virtual UPA
+
+## Temporal Data
 
 | Parameter | Value |
 |-----------|-------|
-| Scene | Sionna RT, Munich UMi |
-| Num BS | 8 (identical positions) |
-| BS split | 2 train / 2 val / 4 test |
-| Num UE | 100 per snapshot |
-| UE dist | 10–150 m |
-| UE antennas | 2 (cross-pol variants) |
-| Snapshots | 100 (independent) / 1000 (temporal) |
-| Guard band | 10% |
-| Temperature | 293 K |
-| Max depth | 5 reflections |
+| Snapshots | 800 |
+| UEs | 15 (5 speeds × 3 each) |
+| Speeds (m/s) | 0, 1, 2, 5, 8.3 |
+| dt | 0.125 ms (= slot duration) |
+| Total duration | 100 ms |
+| Mobility model | Gauss-Markov (α=0.95) |
 
-### Per-Config Details
+## 시뮬레이션과 실제 시스템의 차이
 
-| Config | Array | Freq | BW | SC | Power | Synth Array | data_dir |
-|--------|-------|------|-----|-----|-------|-------------|----------|
-| `5g_mimo_3g5` | 8×8 | 3.5 GHz | 100 MHz | 256 | 46 dBm | false | `channels_5g_mimo_3g5` |
-| `mimo_15g` | 8×8 | 15 GHz | 400 MHz | 1024 | 40 dBm | true | `channels_mimo_15g` |
-| `mimo_28g` | 8×8 | 28 GHz | 100 MHz | 256 | 40 dBm | true | `channels_mimo_28g` |
-| `elaa_s_1k_15g` | 16×16 | 15 GHz | 400 MHz | 1024 | 40 dBm | true | `channels_elaa_s_1k_15g` |
-| `elaa_s_1k_28g` | 16×16 | 28 GHz | 400 MHz | 1024 | 40 dBm | true | `channels_elaa_s_1k_28g` |
-| `elaa_m_1k_15g` | 32×16 | 15 GHz | 400 MHz | 1024 | 40 dBm | true | `channels_elaa_m_1k_15g` |
-| `elaa_m_1k_28g` | 32×16 | 28 GHz | 400 MHz | 1024 | 40 dBm | true | `channels_elaa_m_1k_28g` |
+### 반영된 것 (3GPP compliant)
+- TS 38.211 numerology (μ=3, SCS=120 kHz)
+- TS 38.101-2 channel bandwidth (200 MHz @ FR2)
+- TS 38.211 DMRS Type 2 frequency pattern (Section 6.4.1.1.3, Table 6.4.1.1.3-2)
+- TS 38.211 DMRS symbol positions (Table 6.4.1.1.3-3, mapping type A, pos1 → {2, 11})
+- Slot 단위 temporal sampling
+- Sionna RT ray-tracing 채널 (site-specific)
 
----
+### 단순화된 것 (acknowledged limitations)
 
-## Experiment Design: Isolate One Axis at a Time
+| 단순화 | 설명 | CE-skip 영향 |
+|--------|------|-------------|
+| Slot 내 time variation 무시 | 14 symbol 간 채널 일정 가정. T_c >> 0.125 ms이므로 유효 | 없음 (slot 간 스케줄링) |
+| 단일 CDM group | OCC multiplexing 미반영, rank-1 가정 | δ metric 무관 |
+| No inter-cell interference | 단일 셀 시나리오 | δ가 cleaner → optimistic |
+| No pilot contamination | 단일 셀이므로 해당 없음 | LS 품질 과대평가 |
 
+## 코드 구현
+
+```python
+from src.config import SceneConfig
+
+cfg = SceneConfig.from_preset("munich_elaa_m_1k_15g")
+
+# 3GPP parameters
+cfg.scs                    # 120,000 Hz
+cfg.slot_duration_s        # 0.000125 s
+cfg.numerology_mu          # 3
+
+# DMRS
+cfg.dmrs_type              # 2
+cfg.pilot_sc_per_dmrs_symbol  # 528
+cfg.dmrs_symbols_per_slot     # 2
+cfg.total_pilot_res           # 1056
+cfg.pilot_density             # 0.0476
+
+# Pilot mask
+freq_mask = cfg.pilot_mask()           # (1584,) bool
+grid_mask = cfg.pilot_mask(as_2d=True) # (14, 1584) bool
 ```
-                     FR1 (3.5 GHz)     FR3 (15 GHz)      FR2 (28 GHz)
-                     BW=100M SC=256    BW=400M SC=1024   BW=400M SC=1024
-
-8×8   (64 ant)       5g_mimo_3g5       mimo_15g           mimo_28g
-                                            |                   |
-                                            ↓ Antenna scale     ↓
-16×16 (256 ant)           —            elaa_s_1k_15g      elaa_s_1k_28g
-                                            |                   |
-                                            ↓                   ↓
-32×16 (512 ant)           —            elaa_m_1k_15g      elaa_m_1k_28g
-
-                     ←──────── Frequency axis ────────→
-```
-
-### Controlled Comparisons
-
-| Comparison | Config pair/set | What varies | What's fixed |
-|------------|----------------|-------------|--------------|
-| **Freq effect (FR1↔FR2)** | `5g_mimo_3g5` vs `mimo_28g` | Freq (3.5→28 GHz) | Ant 8×8 |
-| **Freq effect (FR3↔FR2)** | `mimo_15g` vs `mimo_28g` | Freq (15→28 GHz) | Ant 8×8 |
-| **Freq effect (same ant)** | `elaa_s_1k_15g` vs `elaa_s_1k_28g` | Freq only | Ant 16×16, SC 1024 |
-| **Scale effect @ FR3** | `mimo_15g` → `elaa_s_1k_15g` → `elaa_m_1k_15g` | Ant (64→256→512) | Freq 15G, SC 1024 |
-| **Scale effect @ FR2** | `mimo_28g` → `elaa_s_1k_28g` → `elaa_m_1k_28g` | Ant (64→256→512) | Freq 28G, SC 1024 |
-| **Cross-freq scale** | FR3 ELAA triplet vs FR2 ELAA triplet | Freq (15↔28 GHz) | Same ant progression |
-| **Mobility effect** | Any config × {0, 1, 8.3, 33} m/s | Speed only | Everything else |
-| **Multi-BS** | All configs have 8 BS | Per-BS skip pattern | Same scene, positions |
-
----
-
-## Data Size Estimates
-
-| Config | Ant | SC | Per-snapshot | 100 snap × 8 BS |
-|--------|-----|----|-------------|------------------|
-| `5g_mimo_3g5` | 64 | 256 | ~6 MB | **~5G** |
-| `mimo_15g` | 64 | 1024 | ~25 MB | **~20G** |
-| `mimo_28g` | 64 | 256 | ~6 MB | **~5G** |
-| `elaa_s_1k_*` | 256 | 1024 | ~50 MB | **~40G** (×2) |
-| `elaa_m_1k_*` | 512 | 1024 | ~100 MB | **~80G** (×2) |
-
-Total estimated: **~270G** for all 7 configs (independent mode)
-
----
-
-## Key Design Decisions
-
-### Why no FR1 + ELAA?
-
-FR1 (3.5 GHz) + ELAA (256/512 ant) was excluded from the matrix:
-- **Near-field negligible**: At 3.5 GHz, Rayleigh distance for 16×16 UPA ≈ 11m, 32×16 ≈ 44m. Most UEs (10–150m) are in far-field → ELAA near-field advantages don't apply.
-- **Physical size impractical**: 32×16 UPA at λ/2 = 4.3cm → **137×69cm** panel. Physically installable but rarely deployed in practice.
-- **Literature gap for wrong reason**: Papers don't study this combo because the physics doesn't warrant it, not because it's unexplored territory.
-- **CE-skip positioning**: Our contribution is about temporal CE scheduling, not near-field CE itself. Far-field ELAA at FR1 would dilute the narrative without adding insight.
-
-Config files (`munich_elaa_s_256_3g5.yaml`, `munich_elaa_m_256_3g5.yaml`) are retained but not used in experiments.
-
-### Why 3 frequency bands?
-
-- **FR1 (3.5 GHz)**: Established 5G baseline, most literature comparisons available
-- **FR3 (15 GHz)**: Emerging 6G band, only 2 papers in our relworks use it — novelty kick
-- **FR2 (28 GHz)**: Well-studied mmWave, strong baseline for ELAA comparisons
-
-### Why different BW/SC across frequency bands?
-- FR1 (3.5 GHz): 100 MHz BW is 3GPP-standard for n78 band
-- FR2/FR3 (15/28 GHz): 400 MHz BW matches wider mmWave/FR3 allocations
-- SC count adjusted to maintain ~390 kHz spacing for consistent OFDM structure
-
-### Why `synthetic_array: false` for FR1?
-- At 3.5 GHz, half-wavelength spacing (~4.3 cm) makes arrays physically large
-- Physical modeling matters more at sub-6 GHz (Rayleigh distance within UE range)
-- FR2/FR3 arrays are smaller → synthetic approximation is acceptable
-
-### Why `power_dbm` differs?
-- FR1: 46 dBm (macro cell standard)
-- FR2/FR3: 40 dBm (small cell / mmWave standard)
-
----
 
 ## Changelog
 
-- 2026-03-18: Rationalized to 6 configs (removed legacy/2k/4k/L presets)
-- 2026-03-18: Expanded to 9-config 3×3 matrix (added mimo_15g, elaa_s_256_3g5, elaa_m_256_3g5)
-- 2026-03-18: Fixed mimo_28g SC 1024→256 for consistent ~390 kHz spacing
-- 2026-03-18: Reduced to 7-config matrix — excluded FR1+ELAA (near-field negligible at 3.5 GHz)
+- 2026-03-18: Initial 7-config matrix (3×3 - FR1+ELAA)
+- 2026-03-25: 3GPP numerology SSOT (μ=3, BW=200MHz, N_sc=1584, DMRS Type 2)
+- 2026-03-25: DMRS symbol positions corrected {2,7} → {2,11} per Table 6.4.1.1.3-3

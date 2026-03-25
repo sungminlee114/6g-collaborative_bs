@@ -83,18 +83,37 @@ GPU-native RAN에서 CE는 CUDA 커널이다. 실행 여부를 런타임에 결�
 
 Skip 대상은 full CE inference이지, 파일럿 수신이 아니다.
 
-### 2.2 Continuous-Alpha Two-Mode Scheduling
+### 2.2 Proportional-Alpha Scheduling (확정)
 
 ```
 매 슬롯 t:
-  (1) h_LS(t) ← Y_pilot(t) / X_pilot          [항상 수행]
-  (2) δ(t) ← ‖h_LS(t) − h_LS(t−1)‖ / ‖h_LS(t−1)‖   [Monitor]
-  (3) α(t) = clamp((δ(t) - δ_min) / (τ_full - δ_min), 0, 1)
-  (4) 분기:
-      δ(t) ≤ τ_full   → Blend:  ĥ(t) ← (1-α(t))·ĥ(t−1) + α(t)·h_LS(t)
-      δ(t) > τ_full    → Full:   ĥ(t) ← FullCE(h_LS(t))
-  (5) Safety: 누적 슬롯 > N_max이면 강제 Full
+  (1) h_LS(t) ← Y_pilot(t) / X_pilot          [항상 수행, overhead ≈ 0]
+  (2) δ(t) ← ‖h_LS(t) − h_LS(t−1)‖_F / ‖h_LS(t−1)‖_F   [Frobenius norm monitor]
+  (3) τ = c · √(2/SNR)                         [SNR-adaptive threshold, c는 설계 파라미터]
+  (4) α(t) = min(δ(t) / τ, 1)                  [Proportional blending weight]
+  (5) ĥ(t) = α(t)·h_LS(t) + (1-α(t))·ĥ(t−1)  [EMA update]
+  (6) Safety: 연속 N_max 슬롯 non-full이면 강제 α=1
 ```
+
+**설계 선택 근거 (2026.03.24 실험 결과 기반):**
+
+- **δ metric**: Frobenius norm (전체 antenna×subcarrier의 L2). Equalization 후 SNR degradation과 직결 (Post-EQ SNR ≈ SNR/(1+SNR·δ²)).
+- **τ = c·√(2/SNR)**: LS noise floor = √(2/SNR) ≈ 0.141 @20dB. τ < NF면 LS monitor가 변화를 감지 못해 scheduling 무의미. c=1이 자연스러운 operating point.
+- **α = δ/τ (proportional)**: Binary (skip/full) 대비 UE4(118-path ped)에서 **19dB 개선** (-1.9→-20.7dB). 작은 δ에서 α가 작아져 temporal noise averaging 효과 (static UE에서 Full CE보다 10dB 좋음).
+- **Oracle upper bound**: greedy per-slot optimal α를 fitting → α = sigmoid(63·(δ-0.054)). Static UE에서 proposed δ/τ 대비 최대 ~8dB 더 좋음 (sharp transition으로 noise averaging 극대화).
+
+**비교한 4가지 전략:**
+
+| Strategy | 수식 | 역할 |
+|---|---|---|
+| Full CE | α=1 (매 slot) | Baseline (-20dB) |
+| Binary | α=0 if δ<τ, else 1 | Naive. UE4에서 catastrophic failure |
+| **δ/τ (proposed)** | α=min(δ/τ, 1) | Main proposal. Tunable, practical |
+| Oracle fit (sigmoid) | α=1/(1+exp(-63·(δ-0.054))) | Upper bound (h_real 기반 fit, not deployable) |
+
+**Controlled experiment (UE3/UE4 static):**
+- UE4를 고정하면 δ: 0.057 → 0.009 (6.4× 감소) → skip 가능 수준
+- **Skip 가능 여부 = f(mobility × path diversity)**. 둘 다 있을 때만 skip 불가.
 
 ### 2.3 CE-Agnostic Framework
 
