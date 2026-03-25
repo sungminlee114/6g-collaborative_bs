@@ -18,3 +18,4 @@ assets/checkpoints/
 assets/results/
 assets/backlog.json
 assets/backlog.lock
+*.ply
