@@ -317,6 +317,14 @@ def main():
                 print(f"  ✓ All {len(covered)} snapshots covered")
 
                 h5_path = data_dir / "channels.h5"
+                # Check if shards have CFR
+                has_cfr = False
+                with h5py.File(valid_shards[0], "r") as f0:
+                    has_cfr = "cfr" in f0
+                    if has_cfr:
+                        cfr_shape = f0["cfr"].shape  # (local, n_ue, n_rx, n_tx, n_sc)
+                        n_sc = cfr_shape[-1]
+
                 with h5py.File(h5_path, "w") as out:
                     ds_a = out.create_dataset(
                         "cir_a", shape=(args.num_snapshots, n_ue, n_rx, n_tx, max_paths),
@@ -326,6 +334,13 @@ def main():
                         "cir_tau", shape=(args.num_snapshots, n_ue, max_paths),
                         dtype="float32",
                     )
+                    ds_cfr = None
+                    if has_cfr:
+                        ds_cfr = out.create_dataset(
+                            "cfr", shape=(args.num_snapshots, n_ue, n_rx, n_tx, n_sc),
+                            dtype="complex64",
+                            chunks=(1, n_ue, n_rx, n_tx, n_sc),
+                        )
                     out.attrs["n_snapshots"] = args.num_snapshots
                     out.attrs["n_ue"] = n_ue
 
@@ -341,6 +356,8 @@ def main():
                                 if global_t < args.num_snapshots:
                                     ds_a[global_t, :, :, :, :n_p] = sh["cir_a"][local_t, :, :, :, :n_p]
                                     ds_tau[global_t, :, :n_p] = sh["cir_tau"][local_t, :, :n_p]
+                                    if ds_cfr is not None and "cfr" in sh:
+                                        ds_cfr[global_t] = sh["cfr"][local_t]
 
             print(f"  Merged: {h5_path} ({h5_path.stat().st_size/1024**3:.1f} GB)")
             # Clean shards

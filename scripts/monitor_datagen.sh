@@ -13,42 +13,54 @@ print_status() {
         [ -d "$dir" ] || continue
         name=$(basename "$dir" | sed 's/channels_//;s/_temporal//')
 
-        if [ -f "$dir/progress.json" ]; then
-            read -r snap_count speed eta < <(python3 -c "
-import json, os
-d=json.load(open('$dir/progress.json'))
-npz_count=sum(1 for x in os.listdir('$dir') if x.startswith('snapshot_'))
-if npz_count > 0:
-    snaps = npz_count
-else:
-    # h5 shard mode: progress shows one worker, estimate total
-    done = d.get('done', 0)
-    total_per_worker = d.get('total', 1)
-    # Estimate n_workers from snapshot range
-    s_start = d.get('snapshot_start', 0)
-    s_end = d.get('snapshot_end', 20000)
-    per_worker = s_end - s_start
-    n_workers = max(1, 20000 // max(per_worker, 1))
-    snaps = done * n_workers  # rough estimate
-print(f'{snaps} {d.get(\"avg_snap_s\",0):.1f}s {d.get(\"eta_s\",0)/3600:.1f}h')
-" 2>/dev/null)
-        else
-            snap_count=0; speed="-"; eta="-"
-        fi
-
         # Auto-detect target from trajectory_info or progress
-        target=20000
+        target=200
         for tj in "$dir/trajectory_info.json" "assets/data/shared_trajectories/trajectory_info.json"; do
-            [ -f "$tj" ] && target=$(python3 -c "import json; print(json.load(open('$tj')).get('num_snapshots', 20000))" 2>/dev/null) && break
+            if [ -f "$tj" ]; then
+                t=$(python3 -c "import json; print(json.load(open('$tj')).get('num_snapshots', 200))" 2>/dev/null)
+                [ -n "$t" ] && target=$t && break
+            fi
         done
 
-        pct=$((snap_count * 100 / target))
-        filled=$((pct / 2))
-        bar=$(printf '%0.s█' $(seq 1 $filled 2>/dev/null))
-        empty=$(printf '%0.s░' $(seq 1 $((50 - filled)) 2>/dev/null))
+        snap_count=0; speed="-"; eta="-"
+        if [ -f "$dir/progress.json" ]; then
+            read -r snap_count speed eta < <(python3 -c "
+import json
+d=json.load(open('$dir/progress.json'))
+done = d.get('done', 0)
+avg = d.get('avg_snap_s', 0)
+eta_s = d.get('eta_s', 0)
+if eta_s > 3600:
+    eta_str = f'{eta_s/3600:.1f}h'
+elif eta_s > 60:
+    eta_str = f'{eta_s/60:.0f}m'
+else:
+    eta_str = f'{eta_s:.0f}s'
+print(f'{done} {avg:.1f}s {eta_str}')
+" 2>/dev/null)
+        fi
 
-        printf "  %-20s %s%s %5d/%d (%2d%%) %s/snap ETA %s\n" \
-            "$name" "$bar" "$empty" "$snap_count" "$target" "$pct" "$speed" "$eta"
+        # Also check h5 file existence as completion indicator
+        if [ -f "$dir/channels.h5" ] && [ "$snap_count" = "0" ]; then
+            snap_count=$target
+        fi
+
+        if [ "$target" -gt 0 ] 2>/dev/null; then
+            pct=$((snap_count * 100 / target))
+        else
+            pct=0
+        fi
+        # Clamp to 0-100
+        [ "$pct" -gt 100 ] 2>/dev/null && pct=100
+        [ "$pct" -lt 0 ] 2>/dev/null && pct=0
+
+        filled=$((pct / 2))
+        empty=$((50 - filled))
+        bar=$(printf '%0.s█' $(seq 1 $filled 2>/dev/null))
+        space=$(printf '%0.s░' $(seq 1 $empty 2>/dev/null))
+
+        printf "  %-20s %s%s %5s/%s (%2d%%) %s/snap ETA %s\n" \
+            "$name" "$bar" "$space" "$snap_count" "$target" "$pct" "$speed" "$eta"
     done
 
     # CPU / RAM
@@ -67,10 +79,11 @@ print(f'{snaps} {d.get(\"avg_snap_s\",0):.1f}s {d.get(\"eta_s\",0)/3600:.1f}h')
             mem=$(echo $mem | tr -d ' ')
             total=$(echo $total | tr -d ' ')
             ufilled=$((util / 5))
+            uempty=$((20 - ufilled))
             ubar=$(printf '%0.s▓' $(seq 1 $ufilled 2>/dev/null))
-            uempty=$(printf '%0.s░' $(seq 1 $((20 - ufilled)) 2>/dev/null))
+            uespace=$(printf '%0.s░' $(seq 1 $uempty 2>/dev/null))
             printf "    GPU %s: %s%s %3d%%  VRAM %5d/%5dMB\n" \
-                "$idx" "$ubar" "$uempty" "$util" "$mem" "$total"
+                "$idx" "$ubar" "$uespace" "$util" "$mem" "$total"
         done
 
     # Disk

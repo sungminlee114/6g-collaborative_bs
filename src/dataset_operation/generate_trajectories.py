@@ -370,6 +370,13 @@ def generate_trajectories_gpu(preset, num_snapshots, num_ue, dt, velocities,
         print(f"  Warning: only {len(ue_infos)} UEs passed filters (requested {num_ue})")
         num_ue = len(ue_infos)
     elif len(ue_infos) > num_ue:
+        # Sort by distance to target BS — prefer closer UEs with better connectivity
+        if target_bs is not None:
+            bs_pos = np.array(cfg.bs_positions[target_bs])[:2]
+            ue_infos.sort(key=lambda u: (u["x"] - bs_pos[0])**2 + (u["y"] - bs_pos[1])**2)
+            max_dist = np.sqrt((ue_infos[num_ue - 1]["x"] - bs_pos[0])**2 +
+                               (ue_infos[num_ue - 1]["y"] - bs_pos[1])**2)
+            print(f"  Sorted by distance to BS{target_bs}: max_dist={max_dist:.1f}m")
         ue_infos = ue_infos[:num_ue]
         print(f"  Truncated to {num_ue} UEs")
 

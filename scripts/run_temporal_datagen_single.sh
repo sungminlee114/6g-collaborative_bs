@@ -1,7 +1,7 @@
 #!/bin/bash
 # Generate temporal channel data for all 3 presets using SINGLE WORKER per preset.
 # Single worker avoids shard boundary spike artifact.
-# Each preset: 200 snapshots, 25 UEs (5 speeds × 5 each), dt from config numerology_mu, seed=42
+# Each preset: 800 snapshots, 15 UEs (5 speeds × 3 each), dt from config numerology_mu (mu=3 → 0.125ms), seed=42
 # Shared trajectory: assets/data/shared_trajectories/
 #
 # Step 1: Generate trajectories (needs GPU for radio map)
@@ -17,15 +17,15 @@
 set -e
 TRAJ_DIR="assets/data/shared_trajectories"
 TRAJ="$TRAJ_DIR/trajectories.npz"
-N_SNAP=400
-N_UE=15
+N_SNAP=800
+N_UE=50
 VELOCITIES="0,1,2,5,8.3"
 
 generate_trajectories() {
     echo ""
     echo "════════════════════════════════════════════"
     echo "  Generating trajectories: ${N_UE} UEs, ${N_SNAP} snapshots"
-    echo "  Speeds: ${VELOCITIES} m/s (5 UEs per speed)"
+    echo "  Speeds: ${VELOCITIES} m/s (10 UEs per speed)"
     echo "════════════════════════════════════════════"
 
     CUDA_VISIBLE_DEVICES=0 uv run python -m src.dataset_operation.generate_trajectories \

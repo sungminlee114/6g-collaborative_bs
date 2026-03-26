@@ -43,11 +43,18 @@ def load_all_ues(
     preset: str,
     max_snapshots: int = 4000,
     ue_per_speed: int = 2,
+    split: dict = None,
+    load_ue_ids: list = None,
 ) -> dict:
     """Load selected UEs into RAM. Returns dict with ue_list + metadata.
 
     This is the SLOW step (CIR→CFR). Run once, keep in memory.
     ~16GB per UE (4000 snap × 2 × 512 × 1024 × 4 bytes).
+
+    Args:
+        split: if provided (from cfg.ue_split()), partitions ue_list into
+               train_ues, val_ues, test_ues. Ignores ue_per_speed.
+        load_ue_ids: explicit list of UE IDs to load. Ignores ue_per_speed.
     """
     cfg = ExperimentConfig.from_preset(preset)
     data = TemporalChannelData(
@@ -57,40 +64,66 @@ def load_all_ues(
     print(f"Loaded {preset}: {data.num_snapshots} snaps, {data.num_ue} UEs, dt={data.dt_s}s")
 
     r_rayleigh = _rayleigh_distance(cfg)
+    T = min(max_snapshots, data.num_snapshots)
 
-    # Find BS with UEs
-    if data.ue_bs_ids is not None:
-        bs_ids = sorted(set(data.ue_bs_ids))
+    # Determine which UEs to load
+    if load_ue_ids is not None:
+        # Explicit UE list takes priority
+        target_ue_ids = sorted(load_ue_ids)
+    elif split is not None:
+        # Load all UEs in the split
+        all_ids = split["train"] + split.get("val", []) + split["test"]
+        target_ue_ids = sorted(set(all_ids))
     else:
-        bs_ids = list(range(cfg.num_bs))
+        target_ue_ids = None  # legacy: use ue_per_speed selection
 
-    # Pre-filter valid UEs
-    all_ue_ids = []
-    for bs_id in bs_ids:
-        ue_ids_for_bs = [i for i, b in enumerate(data.ue_bs_ids) if b == bs_id] if data.ue_bs_ids is not None else []
-        if not ue_ids_for_bs:
-            continue
-        valid = []
-        for uid in ue_ids_for_bs:
+    if target_ue_ids is not None:
+        # Resolve (bs_id, uid) pairs — find serving BS for each UE
+        all_ue_ids = []
+        for uid in target_ue_ids:
+            bs_id = int(data.ue_bs_ids[uid]) if data.ue_bs_ids is not None else 0
             h1 = data.get_ue_series(uid, bs_id, snap_range=(0, 1))
             if np.abs(h1).sum() > 1e-12:
-                valid.append(uid)
-        selected = []
-        counts = {}
-        for uid in valid:
-            spd = round(float(data.get_ue_speed(uid)), 1)
-            counts.setdefault(spd, 0)
-            if counts[spd] < ue_per_speed:
-                selected.append((bs_id, uid))
-                counts[spd] += 1
-        all_ue_ids.extend(selected)
+                all_ue_ids.append((bs_id, uid))
+            else:
+                print(f"  [warn] UE{uid} has zero channel, skipping")
+    else:
+        # Legacy: select ue_per_speed per speed group
+        if data.ue_bs_ids is not None:
+            bs_ids = sorted(set(data.ue_bs_ids))
+        else:
+            bs_ids = list(range(cfg.num_bs))
+        all_ue_ids = []
+        for bs_id in bs_ids:
+            ue_ids_for_bs = [i for i, b in enumerate(data.ue_bs_ids) if b == bs_id] if data.ue_bs_ids is not None else []
+            if not ue_ids_for_bs:
+                continue
+            valid = []
+            for uid in ue_ids_for_bs:
+                h1 = data.get_ue_series(uid, bs_id, snap_range=(0, 1))
+                if np.abs(h1).sum() > 1e-12:
+                    valid.append(uid)
+            counts = {}
+            for uid in valid:
+                spd = round(float(data.get_ue_speed(uid)), 1)
+                counts.setdefault(spd, 0)
+                if counts[spd] < ue_per_speed:
+                    all_ue_ids.append((bs_id, uid))
+                    counts[spd] += 1
 
     labels = [f"UE{uid}({SPEED_LABELS.get(round(data.get_ue_speed(uid), 1), '?')})" for _, uid in all_ue_ids]
     print(f"Selected {len(all_ue_ids)} UEs: [{', '.join(labels)}]")
 
+    # Pre-load velocity data once
+    _traj_vels = None
+    traj_path = data.trajectory_dir / "trajectories.npz" if data.trajectory_dir else None
+    if traj_path and traj_path.exists():
+        _traj = np.load(traj_path)
+        if "velocities" in _traj:
+            _traj_vels = _traj["velocities"]
+
     # Load all into RAM
     ue_list = []
-    T = min(max_snapshots, data.num_snapshots)
     for bs_id, uid in tqdm(all_ue_ids, desc="Loading UEs (CIR→CFR)", unit="ue"):
         h_complex = data.get_ue_series(uid, bs_id, snap_range=(0, T))
         h_real = torch.from_numpy(
@@ -98,11 +131,33 @@ def load_all_ues(
         )  # (T, 2, n_ant, n_sc) float32 on CPU
         del h_complex
 
+        # Position relative to BS → (r, θ, v_radial, v_tangential)
+        ue_pos = data.positions[0, uid] if data.positions is not None else np.zeros(3)
+        bs_positions = data.bs_info.get("positions", data.bs_info.get("bs_positions", []))
+        bs_pos = np.array(bs_positions[bs_id]) if bs_id < len(bs_positions) else np.zeros(3)
+        rel = ue_pos - bs_pos
+        r_dist = float(np.linalg.norm(rel[:2]))
+        theta_deg = float(np.degrees(np.arctan2(rel[1], rel[0])))
+
+        # Velocity decomposition from pre-loaded trajectory
+        v_radial, v_tangential = 0.0, 0.0
+        if _traj_vels is not None:
+            v_avg = _traj_vels[:, uid, :].mean(axis=0)  # (2,)
+            r_hat = rel[:2] / r_dist if r_dist > 1e-6 else np.zeros(2)
+            v_radial = float(np.dot(v_avg, r_hat))
+            v_mag = float(np.linalg.norm(v_avg))
+            v_tangential = float(np.sqrt(max(v_mag**2 - v_radial**2, 0)))
+
         ue_list.append({
             "uid": int(uid),
             "bs_id": int(bs_id),
             "speed": float(data.get_ue_speed(uid)),
             "dist": float(data.get_ue_distance(uid, bs_id, snap_idx=0)),
+            "r": r_dist,
+            "theta": theta_deg,
+            "v_radial": v_radial,
+            "v_tangential": v_tangential,
+            "pos_xy": (float(rel[0]), float(rel[1])),
             "h_real": h_real,
         })
 
@@ -111,7 +166,7 @@ def load_all_ues(
 
     data.clear_cache()
 
-    return {
+    result = {
         "preset": preset,
         "ue_list": ue_list,
         "cfg": cfg,
@@ -120,6 +175,189 @@ def load_all_ues(
         "n_ant": cfg.num_rx_ant * cfg.num_tx_ant,
         "n_sc": cfg.num_subcarriers,
     }
+
+    # Partition into train/val/test if split provided
+    if split is not None:
+        uid_to_ue = {u["uid"]: u for u in ue_list}
+        result["train_ues"] = [uid_to_ue[uid] for uid in split["train"] if uid in uid_to_ue]
+        result["val_ues"] = [uid_to_ue[uid] for uid in split.get("val", []) if uid in uid_to_ue]
+        result["test_ues"] = [uid_to_ue[uid] for uid in split["test"] if uid in uid_to_ue]
+        result["split"] = split
+        print(f"  Split: train={len(result['train_ues'])}, "
+              f"val={len(result['val_ues'])}, test={len(result['test_ues'])}")
+
+    return result
+
+
+# ══════════════════════════════════════════════════════════════
+#  Phase 1.5: Unified pipeline helpers (DL-CE training + LUT)
+# ══════════════════════════════════════════════════════════════
+
+def calibrate_lut(ue_data: dict, snr_db: float = 20.0,
+                  nmse_margin_db: float = 1.0,
+                  tau_values: list = None,
+                  device=None) -> "scipy.interpolate.interp1d":
+    """Build speed→optimal_c LUT from train UEs.
+
+    For each train UE:
+      1. Compute d_oracle (or d_ls) from h_real/h_ls
+      2. Sweep tau values, find empirical optimal c
+      3. Record (speed, c_opt)
+
+    Returns scipy interp1d: speed (m/s) → optimal c value.
+    """
+    from scipy.interpolate import interp1d
+
+    train_ues = ue_data.get("train_ues", ue_data["ue_list"])
+    if tau_values is None:
+        tau_values = np.linspace(0.001, 0.3, 25).tolist()
+
+    noise_floor = np.sqrt(2.0 / (10 ** (snr_db / 10)))
+    speed_c_pairs = []
+
+    # Get pilot mask from config if available
+    cfg = ue_data.get("cfg")
+    pmask = cfg.scene.pilot_mask() if cfg and hasattr(cfg, 'scene') else None
+
+    for u in tqdm(train_ues, desc="Calibrating LUT", unit="ue"):
+        # Compute deltas if not already done
+        if "d_oracle" not in u:
+            _precompute_deltas_for_ue(u, snr_db, pilot_mask=pmask)
+
+        # Sweep tau and find optimal c
+        results = _batch_nmse_multi_tau(
+            u["h_real"], u.get("h_ls", u["h_real"]),
+            u["d_oracle"], tau_values,
+            alpha_mode="binary", device=device,
+        )
+        sweep_results = [
+            {"tau": r["tau"], "nmse": float(np.mean(r["nmse_arr"])),
+             "n_skip": r["n_skip"], "total": r["total"]}
+            for r in results
+        ]
+        c_opt = _empirical_optimal_c(sweep_results, noise_floor, nmse_margin_db)
+        speed_c_pairs.append((u["speed"], c_opt))
+
+    speed_c_pairs.sort()
+    speeds_arr = np.array([s for s, c in speed_c_pairs])
+    copt_arr = np.array([c for s, c in speed_c_pairs])
+
+    lut = interp1d(speeds_arr, copt_arr, kind="linear",
+                   bounds_error=False, fill_value=(copt_arr[0], copt_arr[-1]))
+
+    print(f"  LUT calibrated from {len(train_ues)} train UEs:")
+    for spd in sorted(set(speeds_arr)):
+        mask = speeds_arr == spd
+        print(f"    {spd:.1f} m/s → c_opt = {copt_arr[mask].mean():.3f} "
+              f"(range {copt_arr[mask].min():.3f}–{copt_arr[mask].max():.3f})")
+
+    return lut
+
+
+def train_dl_ce(ue_data: dict, snr_db: float = 20.0, epochs: int = 80,
+                lr: float = 1e-3, batch_size: int = 2,
+                n_train: int = 100, n_val: int = 50,
+                device: str = "cuda", save_path: str = None,
+                tracker=None) -> torch.nn.Module:
+    """Train DL-CE model using independent snapshot data (diverse positions).
+
+    Uses existing snapshot data (ChannelEstimationDataset) — each sample is
+    a different UE position, providing spatial diversity without temporal overhead.
+    Random SNR augmentation per epoch for noise diversity.
+
+    Returns trained model.
+    """
+    from src.dataset_operation.dataset import ChannelEstimationDataset
+    from src.models.estimator import create_model
+    from src.training.trainer import train_local
+    from torch.utils.data import DataLoader
+
+    cfg = ue_data["cfg"]
+    data_dir = cfg.data_dir
+
+    # Use existing snapshot data — train/val split by UE index
+    # bs_ids=None loads all BS; filtering by ue_id is sufficient
+    train_ds = ChannelEstimationDataset(
+        data_dir=data_dir,
+        ue_ids=list(range(0, n_train)), fixed_snr_db=snr_db,
+    )
+    val_ds = ChannelEstimationDataset(
+        data_dir=data_dir,
+        ue_ids=list(range(n_train, n_train + n_val)), fixed_snr_db=snr_db,
+    )
+
+    print(f"Training DL-CE: {len(train_ds)} train, {len(val_ds)} val samples "
+          f"(independent snapshots, SNR={snr_db}dB)")
+
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True,
+                               num_workers=4, pin_memory=True)
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False,
+                             num_workers=4, pin_memory=True)
+
+    # Create model — same architecture as S1/train_dl_ce.py
+    # Fully convolutional: n_ant_pairs/n_subcarriers are defaults (8/1024)
+    # but model adapts to any input spatial size via conv layers
+    n_ant = cfg.num_rx_ant * cfg.num_tx_ant
+    if n_ant > 256:
+        batch_size = min(batch_size, 4)
+    model = create_model(
+        site_integration="none",
+        encoder_channels=64, encoder_blocks=3, task_head_blocks=2,
+    )
+
+    # Train
+    model = model.to(device)
+    result = train_local(
+        model, train_loader, val_loader,
+        epochs=epochs, lr=lr, device=device,
+        patience=15, verbose=True,
+        save_as=save_path, tracker=tracker,
+    )
+
+    best_val = result.get('best_val', result.get('best_val_nmse_db', float('nan')))
+    print(f"  DL-CE training done: best_val={best_val:.1f} dB")
+
+    return model
+
+
+def _precompute_deltas_for_ue(u: dict, snr_db: float = 20.0,
+                               pilot_mask: np.ndarray = None):
+    """Compute h_ls, d_oracle, d_ls for a single UE dict (in-place).
+
+    Args:
+        pilot_mask: (n_sc,) bool — if given, δ is computed on pilot SC only
+                    (realistic DMRS observation). NMSE is always on full grid.
+    """
+    h_real = u["h_real"]
+    T = h_real.shape[0]
+
+    sig_pow = h_real.flatten(1).pow(2).mean(1, keepdim=True).sqrt().unsqueeze(-1).unsqueeze(-1)
+    h_ls = h_real + (sig_pow / (10 ** (snr_db / 20))) * torch.randn_like(h_real)
+    u["h_ls"] = h_ls
+
+    # Select subcarriers for δ computation
+    if pilot_mask is not None:
+        pm = torch.from_numpy(pilot_mask)
+        h_real_p = h_real[:, :, :, pm]
+        h_ls_p = h_ls[:, :, :, pm]
+    else:
+        h_real_p = h_real
+        h_ls_p = h_ls
+
+    # Oracle delta (on pilot SC)
+    diff = h_real_p[1:] - h_real_p[:-1]
+    d_oracle = (diff.flatten(1).norm(dim=1) /
+                h_real_p[:-1].flatten(1).norm(dim=1).clamp(min=1e-12)).numpy()
+    u["d_oracle"] = d_oracle
+
+    # LS delta (on pilot SC)
+    diff_ls = h_ls_p[1:] - h_ls_p[:-1]
+    d_ls = (diff_ls.flatten(1).norm(dim=1) /
+            h_ls_p[:-1].flatten(1).norm(dim=1).clamp(min=1e-12)).numpy()
+    u["d_ls"] = d_ls
+
+    spd = round(u["speed"], 1)
+    u["spd"] = str(spd)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -330,34 +568,297 @@ def run_s1(ue_data: dict, tau: float = 0.2, snr_db: float = 20.0) -> dict:
     return {"per_ue": per_ue, "tau": tau, "snr_db": snr_db, "tau_snr_adaptive": tau_snr}
 
 
-def _precompute_deltas(h_real: torch.Tensor, snr_db: float = 20.0):
+def _precompute_deltas(h_real: torch.Tensor, snr_db: float = 20.0,
+                       pilot_mask: np.ndarray = None):
     """Precompute LS estimates and δ series for a UE.
 
+    Args:
+        pilot_mask: (n_sc,) bool — if given, δ is computed on pilot SC only.
+                    NMSE reuse is always computed on full grid.
+
     Returns:
-        h_ls: (T, 2, n_ant, n_sc) noisy LS
-        deltas_ls: (T-1,) LS-based normalized delta
-        deltas_oracle: (T-1,) oracle (ground truth) normalized delta
-        nmse_reuse: (T-1,) NMSE if reusing previous slot
+        h_ls: (T, 2, n_ant, n_sc) noisy LS (full grid)
+        deltas_ls: (T-1,) LS-based normalized delta (pilot SC)
+        deltas_oracle: (T-1,) oracle normalized delta (pilot SC)
+        nmse_reuse: (T-1,) NMSE if reusing previous slot (full grid)
     """
     T = h_real.shape[0]
     sig_pow = h_real.flatten(1).pow(2).mean(1, keepdim=True).sqrt().unsqueeze(-1).unsqueeze(-1)
     h_ls = h_real + (sig_pow / (10 ** (snr_db / 20))) * torch.randn_like(h_real)
 
-    # LS δ: ||h_ls(t) - h_ls(t-1)|| / ||h_ls(t-1)||
-    diff_ls = h_ls[1:] - h_ls[:-1]
+    # Select subcarriers for δ computation
+    if pilot_mask is not None:
+        pm = torch.from_numpy(pilot_mask)
+        h_real_p = h_real[:, :, :, pm]
+        h_ls_p = h_ls[:, :, :, pm]
+    else:
+        h_real_p = h_real
+        h_ls_p = h_ls
+
+    # LS δ on pilot SC
+    diff_ls = h_ls_p[1:] - h_ls_p[:-1]
     deltas_ls = (diff_ls.flatten(1).norm(dim=1) /
-                 h_ls[:-1].flatten(1).norm(dim=1).clamp(min=1e-12)).numpy()
+                 h_ls_p[:-1].flatten(1).norm(dim=1).clamp(min=1e-12)).numpy()
 
-    # Oracle δ: ||h(t) - h(t-1)|| / ||h(t-1)||
-    diff_oracle = h_real[1:] - h_real[:-1]
+    # Oracle δ on pilot SC
+    diff_oracle = h_real_p[1:] - h_real_p[:-1]
     deltas_oracle = (diff_oracle.flatten(1).norm(dim=1) /
-                     h_real[:-1].flatten(1).norm(dim=1).clamp(min=1e-12)).numpy()
+                     h_real_p[:-1].flatten(1).norm(dim=1).clamp(min=1e-12)).numpy()
 
-    # Vectorized NMSE(reuse): ||h(t) - h(t-1)||² / ||h(t)||²  (reuse diff_oracle)
-    nmse_reuse = (diff_oracle.flatten(1).pow(2).sum(1) /
+    # NMSE reuse on FULL grid (demodulation uses all SC)
+    diff_full = h_real[1:] - h_real[:-1]
+    nmse_reuse = (diff_full.flatten(1).pow(2).sum(1) /
                   h_real[1:].flatten(1).pow(2).sum(1).clamp(min=1e-12)).numpy()
 
     return h_ls, deltas_ls, deltas_oracle, nmse_reuse
+
+
+def _precompute_deltas_sparse(h_real: torch.Tensor, snr_db: float = 20.0,
+                               pilot_mask: np.ndarray = None):
+    """Like _precompute_deltas but with sparse DMRS pilot observation.
+
+    Args:
+        h_real: (T, 2, n_ant, n_sc) ground truth channel
+        snr_db: SNR for LS noise
+        pilot_mask: (n_sc,) bool — True at pilot subcarrier positions.
+                    If None, falls back to full observation.
+
+    Returns:
+        h_ls: (T, 2, n_ant, n_sc) full noisy LS (all SC, for NMSE eval)
+        deltas_ls: (T-1,) δ computed on pilot SC only
+        deltas_oracle: (T-1,) oracle δ on pilot SC only
+        nmse_reuse: (T-1,) NMSE if reusing previous slot (full grid)
+    """
+    T = h_real.shape[0]
+    sig_pow = h_real.flatten(1).pow(2).mean(1, keepdim=True).sqrt().unsqueeze(-1).unsqueeze(-1)
+    h_ls = h_real + (sig_pow / (10 ** (snr_db / 20))) * torch.randn_like(h_real)
+
+    if pilot_mask is None:
+        pm = slice(None)
+    else:
+        pm = torch.from_numpy(pilot_mask)
+
+    h_ls_p = h_ls[:, :, :, pm]
+    h_real_p = h_real[:, :, :, pm]
+
+    diff_ls = h_ls_p[1:] - h_ls_p[:-1]
+    deltas_ls = (diff_ls.flatten(1).norm(dim=1) /
+                 h_ls_p[:-1].flatten(1).norm(dim=1).clamp(min=1e-12)).numpy()
+
+    diff_oracle = h_real_p[1:] - h_real_p[:-1]
+    deltas_oracle = (diff_oracle.flatten(1).norm(dim=1) /
+                     h_real_p[:-1].flatten(1).norm(dim=1).clamp(min=1e-12)).numpy()
+
+    diff_full = h_real[1:] - h_real[:-1]
+    nmse_reuse = (diff_full.flatten(1).pow(2).sum(1) /
+                  h_real[1:].flatten(1).pow(2).sum(1).clamp(min=1e-12)).numpy()
+
+    return h_ls, deltas_ls, deltas_oracle, nmse_reuse
+
+
+# ── Speed estimation from δ history → adaptive τ ────────────────────
+
+def _estimate_doppler_from_deltas(deltas: np.ndarray, dt_s: float,
+                                   ema_alpha: float = 0.3) -> np.ndarray:
+    """Estimate max Doppler spread f_d from δ time series.
+
+    Uses the relationship: δ ≈ 2π·f_d·Δt for small Δt (first-order Taylor of J₀).
+    EMA smoothing removes LS noise from δ before estimation.
+
+    Args:
+        deltas: (T-1,) normalized channel delta series
+        dt_s: slot duration in seconds
+        ema_alpha: EMA smoothing factor (0=heavy smoothing, 1=no smoothing)
+
+    Returns:
+        f_d_est: (T-1,) estimated max Doppler frequency (Hz)
+    """
+    # Smooth δ to remove LS noise
+    ema = np.empty_like(deltas)
+    ema[0] = deltas[0]
+    for t in range(1, len(deltas)):
+        ema[t] = ema_alpha * deltas[t] + (1 - ema_alpha) * ema[t - 1]
+
+    # δ ≈ 2π·f_d·Δt → f_d ≈ δ / (2π·Δt)
+    f_d_est = np.clip(ema / (2 * np.pi * dt_s), 0.0, None)
+    return f_d_est
+
+
+def _estimate_speed_from_deltas(deltas: np.ndarray, dt_s: float,
+                                 frequency_hz: float,
+                                 ema_alpha: float = 0.3) -> np.ndarray:
+    """Estimate UE speed from δ time series.
+
+    δ → f_d → v = f_d · c / f_c
+
+    Args:
+        deltas: (T-1,) normalized channel delta
+        dt_s: slot duration in seconds
+        frequency_hz: carrier frequency in Hz
+        ema_alpha: EMA smoothing factor
+
+    Returns:
+        v_est: (T-1,) estimated speed (m/s)
+    """
+    c = 3e8
+    f_d = _estimate_doppler_from_deltas(deltas, dt_s, ema_alpha)
+    return f_d * c / frequency_hz
+
+
+def _empirical_optimal_c(tau_sweep_results: list, noise_floor: float,
+                          nmse_margin_db: float = 1.0) -> float:
+    """Find optimal c from tau sweep data (empirical, per-UE).
+
+    Scans c values from high to low, returns the largest c where
+    NMSE stays within nmse_margin_db of the Full CE baseline (c→0).
+
+    Args:
+        tau_sweep_results: list of {tau, nmse_arr/nmse, n_skip, total, ...}
+        noise_floor: LS noise floor for c = tau/NF conversion
+        nmse_margin_db: max allowed NMSE degradation vs baseline (dB)
+
+    Returns:
+        c_opt: optimal c value (float)
+    """
+    if not tau_sweep_results:
+        return 1.0
+
+    # Extract c and NMSE
+    c_vals, nmses = [], []
+    for r in tau_sweep_results:
+        c_vals.append(r["tau"] / noise_floor)
+        nmse_lin = r.get("nmse", None)
+        if nmse_lin is None:
+            nmse_lin = float(np.mean(r["nmse_arr"]))
+        nmses.append(nmse_lin)
+
+    c_vals = np.array(c_vals)
+    nmses_db = 10 * np.log10(np.clip(nmses, 1e-30, None))
+    baseline_db = nmses_db[0]  # smallest τ ≈ Full CE
+
+    # Scan from high c to low c: find largest c within margin
+    for i in range(len(c_vals) - 1, -1, -1):
+        if nmses_db[i] <= baseline_db + nmse_margin_db:
+            return float(c_vals[i])
+    return float(c_vals[0])
+
+
+def _optimal_tau_from_speed(v_est: np.ndarray, frequency_hz: float,
+                             dt_s: float, noise_floor: float,
+                             target_nmse_db: float = -15.0,
+                             c_min: float = 0.5, c_max: float = 5.0) -> np.ndarray:
+    """Compute speed-adaptive threshold τ*(v).
+
+    Faster UE → lower τ (trigger CE more often).
+    Slower UE → higher τ (skip more aggressively).
+
+    The mapping: τ*(v) = noise_floor × c(v), where c(v) interpolates
+    between c_min (at max speed) and c_max (at zero speed) based on
+    coherence time in slots.
+
+    Args:
+        v_est: (T-1,) estimated speed (m/s)
+        frequency_hz: carrier frequency (Hz)
+        dt_s: slot duration (s)
+        noise_floor: LS noise floor (used as τ unit)
+        target_nmse_db: target NMSE quality (not used in simple mapping)
+        c_min: minimum c = τ/NF (for fastest UE)
+        c_max: maximum c = τ/NF (for static UE)
+
+    Returns:
+        tau_adaptive: (T-1,) per-slot adaptive threshold
+    """
+    c = 3e8
+    lam = c / frequency_hz
+
+    # Coherence time in slots: T_c_slots = λ/(2v) / dt_s
+    # Avoid div by zero for static UEs
+    v_safe = np.clip(v_est, 0.01, None)
+    T_c_slots = lam / (2 * v_safe * dt_s)
+
+    # Map T_c_slots to c value: more coherent → higher c (skip more)
+    # Sigmoid-like mapping: c = c_min + (c_max - c_min) * (1 - exp(-T_c / k))
+    k = 10.0  # characteristic scale in slots
+    c_val = c_min + (c_max - c_min) * (1.0 - np.exp(-T_c_slots / k))
+
+    # Static UEs (v < 0.01): max c
+    c_val[v_est < 0.01] = c_max
+
+    return noise_floor * c_val
+
+
+def _adaptive_scheduling(deltas: np.ndarray, dt_s: float, frequency_hz: float,
+                          noise_floor: float, ema_alpha: float = 0.3,
+                          c_min: float = 0.5, c_max: float = 5.0,
+                          alpha_mode: str = "ramp", n_max: int = 50) -> dict:
+    """Speed-adaptive CE scheduling.
+
+    Pipeline:
+        1. δ history → EMA smoothing → f_d estimation → v estimation
+        2. v → T_c → τ*(v) adaptive threshold
+        3. δ[t] vs τ*[t] → per-slot alpha scheduling
+
+    Returns dict with: alphas, full_mask, tiers, v_est, tau_adaptive, + counts.
+    """
+    # Step 1: estimate speed from δ
+    v_est = _estimate_speed_from_deltas(deltas, dt_s, frequency_hz, ema_alpha)
+
+    # Step 2: compute adaptive τ per slot
+    tau_adaptive = _optimal_tau_from_speed(
+        v_est, frequency_hz, dt_s, noise_floor, c_min=c_min, c_max=c_max)
+
+    # Step 3: per-slot scheduling with varying τ
+    T = len(deltas) + 1
+    alphas = np.zeros(T, dtype=np.float64)
+    alphas[0] = 1.0  # slot 0 always full CE
+
+    full_mask = np.zeros(T, dtype=bool)
+    full_mask[0] = True
+
+    for t in range(len(deltas)):
+        tau_t = tau_adaptive[t]
+        delta_min_t = tau_t * 0.5  # ramp starts at half of τ
+        if alpha_mode == "binary":
+            alphas[t + 1] = 1.0 if deltas[t] > tau_t else 0.0
+            full_mask[t + 1] = deltas[t] > tau_t
+        elif alpha_mode == "ramp":
+            denom = tau_t - delta_min_t
+            if denom < 1e-12:
+                denom = 1e-12
+            alphas[t + 1] = np.clip((deltas[t] - delta_min_t) / denom, 0.0, 1.0)
+            full_mask[t + 1] = deltas[t] > tau_t
+        else:
+            alphas[t + 1] = 1.0 if deltas[t] > tau_t else 0.0
+            full_mask[t + 1] = deltas[t] > tau_t
+
+    # Safety: force full CE after n_max consecutive non-Full slots
+    if n_max < T:
+        consecutive = 0
+        for t in range(1, T):
+            if not full_mask[t]:
+                consecutive += 1
+                if consecutive >= n_max:
+                    full_mask[t] = True
+                    alphas[t] = 1.0
+                    consecutive = 0
+            else:
+                consecutive = 0
+
+    tiers = np.ones(T, dtype=np.int32)
+    tiers[alphas < 1e-8] = 0
+    tiers[full_mask] = 2
+
+    return {
+        "alphas": alphas,
+        "full_mask": full_mask,
+        "tiers": tiers,
+        "n_skip": int((tiers == 0).sum()),
+        "n_delta": int((tiers == 1).sum()),
+        "n_full": int((tiers == 2).sum()),
+        "total": T,
+        "v_est": v_est,
+        "tau_adaptive": tau_adaptive,
+    }
 
 
 def _vectorized_scheduling(deltas: np.ndarray,
@@ -368,6 +869,7 @@ def _vectorized_scheduling(deltas: np.ndarray,
     """Vectorized scheduling with continuous alpha support.
 
     Modes:
+      - "binary": 2-tier. delta > delta_min → full CE (alpha=1), else skip (alpha=0).
       - "step" (legacy): discrete 3-tier from tau_low/tau_high.
         When tau_low/tau_high are provided without tau_full/delta_min,
         automatically sets alpha_mode="step".
@@ -395,8 +897,12 @@ def _vectorized_scheduling(deltas: np.ndarray,
     # Full mask: delta exceeds tau_full
     full_inner = deltas > tau_full  # (T-1,) bool
 
+    # For binary mode: skip or full only (no interpolation)
+    if alpha_mode == "binary":
+        alphas_inner = np.where(deltas > delta_min, 1.0, 0.0)
+        full_inner = deltas > delta_min
     # For step mode, quantize alphas to {0, fixed_mid, 1}
-    if alpha_mode == "step":
+    elif alpha_mode == "step":
         # alpha==0 where delta <= delta_min (skip)
         # alpha==1 where delta > tau_full (full)
         # in-between gets 0.5 (legacy EMA default)
@@ -555,14 +1061,16 @@ def _batch_nmse_multi_tau(h_real: torch.Tensor, h_ls: torch.Tensor,
                            deltas: np.ndarray, tau_values: list,
                            alpha: float = 0.5, delta_mode: str = "ema",
                            h_ce: torch.Tensor = None,
-                           alpha_mode: str = "step") -> list:
+                           alpha_mode: str = "step",
+                           device: Optional[torch.device] = None
+                           ) -> list:
     """Compute NMSE for multiple tau values — GPU-accelerated.
 
     Moves h_real/h_ls to GPU once (~21GB for ELAA), computes scheduling on CPU
     (trivial), then h_hat construction + NMSE on GPU. No RAM copies per tau.
     """
     T = h_real.shape[0]
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu") if device is None else device
 
     # Move to GPU once, flattened: (T, D). Only h_real + h_ls = ~21GB
     h_real_g = h_real.reshape(T, -1).to(device, non_blocking=True)

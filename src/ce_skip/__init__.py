@@ -1,8 +1,9 @@
 """CE skip scheduling — event-triggered CE inference scheduling framework."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List
+from typing import Dict, List, Optional
 
+import numpy as np
 import yaml
 
 from src.config import SceneConfig, CONFIGS_DIR
@@ -109,3 +110,43 @@ class ExperimentConfig:
     @property
     def slot_duration_s(self) -> float:
         return self.scene.slot_duration_s
+
+    def ue_split(self, train: int = 3, val: int = 1, test: int = 6,
+                 seed: int = 42) -> Dict[str, List[int]]:
+        """Stratified UE split by speed group.
+
+        Per speed group: train/val/test = 3/1/6 (default, 10 UEs per speed).
+        Deterministic with seed for reproducibility.
+
+        Returns:
+            {"train": [ue_ids], "val": [ue_ids], "test": [ue_ids]}
+        """
+        traj_path = self.trajectory_dir / "trajectories.npz"
+        traj = np.load(traj_path)
+        speeds = traj["speeds"]  # (N_UE,)
+        n_ue = len(speeds)
+
+        total = train + val + test
+        rng = np.random.default_rng(seed)
+
+        # Group UE IDs by speed
+        speed_groups = {}
+        for uid in range(n_ue):
+            spd = round(float(speeds[uid]), 1)
+            speed_groups.setdefault(spd, []).append(uid)
+
+        train_ids, val_ids, test_ids = [], [], []
+        for spd in sorted(speed_groups.keys()):
+            uids = sorted(speed_groups[spd])
+            rng.shuffle(uids)
+            n = len(uids)
+            n_train = round(n * train / total)
+            n_val = round(n * val / total)
+            # Remainder goes to test
+            train_ids.extend(uids[:n_train])
+            val_ids.extend(uids[n_train:n_train + n_val])
+            test_ids.extend(uids[n_train + n_val:])
+
+        return {"train": sorted(train_ids),
+                "val": sorted(val_ids),
+                "test": sorted(test_ids)}

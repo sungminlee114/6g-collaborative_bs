@@ -107,12 +107,30 @@ def plot_trajectories(traj_dir="assets/data/shared_trajectories",
 
     buildings = load_buildings()
 
+    # Offset coordinates so BS1 (or target BS) is at origin
+    target_bs = info.get("target_bs", 1)
+    if len(bs_positions) > target_bs:
+        origin = np.array(bs_positions[target_bs][:2])
+    else:
+        origin = np.zeros(2)
+    positions[:, :, 0] -= origin[0]
+    positions[:, :, 1] -= origin[1]
+    bs_positions = bs_positions.copy()
+    if len(bs_positions) > 0:
+        bs_positions[:, 0] -= origin[0]
+        bs_positions[:, 1] -= origin[1]
+    if buildings:
+        for b in buildings:
+            b["x_min"] -= origin[0]; b["x_max"] -= origin[0]
+            b["y_min"] -= origin[1]; b["y_max"] -= origin[1]
+
     # Compute view bounds: auto-fit to UE extent with margin
     all_x = positions[:, :, 0].flatten()
     all_y = positions[:, :, 1].flatten()
-    margin = 15  # meters padding around UE extent
+    margin = 20  # meters padding around UE extent
+    y_margin = 5  # tighter vertical padding
     xmin, xmax = all_x.min() - margin, all_x.max() + margin
-    ymin, ymax = all_y.min() - margin, all_y.max() + margin
+    ymin, ymax = all_y.min() - y_margin, all_y.max() + y_margin
     # Ensure aspect ratio is reasonable (at least 50m span)
     span_x = xmax - xmin
     span_y = ymax - ymin
@@ -127,13 +145,15 @@ def plot_trajectories(traj_dir="assets/data/shared_trajectories",
     # ── Radio map ──
     try:
         sinr_db, x_edges, y_edges = compute_or_load_radio_map(traj_dir, info)
+        x_edges = x_edges - origin[0]
+        y_edges = y_edges - origin[1]
         has_radio_map = True
     except Exception as e:
         print(f"  Radio map unavailable: {e}")
         has_radio_map = False
 
     # ── Plot ──
-    fig, ax = plt.subplots(1, 1, figsize=(12, 10))
+    fig, ax = plt.subplots(1, 1, figsize=(8, 6))
 
     # Layer 1: Radio map heatmap
     if has_radio_map:
@@ -159,63 +179,79 @@ def plot_trajectories(traj_dir="assets/data/shared_trajectories",
                 cmap=cmap, vmin=-5, vmax=30,
                 alpha=0.25, zorder=0, shading="flat",
             )
-            cbar = fig.colorbar(im, ax=ax, shrink=0.7, pad=0.02)
-            cbar.set_label("Best-server SINR [dB]", fontsize=10)
+            cbar = fig.colorbar(im, ax=ax, shrink=0.82, pad=0.02, aspect=25)
+            cbar.set_label("SINR [dB]", fontsize=10)
 
-    # Buildings: use actual mesh triangles (exact 2D projection) if available
+    # Buildings: mesh triangles only
     tris_path = Path("assets/data/munich_buildings_tris.json")
     if tris_path.exists():
         from matplotlib.patches import Polygon as MplPolygon
         with open(tris_path) as f:
             all_tris = json.load(f)
-        # Filter to view region for performance
         patches = []
         for tri in all_tris:
             t = np.array(tri)
+            t[:, 0] -= origin[0]
+            t[:, 1] -= origin[1]
             if (t[:, 0].max() < xmin or t[:, 0].min() > xmax or
                 t[:, 1].max() < ymin or t[:, 1].min() > ymax):
                 continue
-            patches.append(MplPolygon(tri, closed=True))
-        pc = PatchCollection(patches, facecolor="#c8c8c8", edgecolor="#999999",
-                             linewidth=0.15, alpha=0.85, zorder=2)
-        ax.add_collection(pc)
-    elif buildings:
-        patches = []
-        for b in buildings:
-            w = b["x_max"] - b["x_min"]
-            h = b["y_max"] - b["y_min"]
-            patches.append(Rectangle((b["x_min"], b["y_min"]), w, h))
-        pc = PatchCollection(patches, facecolor="#d5d5d5", edgecolor="#aaaaaa",
-                             linewidth=0.3, alpha=0.7, zorder=2)
+            patches.append(MplPolygon(t[:, :2].tolist(), closed=True))
+        pc = PatchCollection(patches, facecolor="#888888", edgecolor="#333333",
+                             linewidth=0.8, alpha=1.0, zorder=3)
         ax.add_collection(pc)
 
-    # Layer 3: UE trajectories
+    # Layer 3: UE trajectories with train/val/test markers
+    # Try to load split info
+    try:
+        from src.ce_skip import ExperimentConfig
+        _preset = info.get("preset", "munich_elaa_m_1k_28g")
+        _ecfg = ExperimentConfig.from_preset(_preset)
+        _split = _ecfg.ue_split(train=3, val=1, test=6)
+    except Exception:
+        _split = None
+
+    _split_marker = {"train": "s", "val": "D", "test": "o"}
+    _split_label_done = {"train": False, "val": False, "test": False}
+
+    def _get_split_name(uid):
+        if _split is None:
+            return "test"
+        for sn in ("train", "val", "test"):
+            if uid in _split.get(sn, []):
+                return sn
+        return "test"
+
     for u in range(N_UE):
         spd = float(speeds[u])
         color = speed_colors[spd]
         xs = positions[:, u, 0]
         ys = positions[:, u, 1]
+        sn = _get_split_name(u)
+        mk = _split_marker.get(sn, "o")
+        mk_size = 6
+        edge_w = 0.8
 
         if spd < 0.01:
-            ax.plot(xs[0], ys[0], 'o', color=color, markersize=5, zorder=6,
-                    markeredgecolor='white', markeredgewidth=0.5)
+            ax.plot(xs[0], ys[0], marker=mk, color=color, markersize=mk_size, zorder=6,
+                    markeredgecolor='black', markeredgewidth=edge_w, linestyle='none')
         else:
             ax.plot(xs, ys, '--', color=color, linewidth=1.2, alpha=0.8, zorder=4)
-            ax.plot(xs[0], ys[0], 'o', color=color, markersize=3.5, zorder=6,
-                    markeredgecolor='white', markeredgewidth=0.3)
+            ax.plot(xs[0], ys[0], marker=mk, color=color, markersize=mk_size, zorder=6,
+                    markeredgecolor='black', markeredgewidth=edge_w, linestyle='none')
 
     # Layer 4: BS markers
     if len(bs_positions) > 0:
         target_bs = info.get("target_bs")
         for i, pos in enumerate(bs_positions):
             is_target = (target_bs is not None and i == target_bs)
-            size = 200 if is_target else 100
-            ec = 'darkred' if is_target else 'gray'
-            fc = 'red' if is_target else 'lightcoral'
+            size = 250 if is_target else 100
+            ec = 'black' if is_target else 'gray'
+            fc = 'black' if is_target else 'lightgray'
             alpha = 1.0 if is_target else 0.4
             ax.scatter(pos[0], pos[1], c=fc, marker='^', s=size, zorder=10,
                        edgecolors=ec, linewidths=1.5, alpha=alpha)
-            ax.annotate(f'BS{i}', (pos[0], pos[1]), fontsize=9, fontweight='bold',
+            ax.annotate(f'BS{i}', (pos[0], pos[1]), fontsize=8,
                         color=ec, ha='center', va='bottom', alpha=alpha,
                         xytext=(0, 10), textcoords='offset points', zorder=11)
 
@@ -225,30 +261,41 @@ def plot_trajectories(traj_dir="assets/data/shared_trajectories",
         color = speed_colors[spd]
         label = f"Static" if spd < 0.01 else f"{spd:.1f} m/s"
         ue_count = sum(1 for s in speeds if abs(float(s) - spd) < 0.01)
-        if spd < 0.01:
-            h = ax.plot([], [], 'o', color=color, markersize=6,
-                        label=f"{label} ({ue_count} UEs)")[0]
-        else:
-            h = ax.plot([], [], '-', color=color, linewidth=2,
-                        label=f"{label} ({ue_count} UEs)")[0]
+        h = ax.plot([], [], '-', color=color, linewidth=2.5,
+                    label=f"{label} ({ue_count} UEs)")[0]
         legend_handles.append(h)
 
-    ax.legend(handles=legend_handles, loc='upper right', fontsize=9,
-              framealpha=0.9, title="Speed groups")
+    # Split markers in legend
+    if _split is not None:
+        from matplotlib.lines import Line2D
+        for sn, mk in _split_marker.items():
+            n = len(_split.get(sn, []))
+            if n > 0:
+                legend_handles.append(Line2D([], [], marker=mk, color='gray', linestyle='none',
+                                             markersize=6, markeredgecolor='black',
+                                             label=f"{sn} ({n} UEs)"))
+    ax.legend(handles=legend_handles, loc='upper right', fontsize=8,
+              framealpha=0.9, ncol=2)
 
     ax.set_xlabel("x [m]", fontsize=11)
     ax.set_ylabel("y [m]", fontsize=11)
-    ax.set_title(f"UE Trajectories + Radio Map: {N_UE} UEs, {T} snapshots, "
-                 f"dt={dt_ms}ms, total={total_ms:.0f}ms", fontsize=12)
+    # Print title content for paper caption
+    title_text = (f"UE Trajectories + Radio Map: {N_UE} UEs, {T} snapshots, "
+                  f"dt={dt_ms}ms, total={total_ms:.0f}ms")
+    print(f"  Title: {title_text}")
     ax.set_aspect("equal")
     ax.set_xlim(xmin, xmax)
     ax.set_ylim(ymin, ymax)
 
     plt.tight_layout()
     Path(output).parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output, dpi=150, bbox_inches='tight')
+    fig.savefig(output, dpi=200, bbox_inches='tight')
+    # PDF version
+    pdf_output = str(output).rsplit('.', 1)[0] + '.pdf'
+    fig.savefig(pdf_output, bbox_inches='tight')
     plt.close(fig)
     print(f"Saved: {output}")
+    print(f"Saved: {pdf_output}")
 
 
 if __name__ == "__main__":

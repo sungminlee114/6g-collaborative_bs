@@ -200,14 +200,15 @@ class SceneConfig:
 
         # 2D: (14 symbols, num_sc)
         grid = np.zeros((self.symbols_per_slot, self.num_subcarriers), dtype=bool)
-        # DMRS symbol positions (simplified: start at symbol 2)
+        # DMRS symbol positions per TS 38.211 Table 7.4.1.1.2-3 / 6.4.1.1.3-3
+        # Mapping type A, dmrs-TypeA-Position=pos2 (l0=2), ld=14
         dmrs_positions = [2]
         if self.dmrs_additional_position >= 1:
-            dmrs_positions.append(7)
-        if self.dmrs_additional_position >= 2:
             dmrs_positions.append(11)
+        if self.dmrs_additional_position >= 2:
+            dmrs_positions = [2, 8, 11]
         if self.dmrs_additional_position >= 3:
-            dmrs_positions.append(13 if self.symbols_per_slot == 14 else 12)
+            dmrs_positions = [2, 5, 8, 11]
         for sym in dmrs_positions:
             if sym < self.symbols_per_slot:
                 grid[sym] = freq_mask
